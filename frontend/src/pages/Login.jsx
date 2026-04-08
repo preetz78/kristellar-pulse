@@ -3,13 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { users } from "../data/users";
 import { Mail, Lock } from "lucide-react";
 
-const getRoleHomePath = (role) => {
-  if (role === "admin") return "/admin/overview";
-  if (role === "manager") return "/manager/overview";
-  if (role === "employee") return "/employee/overview";
-  return "/login";
-};
-
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,25 +20,37 @@ const Login = () => {
     }
 
     setError("");
+
+    // Save role and trigger update
     localStorage.setItem("role", user.role);
     window.dispatchEvent(new Event("auth-change"));
-    navigate(getRoleHomePath(user.role), { replace: true });
+
+    // Navigate based on role
+    if (user.role === "admin") {
+      navigate("/admin/dashboard", { replace: true });
+    } else if (user.role === "manager") {
+      navigate("/manager/dashboard", { replace: true });
+    } else if (user.role === "reviewer") {
+      navigate("/reviewer/dashboard", { replace: true });
+    } else {
+      navigate("/login", { replace: true });
+    }
   };
 
   return (
     <div className="h-screen flex items-center justify-center relative overflow-hidden">
 
-      {/* 🔥 Background Image */}
+      {/* Background Image */}
       <img
         src="/bg.jpg"
         alt="background"
         className="absolute w-full h-full object-cover scale-110"
       />
 
-      {/* 🔥 Dark Overlay (makes it soft & readable) */}
+      {/* Dark Overlay */}
       <div className="absolute inset-0 bg-black/40" />
 
-      {/* 🔥 Glass Card */}
+      {/* Glass Card */}
       <div className="relative w-[360px] bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl p-8">
 
         {/* Title */}
@@ -53,7 +58,7 @@ const Login = () => {
           Welcome Back 👋
         </h2>
 
-        {/* Error */}
+        {/* Error Message */}
         {error && (
           <div className="mb-4 text-sm text-red-300 text-center">
             {error}
@@ -69,8 +74,9 @@ const Login = () => {
           <input
             type="email"
             placeholder="Email"
-            className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/40 transition"
+            value={email}
             onChange={(e) => setEmail(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/40 transition"
           />
         </div>
 
@@ -83,12 +89,13 @@ const Login = () => {
           <input
             type="password"
             placeholder="Password"
-            className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/40 transition"
+            value={password}
             onChange={(e) => setPassword(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/40 transition"
           />
         </div>
 
-        {/* Button */}
+        {/* Login Button */}
         <button
           onClick={handleLogin}
           className="w-full py-3 rounded-xl bg-white text-blue-600 font-semibold hover:bg-blue-100 transition-all duration-300 transform hover:scale-[1.02] active:scale-95 shadow-md"

@@ -5,33 +5,26 @@ import DashboardLayout from "./components/DashboardLayout";
 import Login from "./pages/Login";
 
 // Admin Pages
-import AdminOverview from "./pages/Admin/Overview";
-import Organizations from "./pages/Admin/Organizations";
-import AdminUsers from "./pages/Admin/Users";
+import AdminDashboard from "./pages/Admin/Dashboard";
 import AdminProjects from "./pages/Admin/Projects";
-import AdminTasks from "./pages/Admin/Tasks";
-import AccessControl from "./pages/Admin/AccessControl";
-import AuditLogs from "./pages/Admin/AuditLogs";
-import Profile from "./pages/Admin/Profile";
-import Settings from "./pages/Admin/Settings";
-import ProjectDetails from "./pages/Admin/ProjectDetails";
+import TaskInsights from "./pages/Admin/TaskInsights";
+import AdminTeam from "./pages/Admin/Team";
 
-// Manager Pages (NEW)
-import ManagerOverview from "./pages/Manager/ManagerOverview";   
-import ManagerProjects from "./pages/Manager/ManagerProjects";
-import ManagerTasks from "./pages/Manager/ManagerTasks";      
-import ManagerUsers from "./pages/Manager/ManagerUsers";    
+// Manager Pages
+import ManagerDashboard from "./pages/Manager/Dashboard";
+import ManagerProjects from "./pages/Manager/Projects";
+import ProjectDetail from "./pages/Manager/ProjectDetail";
+import ManagerTaskInsights from "./pages/Manager/TaskInsights";
 
-// Employee Pages
-import EmployeeOverview from "./pages/Employee/EmployeeOverview";
-import EmployeeTasks from "./pages/Employee/EmployeeTasks";  
-import EmployeeProjects from "./pages/Employee/EmployeeProjects";   
-
+// Reviewer Pages (New)
+import ReviewerDashboard from "./pages/Reviewer/Dashboard";
+import ReviewerProjects from "./pages/Reviewer/Projects";
+import ReviewerTaskInsights from "./pages/Reviewer/TaskInsights";
 
 const getDefaultRoute = (role) => {
-  if (role === "admin") return "/admin/overview";
-  if (role === "manager") return "/manager/overview";
-  if (role === "employee") return "/employee/overview";
+  if (role === "admin") return "/admin/dashboard";
+  if (role === "manager") return "/manager/dashboard";
+  if (role === "reviewer") return "/reviewer/dashboard";   
   return "/login";
 };
 
@@ -57,42 +50,34 @@ function App() {
 
         <Route path="/" element={<Navigate to={getDefaultRoute(role)} replace />} />
 
-        {/* ==================== ADMIN ROUTES ==================== */}
+        {/* ADMIN ROUTES */}
         {role === "admin" && (
           <Route path="/admin" element={<DashboardLayout />}>
-            <Route path="overview" element={<AdminOverview />} />
-            <Route path="organizations" element={<Organizations />} />
-            <Route path="users" element={<AdminUsers />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="projects" element={<AdminProjects />} />
-            <Route path="tasks" element={<AdminTasks />} />
-            <Route path="access-control" element={<AccessControl />} />
-            <Route path="audit-logs" element={<AuditLogs />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="projects/:id" element={<ProjectDetails />} />
+            <Route path="projects/:projectId" element={<ProjectDetail />} />
+            <Route path="task-insights" element={<TaskInsights />} />
+            <Route path="team" element={<AdminTeam />} />
           </Route>
         )}
 
-        {/* ==================== MANAGER ROUTES ==================== */}
+        {/* MANAGER ROUTES */}
         {role === "manager" && (
           <Route path="/manager" element={<DashboardLayout />}>
-            <Route path="overview" element={<ManagerOverview />} />      
-            <Route path="projects" element={<ManagerProjects />} />       
-            <Route path="tasks" element={<ManagerTasks />} />
-            <Route path="users" element={<ManagerUsers />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="settings" element={<Settings />} />
+            <Route path="dashboard" element={<ManagerDashboard />} />
+            <Route path="projects" element={<ManagerProjects />} />
+            <Route path="projects/:projectId" element={<ProjectDetail />} />
+            <Route path="task-insights" element={<ManagerTaskInsights />} />
           </Route>
         )}
 
-        {/* Employee routes (you can keep as is) */}
-        {role === "employee" && (
-          <Route path="/employee" element={<DashboardLayout />}>
-            <Route path="overview" element={<EmployeeOverview />} />
-            <Route path="tasks" element={<EmployeeTasks />} />
-            <Route path="projects" element={<EmployeeProjects />} />
-            {/* <Route path="profile" element={<Profile />} /> */}
-            {/* <Route path="settings" element={<Settings />} /> */}
+        {/* REVIEWER ROUTES  */}
+        {role === "reviewer" && (
+          <Route path="/reviewer" element={<DashboardLayout />}>
+            <Route path="dashboard" element={<ReviewerDashboard />} />
+            <Route path="projects" element={<ReviewerProjects />} />
+            {/* <Route path="projects/:projectId" element={<ProjectDetail />} /> */}
+            <Route path="task-insights" element={<ReviewerTaskInsights />} />
           </Route>
         )}
 

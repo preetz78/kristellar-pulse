@@ -1,19 +1,23 @@
-// src/pages/Admin/Projects.jsx
+// src/pages/Manager/Projects.jsx
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { 
   Calendar, 
   Users, 
   TrendingUp 
 } from "lucide-react";
 
-const Projects = () => {
-  const [projects, setProjects] = useState([
+const ManagerProjects = () => {
+  const navigate = useNavigate();
+  const managerName = "Rahul Sharma";
+
+  const [projects] = useState([
     {
       id: 1,
       org: "TechFlow Solutions",
       title: "Cloud Migration",
       idCode: "PRJ-001",
-      manager: "John Doe",
+      manager: "Rahul Sharma",
       teamSize: "8 Experts",
       deadline: "2026-04-25",
       progress: 65,
@@ -37,11 +41,23 @@ const Projects = () => {
       org: "NextGen AI",
       title: "ML Model Training",
       idCode: "PRJ-003",
-      manager: "Alex Kumar",
+      manager: "Rahul Sharma",
       teamSize: "6 Data Scientists",
       deadline: "2026-06-30",
       progress: 85,
       priority: "High",
+      status: "In Progress",
+    },
+    {
+      id: 4,
+      org: "InnovaTech",
+      title: "Mobile App Redesign",
+      idCode: "PRJ-004",
+      manager: "Rahul Sharma",
+      teamSize: "5 Designers",
+      deadline: "2026-05-20",
+      progress: 30,
+      priority: "Medium",
       status: "In Progress",
     },
   ]);
@@ -52,6 +68,9 @@ const Projects = () => {
   const [selectedOrg, setSelectedOrg] = useState("All Organizations");
   const [activeFilter, setActiveFilter] = useState("All Projects");
   const [selectedProjectTitle, setSelectedProjectTitle] = useState("All Projects");
+
+  // Filter projects assigned to this manager only
+  const myProjects = projects.filter(project => project.manager === managerName);
 
   const getPriorityStyle = (priority) => {
     if (priority === "High") return "bg-red-100 text-red-700 border border-red-300";
@@ -65,7 +84,7 @@ const Projects = () => {
     return "from-amber-500 to-orange-600";
   };
 
-  const filteredProjects = projects.filter((project) => {
+  const filteredProjects = myProjects.filter((project) => {
     const matchesOrg = selectedOrg === "All Organizations" || project.org === selectedOrg;
     
     let matchesFilter = true;
@@ -86,7 +105,7 @@ const Projects = () => {
           <h1 className="text-3xl font-semibold text-blue-700">Projects</h1>
           <p className="text-gray-600 mt-1 flex items-center gap-2">
             <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
-            Track and manage all active projects
+            My Assigned Projects
           </p>
         </div>
       </div>
@@ -99,8 +118,8 @@ const Projects = () => {
               <TrendingUp size={20} className="text-white" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">Total Projects</p>
-              <p className="text-2xl font-semibold text-gray-900">{projects.length}</p>
+              <p className="text-sm text-gray-600">My Projects</p>
+              <p className="text-2xl font-semibold text-gray-900">{myProjects.length}</p>
             </div>
           </div>
 
@@ -111,7 +130,7 @@ const Projects = () => {
             <div>
               <p className="text-sm text-gray-600">In Progress</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {projects.filter((p) => p.status === "In Progress").length}
+                {myProjects.filter((p) => p.status === "In Progress").length}
               </p>
             </div>
           </div>
@@ -123,7 +142,7 @@ const Projects = () => {
             <div>
               <p className="text-sm text-gray-600">High Priority</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {projects.filter((p) => p.priority === "High").length}
+                {myProjects.filter((p) => p.priority === "High").length}
               </p>
             </div>
           </div>
@@ -145,7 +164,7 @@ const Projects = () => {
               className="bg-white border-0 text-blue-700 font-medium px-6 py-3 rounded-[14px] focus:outline-none cursor-pointer appearance-none pr-10 min-w-[180px]"
             >
               <option value="All Projects">All Projects</option>
-              {projects.map((project) => (
+              {myProjects.map((project) => (
                 <option key={project.id} value={project.title}>
                   {project.title}
                 </option>
@@ -198,14 +217,15 @@ const Projects = () => {
         </div>
       </div>
 
-      {/* PROJECT CARDS GRID */}
+      {/* PROJECT CARDS GRID - Now Clickable to go to Detail Page */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredProjects.map((project, idx) => (
           <div
             key={project.id}
             onMouseEnter={() => setHoveredCard(idx)}
             onMouseLeave={() => setHoveredCard(null)}
-            className={`relative group bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl ${
+            onClick={() => navigate(`/manager/projects/${project.id}`)}   // ← This line added
+            className={`relative group bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl cursor-pointer ${
               hoveredCard === idx ? "shadow-2xl -translate-y-1 border-blue-400" : ""
             }`}
           >
@@ -282,4 +302,4 @@ const Projects = () => {
   );
 };
 
-export default Projects;
+export default ManagerProjects;

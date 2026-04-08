@@ -9,8 +9,7 @@ const DashboardLayout = () => {
   const profileMenuRef = useRef(null);
   const location = useLocation();
 
-  // ✅ STEP 1: Get Role from localStorage
-  const role = localStorage.getItem("role");
+  const role = localStorage.getItem("role") || "admin";
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -36,45 +35,41 @@ const DashboardLayout = () => {
     };
   }, [showProfileMenu]);
 
-  // ✅ STEP 2: Role-Based Menus
+  // ==================== MENU BASED ON ROLE ====================
   const adminMenu = [
-    { path: '/admin/overview', label: 'Overview', icon: '📊' },
-    { path: '/admin/organizations', label: 'Organizations', icon: '🏢' },
-    { path: '/admin/users', label: 'Users', icon: '👥' },
+    { path: '/admin/dashboard', label: 'Dashboard', icon: '📊' },
     { path: '/admin/projects', label: 'Projects', icon: '📁' },
-    { path: '/admin/tasks', label: 'Tasks', icon: '✅' },
-    { path: '/admin/access-control', label: 'Access Control', icon: '🔐' },
-    { path: '/admin/audit-logs', label: 'Audit Logs', icon: '📜' },
+    { path: '/admin/task-insights', label: 'Task Insights', icon: '🔍' },
+    { path: '/admin/team', label: 'Team Management', icon: '👥' },
   ];
 
   const managerMenu = [
-    { path: '/manager/overview', label: 'Overview', icon: '📊' },
+    { path: '/manager/dashboard', label: 'Dashboard', icon: '📊' },
     { path: '/manager/projects', label: 'Projects', icon: '📁' },
-    { path: '/manager/tasks', label: 'Tasks', icon: '✅' },
-    { path: '/manager/users', label: 'Users', icon: '👥' },
+    { path: '/manager/task-insights', label: 'Task Insights', icon: '🔍' },
   ];
 
-  // Updated Employee Menu as per your request
-  const employeeMenu = [
-    { path: '/employee/overview', label: 'Overview', icon: '📊' },
-    { path: '/employee/projects', label: 'Projects', icon: '📁' },
-    { path: '/employee/tasks', label: 'Tasks', icon: '✅' },
+  const reviewerMenu = [
+    { path: '/reviewer/dashboard', label: 'Dashboard', icon: '📊' },
+    { path: '/reviewer/projects', label: 'Projects', icon: '📁' },
+    { path: '/reviewer/task-insights', label: 'Task Insights', icon: '🔍' },
   ];
 
-  let menuItems = [];
+  // Select correct menu based on role
+  let menuItems = adminMenu;
+  if (role === "manager") menuItems = managerMenu;
+  if (role === "reviewer") menuItems = reviewerMenu;
 
-  if (role === "admin") {
-    menuItems = adminMenu;
-  } else if (role === "manager") {
-    menuItems = managerMenu;
-  } else if (role === "employee") {
-    menuItems = employeeMenu;
-  }
+  // Improved function to show correct tab name even on sub-routes (e.g. /projects/1)
+  const getCurrentPageLabel = () => {
+    const pathname = location.pathname.toLowerCase();
 
-  const pageTitles = {
-    '/admin/profile': 'My Profile',
-    '/admin/settings': 'Settings',
-    '/employee/profile': 'My Profile',
+    if (pathname.includes('/dashboard')) return 'Dashboard';
+    if (pathname.includes('/projects')) return 'Projects';
+    if (pathname.includes('/task-insights')) return 'Task Insights';
+    if (pathname.includes('/team')) return 'Team Management';
+
+    return 'Dashboard';
   };
 
   return (
@@ -91,7 +86,7 @@ const DashboardLayout = () => {
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center font-bold text-2xl shadow-lg">
             K
           </div>
-
+          
           {sidebarOpen && (
             <div>
               <h1 className="text-xl font-bold tracking-tight">KRISTELLAR</h1>
@@ -127,7 +122,7 @@ const DashboardLayout = () => {
         {/* NAVBAR */}
         <nav className="h-16 px-6 flex items-center justify-between bg-white border-b border-blue-100 shadow-sm">
 
-          {/* LEFT SIDE */}
+          {/* LEFT SIDE - Dynamic Tab Name */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -137,9 +132,7 @@ const DashboardLayout = () => {
             </button>
 
             <h2 className="text-lg font-semibold text-gray-800">
-              {pageTitles[location.pathname] ||
-                menuItems.find((item) => item.path === location.pathname)?.label ||
-                'Dashboard'}
+              {getCurrentPageLabel()}
             </h2>
           </div>
 
@@ -184,11 +177,9 @@ const DashboardLayout = () => {
                 </div>
               </div>
 
-              {/* Enhanced Profile Dropdown */}
+              {/* Profile Dropdown Menu */}
               {showProfileMenu && (
-                <div className="absolute right-0 mt-3 w-80 bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-
-                  {/* Profile Header */}
+                <div className="absolute right-0 mt-3 w-80 bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden z-50">
                   <div className="p-6 bg-gradient-to-br from-blue-50 to-white border-b border-blue-100">
                     <div className="flex gap-4">
                       <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-semibold shadow">
@@ -202,10 +193,9 @@ const DashboardLayout = () => {
                     </div>
                   </div>
 
-                  {/* Menu Items */}
                   <div className="py-2">
                     <NavLink
-                      to={role === "employee" ? "/employee/profile" : "/admin/profile"}
+                      to={`/${role}/profile`}
                       onClick={() => setShowProfileMenu(false)}
                       className="w-full px-6 py-3 flex items-center gap-3 hover:bg-blue-50 text-gray-700 transition"
                     >
@@ -214,7 +204,7 @@ const DashboardLayout = () => {
                     </NavLink>
 
                     <NavLink
-                      to={role === "employee" ? "/employee/settings" : "/admin/settings"}
+                      to={`/${role}/settings`}
                       onClick={() => setShowProfileMenu(false)}
                       className="w-full px-6 py-3 flex items-center gap-3 hover:bg-blue-50 text-gray-700 transition"
                     >
@@ -223,7 +213,6 @@ const DashboardLayout = () => {
                     </NavLink>
                   </div>
 
-                  {/* Logout */}
                   <div className="border-t border-gray-100">
                     <button
                       onClick={() => {
