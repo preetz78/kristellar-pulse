@@ -1,4 +1,3 @@
-// backend/config/db.js
 import mysql from "mysql2/promise";
 import "dotenv/config";
 
@@ -12,13 +11,7 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 
-// Handle unexpected errors
-pool.on("error", (err) => {
-  console.error("Unexpected MySQL error:", err);
-  process.exit(1);
-});
-
-// Test connection on startup (same style as your PG file)
+// Test connection on startup
 (async () => {
   try {
     const connection = await pool.getConnection();

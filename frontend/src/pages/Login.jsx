@@ -1,71 +1,81 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { users } from "../data/users";
+import apiConfig from "../config/apiConfig";
 import { Mail, Lock } from "lucide-react";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const navigate = useNavigate();
 
-  const handleLogin = () => {
-    const user = users.find(
-      (u) => u.email === email && u.password === password
-    );
-
-    if (!user) {
-      setError("Invalid email or password ❌");
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError("Please enter email and password");
       return;
     }
 
+    setLoading(true);
     setError("");
 
-    // Save role and trigger update
-    localStorage.setItem("role", user.role);
-    window.dispatchEvent(new Event("auth-change"));
+    try {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    // Navigate based on role
-    if (user.role === "admin") {
-      navigate("/admin/dashboard", { replace: true });
-    } else if (user.role === "manager") {
-      navigate("/manager/dashboard", { replace: true });
-    } else if (user.role === "reviewer") {
-      navigate("/reviewer/dashboard", { replace: true });
-    } else {
-      navigate("/login", { replace: true });
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        const role = result.user.role.toLowerCase();
+
+        localStorage.setItem("token", result.token);
+        localStorage.setItem("user", JSON.stringify(result.user));
+        localStorage.setItem("role", role);
+        window.dispatchEvent(new Event("auth-change"));
+
+        if (role === "admin") {
+          navigate("/admin/dashboard", { replace: true });
+        } else if (role === "manager") {
+          navigate("/manager/dashboard", { replace: true });
+        } else if (role === "reviewer") {
+          navigate("/reviewer/dashboard", { replace: true });
+        } else {
+          navigate("/", { replace: true });
+        }
+      } else {
+        setError(result.message || "Invalid email or password");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Failed to connect to server. Please make sure backend is running.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="h-screen flex items-center justify-center relative overflow-hidden">
-
-      {/* Background Image */}
       <img
         src="/bg.jpg"
         alt="background"
         className="absolute w-full h-full object-cover scale-110"
       />
 
-      {/* Dark Overlay */}
       <div className="absolute inset-0 bg-black/40" />
 
-      {/* Glass Card */}
       <div className="relative w-[360px] bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl p-8">
-
-        {/* Title */}
         <h2 className="text-2xl font-bold text-white text-center mb-6">
-          Welcome Back 👋
+          Welcome Back
         </h2>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 text-sm text-red-300 text-center">
-            {error}
-          </div>
-        )}
+        {error && <div className="mb-4 text-sm text-red-300 text-center">{error}</div>}
 
-        {/* Email */}
         <div className="relative mb-4">
           <Mail
             size={18}
@@ -77,10 +87,10 @@ const Login = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/40 transition"
+            disabled={loading}
           />
         </div>
 
-        {/* Password */}
         <div className="relative mb-5">
           <Lock
             size={18}
@@ -92,18 +102,18 @@ const Login = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/40 transition"
+            disabled={loading}
           />
         </div>
 
-        {/* Login Button */}
         <button
           onClick={handleLogin}
-          className="w-full py-3 rounded-xl bg-white text-blue-600 font-semibold hover:bg-blue-100 transition-all duration-300 transform hover:scale-[1.02] active:scale-95 shadow-md"
+          disabled={loading}
+          className="w-full py-3 rounded-xl bg-white text-blue-600 font-semibold hover:bg-blue-100 transition-all duration-300 transform hover:scale-[1.02] active:scale-95 shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
 
-        {/* Footer */}
         <p className="text-center text-white/60 text-sm mt-6">
           Project Management System
         </p>

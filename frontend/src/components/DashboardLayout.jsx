@@ -216,6 +216,8 @@ const DashboardLayout = () => {
                   <div className="border-t border-gray-100">
                     <button
                       onClick={() => {
+                        localStorage.removeItem("token");
+                        localStorage.removeItem("user");
                         localStorage.removeItem("role");
                         window.dispatchEvent(new Event("auth-change"));
                         window.location.href = "/login";

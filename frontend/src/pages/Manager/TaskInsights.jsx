@@ -1,77 +1,58 @@
 // src/pages/Manager/TaskInsights.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Clock, User, MessageSquare, X, Send } from "lucide-react";
 
 const ManagerTaskInsights = () => {
-  const managerName = "Rahul Sharma"; // Replace with real logged-in manager name later
-
-  const [tasks] = useState([
-    {
-      id: '1',
-      project: 'Pulse CRM',
-      title: 'Design Dashboard UI',
-      description: 'Improve UI consistency, spacing, and ensure the color palette matches the new brand guidelines.',
-      status: 'In Progress',
-      dueDate: 'Apr 12',
-      assignee: 'Rahul Sharma',
-      progress: 70,
-      comments: [
-        { id: 'c1', user: 'Manager', text: 'UI looks good, adjust padding on the mobile view specifically.', timestamp: '2h ago' },
-        { id: 'c2', user: 'Developer', text: 'Working on responsiveness now.', timestamp: '1h ago' }
-      ]
-    },
-    {
-      id: '2',
-      project: 'Pulse CRM',
-      title: 'API Integration',
-      description: 'Connect the lead management module to the backend REST API.',
-      status: 'Delayed',
-      dueDate: 'Apr 10',
-      assignee: 'Rahul Sharma',
-      progress: 30,
-      comments: [
-        { id: 'c3', user: 'Architect', text: 'Endpoint /leads/v2 is now live.', timestamp: '5h ago' }
-      ]
-    },
-    {
-      id: '3',
-      project: 'HR System',
-      title: 'Login Module',
-      description: 'Implement OAuth2 and multi-factor authentication.',
-      status: 'Completed',
-      dueDate: 'Apr 05',
-      assignee: 'Michael',
-      progress: 100,
-      comments: []
-    },
-    {
-      id: '4',
-      project: 'Mobile App',
-      title: 'Payment Gateway',
-      description: 'Integrate Razorpay payment gateway.',
-      status: 'In Progress',
-      dueDate: 'Apr 15',
-      assignee: 'Rahul Sharma',
-      progress: 55,
-      comments: []
-    }
-  ]);
-
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [newComment, setNewComment] = useState('');
 
-  // Filter only tasks assigned to this manager
-  const myTasks = tasks.filter(task => task.assignee === managerName);
+  // Fetch real tasks for manager's projects
+  useEffect(() => {
+    const fetchTaskInsights = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem("token");
 
-  const filteredTasks = myTasks.filter(task =>
+        const response = await fetch("http://localhost:5000/api/manager/task-insights", {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          setTasks(result.data);
+        } else {
+          setError(result.message || "Failed to load task insights");
+        }
+      } catch (err) {
+        console.error(err);
+        setError("Failed to connect to server");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTaskInsights();
+  }, []);
+
+  // Filter and group tasks by project
+  const filteredTasks = tasks.filter(task =>
     task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    task.project.toLowerCase().includes(searchQuery.toLowerCase())
+    task.project_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const groupedTasks = filteredTasks.reduce((acc, task) => {
-    if (!acc[task.project]) acc[task.project] = [];
-    acc[task.project].push(task);
+    const projectName = task.project_name || "Uncategorized";
+    if (!acc[projectName]) acc[projectName] = [];
+    acc[projectName].push(task);
     return acc;
   }, {});
 
@@ -89,8 +70,7 @@ const ManagerTaskInsights = () => {
   const handleAddComment = (e) => {
     e.preventDefault();
     if (!newComment.trim() || !selectedTask) return;
-
-    alert("Comment added successfully! (Demo)");
+    alert("Comment added successfully! (This is a demo - backend comment saving coming soon)");
     setNewComment('');
   };
 
@@ -101,6 +81,16 @@ const ManagerTaskInsights = () => {
     return "bg-gray-100 text-gray-700";
   };
 
+  const getProgressColor = (progress) => {
+    if (progress === 100) return "bg-emerald-500";
+    if (progress >= 70) return "bg-blue-500";
+    if (progress >= 40) return "bg-amber-500";
+    return "bg-red-500";
+  };
+
+  if (loading) return <div className="p-6 text-center text-gray-500">Loading Task Insights...</div>;
+  if (error) return <div className="p-6 text-center text-red-600">{error}</div>;
+
   return (
     <div className="p-6 bg-white min-h-screen">
       {/* Header */}
@@ -109,11 +99,11 @@ const ManagerTaskInsights = () => {
           <h1 className="text-3xl font-semibold text-blue-700">Task Insights</h1>
           <p className="text-gray-600 mt-1 flex items-center gap-2">
             <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
-             Projects Performance & Reviews
+            Projects Performance & Reviews
           </p>
         </div>
 
-        {/* Search on Right */}
+        {/* Search */}
         <div className="relative w-80">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input 
@@ -126,11 +116,11 @@ const ManagerTaskInsights = () => {
         </div>
       </div>
 
-      {/* Task List */}
-      <div className="space-y-4">
+      {/* Task List - Grouped by Project */}
+      <div className="space-y-8">
         {Object.keys(groupedTasks).length === 0 ? (
           <div className="text-center py-12 text-gray-400">
-            No tasks found for your projects
+            No tasks found for your projects yet.
           </div>
         ) : (
           Object.entries(groupedTasks).map(([projectName, projectTasks]) => (
@@ -157,15 +147,15 @@ const ManagerTaskInsights = () => {
                         <div className="flex items-center gap-5 mt-4 text-sm text-slate-500">
                           <div className="flex items-center gap-1.5">
                             <Clock className="w-4 h-4" />
-                            {task.dueDate}
+                            {task.due_date ? new Date(task.due_date).toLocaleDateString('en-GB') : 'No due date'}
                           </div>
                           <div className="flex items-center gap-1.5">
                             <User className="w-4 h-4" />
-                            {task.assignee}
+                            {task.assignee_name || 'Unassigned'}
                           </div>
                           <div className="flex items-center gap-1.5">
                             <MessageSquare className="w-4 h-4" />
-                            {task.comments.length}
+                            {task.comment_count || 0}
                           </div>
                         </div>
                       </div>
@@ -176,8 +166,8 @@ const ManagerTaskInsights = () => {
                         </span>
                         <div className="w-28 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                           <div 
-                            className={`h-full transition-all ${task.status === 'Delayed' ? 'bg-red-500' : 'bg-blue-500'}`}
-                            style={{ width: `${task.progress}%` }}
+                            className={`h-full transition-all ${getProgressColor(task.progress || 0)}`}
+                            style={{ width: `${task.progress || 0}%` }}
                           />
                         </div>
                       </div>
@@ -190,7 +180,7 @@ const ManagerTaskInsights = () => {
         )}
       </div>
 
-      {/* Right Sidebar with Comments */}
+      {/* Right Sidebar with Comments (kept as-is, can be enhanced later) */}
       {selectedTaskId && selectedTask && (
         <div className="fixed inset-0 bg-black/40 z-50 flex justify-end">
           <div 
@@ -214,7 +204,7 @@ const ManagerTaskInsights = () => {
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-xs text-slate-500">Project</p>
-                  <p className="font-semibold text-slate-800">{selectedTask.project}</p>
+                  <p className="font-semibold text-slate-800">{selectedTask.project_name}</p>
                 </div>
                 <span className={`px-4 py-1.5 text-xs font-semibold rounded-2xl ${getStatusColor(selectedTask.status)}`}>
                   {selectedTask.status}
@@ -224,19 +214,19 @@ const ManagerTaskInsights = () => {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="font-medium">Progress</span>
-                  <span className="font-bold text-blue-600">{selectedTask.progress}%</span>
+                  <span className="font-bold text-blue-600">{selectedTask.progress || 0}%</span>
                 </div>
                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-blue-600 rounded-full transition-all"
-                    style={{ width: `${selectedTask.progress}%` }}
+                    className={`h-full transition-all ${getProgressColor(selectedTask.progress || 0)}`}
+                    style={{ width: `${selectedTask.progress || 0}%` }}
                   />
                 </div>
               </div>
 
               <div>
                 <p className="text-xs font-medium text-slate-500 mb-2">DESCRIPTION</p>
-                <p className="text-slate-600 leading-relaxed">{selectedTask.description}</p>
+                <p className="text-slate-600 leading-relaxed">{selectedTask.description || 'No description provided.'}</p>
               </div>
 
               <div>
@@ -244,7 +234,7 @@ const ManagerTaskInsights = () => {
                   <MessageSquare className="w-4 h-4" /> REVIEWS & COMMENTS
                 </p>
                 <div className="space-y-4">
-                  {selectedTask.comments.length > 0 ? (
+                  {selectedTask.comments && selectedTask.comments.length > 0 ? (
                     selectedTask.comments.map((comment) => (
                       <div key={comment.id} className="bg-slate-50 p-4 rounded-2xl">
                         <div className="flex justify-between text-xs">
