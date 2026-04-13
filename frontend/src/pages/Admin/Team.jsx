@@ -11,7 +11,7 @@ import {
   X 
 } from "lucide-react";
 
-const API_BASE_URL = "http://localhost:5000";
+import apiConfig from "../../config/apiConfig";
 
 const Team = () => {
   const [teamMembers, setTeamMembers] = useState([]);
@@ -39,7 +39,7 @@ const Team = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/admin/users`);
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/users`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -93,7 +93,7 @@ const Team = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/users`, {
         method: 'POST',
         body: formData,
       });
@@ -143,7 +143,7 @@ const Team = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/users/${editingUser.id}`, {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/users/${editingUser.id}`, {
         method: 'PUT',
         body: formData,
       });
@@ -173,7 +173,7 @@ const Team = () => {
     setSubmitting(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/users/${deletingUserId}`, {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/users/${deletingUserId}`, {
         method: 'DELETE',
       });
 
@@ -240,7 +240,7 @@ const Team = () => {
       role: member.role,
       password: "",           
       profilePic: null,                 // Important: start with null (no new file)
-      previewUrl: member.profilePic ? `${API_BASE_URL}${member.profilePic}` : null,
+      previewUrl: member.profilePic ? `${apiConfig.API_BASE_URL}${member.profilePic}` : null,
     });
     setShowEditModal(true);
   };
@@ -352,7 +352,7 @@ const Team = () => {
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-semibold text-sm overflow-hidden border border-white">
                         {member.profilePic ? (
                           <img 
-                            src={`${API_BASE_URL}${member.profilePic}`} 
+                            src={`${apiConfig.API_BASE_URL}${member.profilePic}`} 
                             alt={member.name} 
                             className="w-full h-full object-cover" 
                           />

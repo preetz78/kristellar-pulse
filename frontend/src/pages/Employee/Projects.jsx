@@ -1,4 +1,4 @@
-// src/pages/Reviewer/Projects.jsx
+// src/pages/Employee/Projects.jsx
 import { useState, useEffect } from "react";
 import { 
   Calendar, 
@@ -6,28 +6,31 @@ import {
   TrendingUp 
 } from "lucide-react";
 
-import apiConfig from "../../config/apiConfig";
+import apiConfig from "../../config/apiConfig";   // ← Correct import (default export)
 
-const ReviewerProjects = () => {
+const EmployeeProjects = () => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const [hoveredCard, setHoveredCard] = useState(null);
-  
-  // Filter states
-  const [selectedOrg, setSelectedOrg] = useState("All Organizations");
   const [activeFilter, setActiveFilter] = useState("All Projects");
-  const [selectedProjectTitle, setSelectedProjectTitle] = useState("All Projects");
 
-  // Fetch all projects for reviewer
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchMyProjects = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token");
+        setError("");
 
-        const response = await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/projects`, {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          setError("Please login again to view your projects.");
+          return;
+        }
+
+        const apiUrl = `${apiConfig.API_BASE_URL}/api/employee/projects`;
+        console.log("🔄 Fetching projects from:", apiUrl);
+
+        const response = await fetch(apiUrl, {
           method: "GET",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -35,22 +38,36 @@ const ReviewerProjects = () => {
           }
         });
 
-        const result = await response.json();
+        console.log("📡 Response status:", response.status);
+
+        const text = await response.text();
+        console.log("📄 Raw response (first 300 chars):", text.substring(0, 300));
+
+        let result;
+        try {
+          result = JSON.parse(text);
+        } catch (parseErr) {
+          throw new Error("Server returned non-JSON response (HTML). Check apiConfig.API_BASE_URL");
+        }
+
+        if (!response.ok) {
+          throw new Error(result?.message || `Failed to load projects (Status: ${response.status})`);
+        }
 
         if (result.success) {
-          setProjects(result.data);
+          setProjects(result.data || []);
         } else {
           setError(result.message || "Failed to load projects");
         }
       } catch (err) {
-        console.error(err);
-        setError("Failed to connect to server");
+        console.error("❌ Projects fetch error:", err);
+        setError(err.message || "Failed to connect to server. Please check if backend is running.");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProjects();
+    fetchMyProjects();
   }, []);
 
   const getPriorityStyle = (priority) => {
@@ -65,31 +82,32 @@ const ReviewerProjects = () => {
     return "from-amber-500 to-orange-600";
   };
 
+  // Filter projects
   const filteredProjects = projects.filter((project) => {
-    let matchesFilter = true;
-    if (activeFilter === "In Progress") matchesFilter = (project.display_status || project.status) !== "Completed";
-    else if (activeFilter === "Completed") matchesFilter = (project.display_status || project.status) === "Completed";
-    else if (activeFilter === "High Priority") matchesFilter = project.priority === "High";
-
-    const matchesProject = selectedProjectTitle === "All Projects" || project.name === selectedProjectTitle;
-
-    return matchesFilter && matchesProject;
+    if (activeFilter === "All Projects") return true;
+    if (activeFilter === "In Progress") return project.status === "In Progress";
+    if (activeFilter === "Completed") return project.status === "Completed";
+    if (activeFilter === "High Priority") return project.priority === "High";
+    return true;
   });
+
+  if (loading) return <div className="p-6 text-center">Loading your projects...</div>;
+  if (error) return <div className="p-6 text-red-600">{error}</div>;
 
   return (
     <div className="p-6 bg-white min-h-screen">
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-semibold text-blue-700">Projects</h1>
+          <h1 className="text-3xl font-semibold text-blue-700">My Projects</h1>
           <p className="text-gray-600 mt-1 flex items-center gap-2">
             <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
-            All Active Projects in System
+            Projects assigned to me
           </p>
         </div>
       </div>
 
-      {/* Compact Summary Stats */}
+      {/* Summary Stats */}
       <div className="mb-8 bg-gradient-to-br from-blue-50 to-white border border-blue-200 rounded-2xl p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="flex items-center gap-4 group">
@@ -97,7 +115,7 @@ const ReviewerProjects = () => {
               <TrendingUp size={20} className="text-white" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">Total Projects</p>
+              <p className="text-sm text-gray-600">My Projects</p>
               <p className="text-2xl font-semibold text-gray-900">{projects.length}</p>
             </div>
           </div>
@@ -109,7 +127,7 @@ const ReviewerProjects = () => {
             <div>
               <p className="text-sm text-gray-600">In Progress</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {projects.filter((p) => (p.display_status || p.status) !== "Completed").length}
+                {projects.filter((p) => p.status === "In Progress").length}
               </p>
             </div>
           </div>
@@ -119,9 +137,9 @@ const ReviewerProjects = () => {
               <TrendingUp size={20} className="text-white" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">High Priority</p>
+              <p className="text-sm text-gray-600">Completed</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {projects.filter((p) => p.priority === "High").length}
+                {projects.filter((p) => p.status === "Completed").length}
               </p>
             </div>
           </div>
@@ -131,64 +149,37 @@ const ReviewerProjects = () => {
       {/* Filter Bar */}
       <div className="mb-8">
         <div className="flex flex-wrap items-center gap-2 bg-blue-50 rounded-2xl p-2 w-fit">
-          <div className="relative">
-            <select
-              value={selectedProjectTitle}
-              onChange={(e) => {
-                setSelectedProjectTitle(e.target.value);
-                if (e.target.value !== "All Projects") {
-                  setActiveFilter("All Projects");
-                }
-              }}
-              className="bg-white border-0 text-blue-700 font-medium px-6 py-3 rounded-[14px] focus:outline-none cursor-pointer appearance-none pr-10 min-w-[180px]"
-            >
-              <option value="All Projects">All Projects</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.name}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-blue-600 text-sm">▼</div>
-          </div>
+          <button
+            onClick={() => setActiveFilter("All Projects")}
+            className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
+              activeFilter === "All Projects" ? "bg-white shadow-sm text-blue-700" : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            All Projects
+          </button>
 
           <button
-            onClick={() => {
-              setActiveFilter("In Progress");
-              setSelectedProjectTitle("All Projects");
-            }}
+            onClick={() => setActiveFilter("In Progress")}
             className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
-              activeFilter === "In Progress" && selectedProjectTitle === "All Projects"
-                ? "bg-white shadow-sm text-blue-700" 
-                : "text-gray-600 hover:text-gray-900"
+              activeFilter === "In Progress" ? "bg-white shadow-sm text-blue-700" : "text-gray-600 hover:text-gray-900"
             }`}
           >
             In Progress
           </button>
 
           <button
-            onClick={() => {
-              setActiveFilter("Completed");
-              setSelectedProjectTitle("All Projects");
-            }}
+            onClick={() => setActiveFilter("Completed")}
             className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
-              activeFilter === "Completed" && selectedProjectTitle === "All Projects"
-                ? "bg-white shadow-sm text-blue-700" 
-                : "text-gray-600 hover:text-gray-900"
+              activeFilter === "Completed" ? "bg-white shadow-sm text-blue-700" : "text-gray-600 hover:text-gray-900"
             }`}
           >
             Completed
           </button>
 
           <button
-            onClick={() => {
-              setActiveFilter("High Priority");
-              setSelectedProjectTitle("All Projects");
-            }}
+            onClick={() => setActiveFilter("High Priority")}
             className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
-              activeFilter === "High Priority" && selectedProjectTitle === "All Projects"
-                ? "bg-white shadow-sm text-blue-700" 
-                : "text-gray-600 hover:text-gray-900"
+              activeFilter === "High Priority" ? "bg-white shadow-sm text-blue-700" : "text-gray-600 hover:text-gray-900"
             }`}
           >
             High Priority
@@ -203,7 +194,7 @@ const ReviewerProjects = () => {
             key={project.id}
             onMouseEnter={() => setHoveredCard(idx)}
             onMouseLeave={() => setHoveredCard(null)}
-            className={`relative group bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl cursor-pointer ${
+            className={`relative group bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl ${
               hoveredCard === idx ? "shadow-2xl -translate-y-1 border-blue-400" : ""
             }`}
           >
@@ -213,20 +204,20 @@ const ReviewerProjects = () => {
               <div className="flex justify-between items-start mb-6">
                 <div className="flex-1">
                   <h3 className="text-xl font-semibold text-gray-900 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
-                    {project.name}
+                    {project.title}
                   </h3>
-                  <p className="text-xs text-gray-500 mt-1">ID: {project.project_id}</p>
+                  <p className="text-xs text-gray-500 mt-1">ID: {project.idCode}</p>
                 </div>
 
-                <span className={`text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ml-4 ${getPriorityStyle(project.priority || "Medium")}`}>
-                  {project.priority || "Medium"}
+                <span className={`text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ml-4 ${getPriorityStyle(project.priority)}`}>
+                  {project.priority}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
                   <p className="text-xs text-gray-500 font-medium">Project Manager</p>
-                  <p className="font-semibold text-gray-900 mt-1 text-sm">{project.project_manager_name}</p>
+                  <p className="font-semibold text-gray-900 mt-1 text-sm">{project.manager}</p>
                 </div>
 
                 <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
@@ -234,7 +225,7 @@ const ReviewerProjects = () => {
                     <Users size={15} className="text-blue-600" />
                     <p className="text-xs text-gray-500 font-medium">Team Size</p>
                   </div>
-                  <p className="font-semibold text-gray-900 text-sm">{project.team_size} Members</p>
+                  <p className="font-semibold text-gray-900 text-sm">{project.teamSize}</p>
                 </div>
               </div>
 
@@ -245,18 +236,16 @@ const ReviewerProjects = () => {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Deadline</p>
-                    <p className="font-semibold text-gray-900 text-sm">
-                      {project.deadline ? new Date(project.deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
-                    </p>
+                    <p className="font-semibold text-gray-900 text-sm">{project.deadline}</p>
                   </div>
                 </div>
 
                 <span className={`px-4 py-1.5 text-xs font-semibold rounded-xl border ${
-                  (project.display_status || project.status) === "Completed" 
-                    ? "bg-emerald-100 text-emerald-700 border-emerald-200" 
-                    : "bg-blue-100 text-blue-700 border-blue-200"
+                  project.status === "In Progress" 
+                    ? "bg-blue-100 text-blue-700 border-blue-200" 
+                    : "bg-emerald-100 text-emerald-700 border-emerald-200"
                 }`}>
-                  {(project.display_status || project.status) || "In Progress"}
+                  {project.status}
                 </span>
               </div>
 
@@ -266,13 +255,13 @@ const ReviewerProjects = () => {
                     <TrendingUp size={16} className="text-blue-600" />
                     <span className="text-xs font-medium text-gray-600">Progress</span>
                   </div>
-                  <span className="text-2xl font-bold text-blue-600">{project.progress || 0}%</span>
+                  <span className="text-2xl font-bold text-blue-600">{project.progress}%</span>
                 </div>
 
                 <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full bg-gradient-to-r ${getProgressGradient(project.progress || 0)} rounded-full transition-all duration-500`}
-                    style={{ width: `${project.progress || 0}%` }}
+                    className={`h-full bg-gradient-to-r ${getProgressGradient(project.progress)} rounded-full transition-all duration-500`}
+                    style={{ width: `${project.progress}%` }}
                   />
                 </div>
               </div>
@@ -280,8 +269,14 @@ const ReviewerProjects = () => {
           </div>
         ))}
       </div>
+
+      {filteredProjects.length === 0 && (
+        <div className="text-center py-12 text-gray-500">
+          No projects found matching your filter.
+        </div>
+      )}
     </div>
   );
 };
 
-export default ReviewerProjects;
+export default EmployeeProjects;

@@ -3,30 +3,44 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-const uploadDir = 'uploads/profile_pics';
+// Two upload directories
+const userUploadDir = 'uploads/profile_pics';
+const employeeUploadDir = 'uploads/employee';
 
-// Automatically create the folder if it doesn't exist
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log(`✅ Profile upload directory created: ${uploadDir}`);
-}
+// Create directories if they don't exist
+[userUploadDir, employeeUploadDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`Upload directory created: ${dir}`);
+  }
+});
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDir);
+    // If employee_id is sent → it's an employee upload
+    if (req.body.employee_id) {
+      cb(null, employeeUploadDir);
+    } else {
+      // Regular user upload (admin, manager, reviewer)
+      cb(null, userUploadDir);
+    }
   },
   filename: (req, file, cb) => {
-    const { name } = req.body;
-    
-    // Clean the name: "John Doe" → "John_Doe"
-    const cleanName = name 
-      ? name.trim().replace(/[^a-zA-Z0-9]/g, '_') 
-      : 'user';
+    let filename;
 
-    const ext = path.extname(file.originalname).toLowerCase();
-    
-    // Final filename: John_Doe.jpg (as you wanted - no random numbers)
-    const filename = `${cleanName}${ext}`;
+    if (req.body.employee_id) {
+      // Employee: filename = employee_id + extension (e.g., KA001.jpg)
+      const ext = path.extname(file.originalname).toLowerCase();
+      filename = `${req.body.employee_id}${ext}`;
+    } else {
+      // Regular user: use name (your existing logic)
+      const { name } = req.body;
+      const cleanName = name 
+        ? name.trim().replace(/[^a-zA-Z0-9]/g, '_') 
+        : 'user';
+      const ext = path.extname(file.originalname).toLowerCase();
+      filename = `${cleanName}${ext}`;
+    }
 
     cb(null, filename);
   }
@@ -43,7 +57,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
-  limits: { fileSize: 2 * 1024 * 1024 } // Max 2MB
+  limits: { fileSize: 2 * 1024 * 1024 } // 2MB max
 });
 
 export default upload;

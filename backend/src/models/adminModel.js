@@ -44,7 +44,7 @@ const seedAdminUser = async () => {
     );
 
     if (existing.length > 0) {
-      console.log(`Admin user already exists: ${adminEmail} (ID: ${existing[0].id})`);
+      // Silent - no log when already exists (as you wanted)
       return;
     }
 
@@ -60,7 +60,7 @@ const seedAdminUser = async () => {
       [adminId, adminName, adminEmail, hashedPassword, adminRole]
     );
 
-    console.log(`🎉 Admin user seeded successfully: ${adminEmail} (ID: ${adminId})`);
+    console.log(`🎉 Admin user seeded successfully: ${adminEmail}`);
   } catch (error) {
     console.error("❌ Error seeding admin user:", error.message);
   }
@@ -69,15 +69,9 @@ const seedAdminUser = async () => {
 // Run table creation first, then seed (with small delay for safety)
 const initializeDatabase = async () => {
   await createUsersTable();
-  
-  // Small delay to ensure table is fully created
-  setTimeout(() => {
-    seedAdminUser();
-  }, 1000);
+  setTimeout(seedAdminUser, 800);   // Small delay
 };
 
-// Start initialization
-initializeDatabase();
 
 export default {
   createUsersTable,

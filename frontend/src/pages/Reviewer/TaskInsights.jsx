@@ -1,5 +1,6 @@
 // src/pages/Reviewer/TaskInsights.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import apiConfig from '../../config/apiConfig';
 import { 
   Search, 
   Clock, 
@@ -8,57 +9,6 @@ import {
   X, 
   Send 
 } from 'lucide-react';
-
-const INITIAL_TASKS = [
-  {
-    id: '1',
-    project: 'Pulse CRM',
-    title: 'Design Dashboard UI',
-    description: 'Improve UI consistency, spacing, and ensure the color palette matches the new brand guidelines.',
-    status: 'In Progress',
-    dueDate: 'Apr 12',
-    assignee: 'Rahul',
-    progress: 70,
-    comments: [
-      { id: 'c1', user: 'Manager', text: 'UI looks good, adjust padding on the mobile view specifically.', timestamp: '2h ago' },
-    ]
-  },
-  {
-    id: '2',
-    project: 'Pulse CRM',
-    title: 'API Integration',
-    description: 'Connect the lead management module to the backend REST API.',
-    status: 'Delayed',
-    dueDate: 'Apr 10',
-    assignee: 'Sarah',
-    progress: 30,
-    comments: []
-  },
-  {
-    id: '3',
-    project: 'HR System',
-    title: 'Login Module',
-    description: 'Implement OAuth2 and multi-factor authentication for the main portal.',
-    status: 'Completed',
-    dueDate: 'Apr 05',
-    assignee: 'Michael',
-    progress: 100,
-    comments: [
-      { id: 'c4', user: 'QA', text: 'Verified on all browsers. LGTM!', timestamp: '1d ago' }
-    ]
-  },
-  {
-    id: '4',
-    project: 'Mobile App',
-    title: 'Payment Gateway Integration',
-    description: 'Integrate Razorpay payment gateway with proper error handling.',
-    status: 'In Progress',
-    dueDate: 'Apr 18',
-    assignee: 'Priya Sharma',
-    progress: 45,
-    comments: []
-  }
-];
 
 const StatusBadge = ({ status }) => {
   const styles = {
@@ -74,13 +24,110 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+// Format timestamp (e.g., "2h ago")
+const formatTimeAgo = (timestamp) => {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const seconds = Math.floor((now - date) / 1000);
+
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+};
+
 export default function ReviewerTaskInsights() {
-  const [tasks] = useState(INITIAL_TASKS);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [newComment, setNewComment] = useState('');
+  const [comments, setComments] = useState([]);
+  const [loadingComments, setLoadingComments] = useState(false);
 
   const selectedTask = tasks.find(t => t.id === selectedTaskId);
+
+  // Fetch all tasks
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/tasks`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
+        });
+
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+        const result = await response.json();
+        if (result.success && Array.isArray(result.data)) {
+          setTasks(result.data);
+        } else {
+          throw new Error(result.message || 'Invalid response');
+        }
+      } catch (err) {
+        console.error('Error fetching tasks:', err);
+        setError(err.message || 'Failed to load tasks');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTasks();
+  }, []);
+
+  // Fetch comments when task is opened
+  useEffect(() => {
+    if (!selectedTaskId) {
+      setComments([]);
+      return;
+    }
+
+    const fetchComments = async () => {
+      setLoadingComments(true);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(
+          `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTaskId}/comments`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
+          }
+        );
+
+        if (!response.ok) throw new Error('Failed to fetch comments');
+
+        const result = await response.json();
+        if (result.success) {
+          setComments(result.data);
+        }
+      } catch (err) {
+        console.error('Error fetching comments:', err);
+        setComments([]);
+      } finally {
+        setLoadingComments(false);
+      }
+    };
+
+    fetchComments();
+  }, [selectedTaskId]);
+
+  // Update comment count in the main tasks list after adding a comment
+  const updateTaskCommentCount = (taskId, newCount) => {
+    setTasks(prevTasks =>
+      prevTasks.map(task =>
+        task.id === taskId ? { ...task, comments: newCount } : task
+      )
+    );
+  };
 
   const filteredTasks = tasks.filter(task =>
     task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -95,21 +142,86 @@ export default function ReviewerTaskInsights() {
 
   const handleOpenTask = (id) => {
     setSelectedTaskId(id);
+    setNewComment('');
   };
 
   const handleCloseSidebar = () => {
     setSelectedTaskId(null);
     setNewComment('');
+    setComments([]);
   };
 
-  const handleAddComment = (e) => {
+  // Add comment and update count
+  const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!newComment.trim() || !selectedTask) return;
+    if (!newComment.trim() || !selectedTaskId) return;
 
-    // In real app, you would update the task comments here
-    alert("Review/Comment added successfully! (Demo)");
-    setNewComment('');
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTaskId}/comments`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ comment_text: newComment.trim() })
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        setNewComment('');
+
+        // Refresh comments in sidebar
+        const refreshRes = await fetch(
+          `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTaskId}/comments`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        const refreshData = await refreshRes.json();
+        if (refreshData.success) {
+          setComments(refreshData.data);
+        }
+
+        // Update comment count on the main task card
+        updateTaskCommentCount(selectedTaskId, comments.length + 1);
+      } else {
+        alert(result.message || "Failed to add comment");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to add comment. Please try again.");
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading tasks...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
+        <div className="text-center text-red-600">
+          <p className="text-xl font-medium">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-white min-h-screen">
@@ -136,12 +248,10 @@ export default function ReviewerTaskInsights() {
         </div>
       </div>
 
-      {/* Task List */}
+      {/* Task List - Now shows real comment count */}
       <div className="space-y-4">
         {Object.keys(groupedTasks).length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            No tasks found
-          </div>
+          <div className="text-center py-12 text-gray-400">No tasks found</div>
         ) : (
           Object.entries(groupedTasks).map(([projectName, projectTasks]) => (
             <section key={projectName} className="mb-10">
@@ -175,7 +285,7 @@ export default function ReviewerTaskInsights() {
                           </div>
                           <div className="flex items-center gap-1.5">
                             <MessageSquare className="w-4 h-4" />
-                            {task.comments.length}
+                            {task.comments || 0}   {/* Real comment count */}
                           </div>
                         </div>
                       </div>
@@ -198,35 +308,47 @@ export default function ReviewerTaskInsights() {
         )}
       </div>
 
-      {/* Right Sidebar for Comments / Reviews */}
+      {/* Right Sidebar with Real Comments */}
       {selectedTaskId && selectedTask && (
         <div className="fixed inset-0 bg-black/40 z-50 flex justify-end">
           <div 
             className="bg-white w-full max-w-lg h-full shadow-2xl flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            <div className="p-6 border-b flex items-center justify-between bg-slate-50">
+            <div className="p-6 flex items-center justify-between bg-slate-50">
               <div>
                 <p className="text-xs font-medium text-blue-600">TASK REVIEW</p>
                 <h2 className="font-bold text-xl text-slate-900 mt-1">{selectedTask.title}</h2>
               </div>
-              <button 
-                onClick={handleCloseSidebar}
-                className="p-2 hover:bg-slate-200 rounded-xl transition-colors"
-              >
+              <button onClick={handleCloseSidebar} className="p-2 hover:bg-slate-200 rounded-xl">
                 <X size={24} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-xs text-slate-500">Project</p>
-                  <p className="font-semibold text-slate-800">{selectedTask.project}</p>
-                </div>
-                <StatusBadge status={selectedTask.status} />
+              {/* Project Info */}
+              <div>
+                <p className="text-xs text-slate-500">Project</p>
+                <p className="font-semibold text-slate-800">{selectedTask.project}</p>
               </div>
 
+              <div>
+                <p className="text-xs text-slate-500">Project Manager</p>
+                <p className="font-semibold text-slate-800 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  {selectedTask.projectManager || 'No Manager Assigned'}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-slate-500">Assigned To</p>
+                <p className="font-semibold text-slate-800 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  {selectedTask.assignee || 'Unassigned'}
+                </p>
+              </div>
+
+              {/* Progress */}
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="font-medium">Progress</span>
@@ -240,24 +362,29 @@ export default function ReviewerTaskInsights() {
                 </div>
               </div>
 
+              {/* Description */}
               <div>
                 <p className="text-xs font-medium text-slate-500 mb-2">DESCRIPTION</p>
                 <p className="text-slate-600 leading-relaxed">{selectedTask.description}</p>
               </div>
 
+              {/* Comments Section */}
               <div>
                 <p className="text-xs font-medium text-slate-500 mb-4 flex items-center gap-2">
                   <MessageSquare className="w-4 h-4" /> REVIEWS & COMMENTS
                 </p>
-                <div className="space-y-4">
-                  {selectedTask.comments.length > 0 ? (
-                    selectedTask.comments.map((comment) => (
+
+                <div className="space-y-4 mb-6">
+                  {loadingComments ? (
+                    <p className="text-center text-gray-500 py-4">Loading comments...</p>
+                  ) : comments.length > 0 ? (
+                    comments.map((comment) => (
                       <div key={comment.id} className="bg-slate-50 p-4 rounded-2xl">
                         <div className="flex justify-between text-xs">
-                          <span className="font-medium text-slate-700">{comment.user}</span>
-                          <span className="text-slate-400">{comment.timestamp}</span>
+                          <span className="font-medium text-slate-700">{comment.reviewer_name}</span>
+                          <span className="text-slate-400">{formatTimeAgo(comment.created_at)}</span>
                         </div>
-                        <p className="mt-2 text-slate-600 text-sm">{comment.text}</p>
+                        <p className="mt-2 text-slate-600 text-sm">{comment.comment_text}</p>
                       </div>
                     ))
                   ) : (
@@ -268,7 +395,7 @@ export default function ReviewerTaskInsights() {
             </div>
 
             {/* Comment Input */}
-            <div className="p-4 border-t bg-white">
+            <div className="p-4 bg-white">
               <form onSubmit={handleAddComment} className="flex gap-2">
                 <input 
                   type="text"

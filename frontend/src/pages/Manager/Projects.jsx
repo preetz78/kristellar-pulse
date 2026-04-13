@@ -11,6 +11,8 @@ import {
   Trash2
 } from "lucide-react";
 
+import apiConfig from "../../config/apiConfig";
+
 const ManagerProjects = () => {
   const navigate = useNavigate();
   
@@ -70,7 +72,7 @@ const ManagerProjects = () => {
       setLoading(true);
       const token = localStorage.getItem("token");
 
-      const response = await fetch("http://localhost:5000/api/manager/projects", {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -96,7 +98,7 @@ const ManagerProjects = () => {
   const fetchEmployees = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:5000/api/manager/employees", {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/employees`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -139,7 +141,7 @@ const ManagerProjects = () => {
     try {
       const token = localStorage.getItem("token");
 
-      const response = await fetch("http://localhost:5000/api/manager/projects", {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -194,7 +196,7 @@ const ManagerProjects = () => {
     try {
       const token = localStorage.getItem("token");
 
-      const response = await fetch(`http://localhost:5000/api/manager/projects/${editingProject.id}`, {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${editingProject.id}`, {
         method: "PUT",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -234,7 +236,7 @@ const ManagerProjects = () => {
     try {
       const token = localStorage.getItem("token");
 
-      const response = await fetch(`http://localhost:5000/api/manager/projects/${projectToDelete.id}`, {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectToDelete.id}`, {
         method: "DELETE",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -368,7 +370,7 @@ const ManagerProjects = () => {
             <div>
               <p className="text-sm text-gray-600">In Progress</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {projects.filter((p) => (p.display_status || p.status) !== "Completed").length}
+                {projects.filter((p) => (p.progress || 0) < 100).length}
               </p>
             </div>
           </div>
@@ -539,6 +541,9 @@ const ManagerProjects = () => {
                       className={`h-full rounded-full transition-all duration-700 ${getProgressColor(progress)}`}
                       style={{ width: `${progress}%` }}
                     />
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1 text-right">
+                    {project.completed_tasks || 0} of {project.total_tasks || 0} tasks completed
                   </div>
                 </div>
               </div>

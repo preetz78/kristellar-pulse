@@ -11,22 +11,13 @@ const ReviewerDashboard = () => {
 
   const [completionRate] = useState(68);
 
-  // Weekly PROJECT PROGRESS Data
-  const weeklyProgressData = [
-    { week: "W1", progress: 45 },
-    { week: "W2", progress: 52 },
-    { week: "W3", progress: 61 },
-    { week: "W4", progress: 68 },
-    { week: "W5", progress: 75 },
-    { week: "W6", progress: 82 },
-  ];
-
+  // Project Progress Data for thin multi-line chart
   const projectProgressData = [
-    { quarter: "Mon", progress: 84 },
-    { quarter: "Tue", progress: 83 },
-    { quarter: "Wed", progress: 78 },
-    { quarter: "Thu", progress: 63 },
-    { quarter: "Fri", progress: 67 },
+    { name: "WorkSync Project Hub", color: "#3b82f6", progress: [22, 35, 48, 59, 68, 75] },
+    { name: "AI Chatbot Development", color: "#10b981", progress: [12, 28, 39, 52, 61, 68] },
+    { name: "Enterprise Resource Planning System", color: "#8b5cf6", progress: [5, 18, 29, 41, 52, 58] },
+    { name: "Marketing Automation Platform", color: "#f59e0b", progress: [8, 19, 26, 34, 45, 53] },
+    { name: "E-commerce Dashboard", color: "#ef4444", progress: [3, 11, 18, 25, 31, 43] }
   ];
 
   return (
@@ -148,79 +139,100 @@ const ReviewerDashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS */}
+        {/* PROJECT PROGRESS - Thin Multi-Line Chart */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="text-lg font-semibold text-gray-800">PROJECT PROGRESS</h3>
-              <p className="text-xs text-gray-500">Share of progress across timeline</p>
+              <p className="text-xs text-gray-500">Last 6 weeks • All projects</p>
             </div>
             <div className="px-3 py-1 bg-blue-600 text-white text-xs rounded-full animate-pulse">
               Live
             </div>
           </div>
 
-          <div className="relative h-64 bg-gradient-to-br from-blue-100 to-blue-50 rounded-2xl p-6">
-            <svg viewBox="0 0 700 300" className="w-full h-full">
-              <defs>
-                <linearGradient id="smoothArea" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.05" />
-                </linearGradient>
-              </defs>
+          <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
+            <svg viewBox="0 0 750 280" className="w-full h-full">
+              {/* Light grid lines */}
+              {[0, 25, 50, 75, 100].map((val, i) => (
+                <line 
+                  key={i}
+                  x1="50" 
+                  y1={250 - val * 2} 
+                  x2="710" 
+                  y2={250 - val * 2} 
+                  stroke="#f1f5f9" 
+                  strokeWidth="1.5" 
+                />
+              ))}
 
-              {/* SMOOTH AREA */}
-              <path
-                d="M 40 80 
-                  C 150 90, 220 100, 300 140
-                  C 380 190, 460 200, 540 170
-                  C 600 150, 650 120, 680 110
-                  L 680 300 L 40 300 Z"
-                fill="url(#smoothArea)"
-              />
+              {/* X-axis labels */}
+              {["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"].map((week, i) => (
+                <text 
+                  key={i} 
+                  x={80 + i * 115} 
+                  y="272" 
+                  className="text-xs fill-gray-500" 
+                  textAnchor="middle"
+                >
+                  {week}
+                </text>
+              ))}
 
-              {/* SMOOTH LINE */}
-              <path
-                d="M 40 80 
-                  C 150 90, 220 100, 300 140
-                  C 380 190, 460 200, 540 170
-                  C 600 150, 650 120, 680 110"
-                fill="none"
-                stroke="#2563eb"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
+              {/* Y-axis labels */}
+              {[0, 25, 50, 75, 100].map((val, i) => (
+                <text 
+                  key={i} 
+                  x="38" 
+                  y={255 - val * 2} 
+                  className="text-xs fill-gray-500" 
+                  textAnchor="end"
+                >
+                  {val}%
+                </text>
+              ))}
 
-              {/* DOTS */}
-              {[40, 180, 300, 450, 680].map((x, i) => {
-                const yPoints = [80, 95, 140, 200, 110];
-                return (
-                  <circle
-                    key={i}
-                    cx={x}
-                    cy={yPoints[i]}
-                    r="4"
-                    className="fill-blue-600 hover:r-6 transition-all cursor-pointer"
+              {/* Thin Progress Lines for each project */}
+              {projectProgressData.map((project, idx) => (
+                <g key={idx}>
+                  <polyline
+                    points={project.progress.map((val, i) => 
+                      `${80 + i * 115},${250 - (val * 2)}`
+                    ).join(" ")}
+                    fill="none"
+                    stroke={project.color}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
-                );
-              })}
-
-              {/* X LABELS */}
-              {projectProgressData.map((item, i) => {
-                const x = 40 + (i * 640) / (projectProgressData.length - 1);
-                return (
-                  <text
-                    key={i}
-                    x={x}
-                    y="285"
-                    textAnchor="middle"
-                    className="text-xs fill-gray-500 font-medium"
-                  >
-                    {item.quarter}
-                  </text>
-                );
-              })}
+                  {/* Small dots */}
+                  {project.progress.map((val, i) => (
+                    <circle
+                      key={i}
+                      cx={80 + i * 115}
+                      cy={250 - (val * 2)}
+                      r="4"
+                      fill={project.color}
+                      stroke="#ffffff"
+                      strokeWidth="2"
+                    />
+                  ))}
+                </g>
+              ))}
             </svg>
+          </div>
+
+          {/* Legend */}
+          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3 justify-center">
+            {projectProgressData.map((project, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div 
+                  className="w-4 h-0.5 rounded" 
+                  style={{ backgroundColor: project.color }}
+                ></div>
+                <span className="text-xs text-gray-700 font-medium">{project.name}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>

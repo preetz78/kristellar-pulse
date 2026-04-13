@@ -1,53 +1,55 @@
-// src/pages/Manager/Dashboard.jsx
+// src/pages/Employee/Dashboard.jsx
 import { useState, useEffect } from "react";
 import { TrendingUp, Briefcase, CheckCircle, Clock } from "lucide-react";
 
-const ManagerDashboard = () => {
-  const managerName = "Rahul Sharma"; // Replace with real user data later
-
+const EmployeeDashboard = () => {
   const [stats, setStats] = useState({
     totalProjects: 0,
     activeProjects: 0,
     completedProjects: 0,
   });
 
-  const [completionRate] = useState(68);
+  const [completionRate, setCompletionRate] = useState(0);
+  const [employeeName, setEmployeeName] = useState("");
 
-  // Sample projects (filtered for this manager)
-  const allProjects = [
-    { id: 1, title: "Design Dashboard UI", manager: "Rahul Sharma", status: "In Progress", progress: 75 },
-    { id: 2, title: "API Integration", manager: "Rahul Sharma", status: "In Progress", progress: 45 },
-    { id: 3, title: "Payment Gateway", manager: "Sarah Connor", status: "In Progress", progress: 90 },
-    { id: 4, title: "Login Module", manager: "Rahul Sharma", status: "Completed", progress: 100 },
-    { id: 5, title: "User Profile Page", manager: "Rahul Sharma", status: "Completed", progress: 100 },
-  ];
-
+  // This will come from logged-in user (we'll improve this later)
   useEffect(() => {
-    const myProjects = allProjects.filter(p => p.manager === managerName);
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    setEmployeeName(user.name || "Employee");
+
+    // TODO: Later fetch real data from backend using employee_id
+    // For now, using realistic sample data
+    const myProjects = [
+      { id: 1, title: "Frontend UI Development", status: "In Progress", progress: 75 },
+      { id: 2, title: "Bug Fixing Sprint", status: "In Progress", progress: 40 },
+      { id: 3, title: "Payment Integration", status: "Completed", progress: 100 },
+      { id: 4, title: "User Authentication Module", status: "Completed", progress: 100 },
+      { id: 5, title: "API Documentation", status: "In Progress", progress: 60 },
+    ];
 
     const total = myProjects.length;
     const active = myProjects.filter(p => p.status === "In Progress").length;
     const completed = myProjects.filter(p => p.status === "Completed").length;
+    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     setStats({
       totalProjects: total,
       activeProjects: active,
       completedProjects: completed,
     });
+    setCompletionRate(rate);
   }, []);
 
-  // Project Progress Data for thin lines (Last 6 weeks)
+  // Sample progress trend data (Last 6 weeks)
   const projectProgressData = [
-    { name: "WorkSync Project Hub", color: "#3b82f6", progress: [22, 35, 48, 59, 68, 75] },
-    { name: "AI Chatbot Development", color: "#10b981", progress: [12, 28, 39, 52, 61, 68] },
-    { name: "Enterprise Resource Planning System", color: "#8b5cf6", progress: [5, 18, 29, 41, 52, 58] },
-    { name: "Marketing Automation Platform", color: "#f59e0b", progress: [8, 19, 26, 34, 45, 53] },
-    { name: "E-commerce Dashboard", color: "#ef4444", progress: [3, 11, 18, 25, 31, 43] }
+    { name: "My Assigned Tasks", color: "#3b82f6", progress: [35, 48, 62, 71, 68, 82] },
+    { name: "Bug Fixes", color: "#10b981", progress: [20, 33, 45, 58, 65, 78] },
+    { name: "Feature Development", color: "#8b5cf6", progress: [15, 28, 42, 55, 63, 71] },
   ];
 
   return (
     <div className="p-5 md:p-6 bg-white min-h-screen">
-      {/* Header - Compact */}
+      {/* Header */}
       <div className="flex justify-between items-center mb-6 md:mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold text-blue-700">Dashboard</h1>
@@ -62,21 +64,21 @@ const ManagerDashboard = () => {
         </button>
       </div>
 
-      {/* Top Stats Cards - More Compact */}
+      {/* Top Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
         {/* Total Projects */}
         <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-6 hover:border-blue-400 transition-all group">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-medium text-gray-500">TOTAL PROJECTS</p>
+              <p className="text-xs font-medium text-gray-500">MY PROJECTS</p>
               <p className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 md:mt-3">{stats.totalProjects}</p>
             </div>
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform flex-shrink-0">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
               <Briefcase size={24} className="text-white" />
             </div>
           </div>
           <p className="text-xs md:text-sm text-emerald-600 mt-4 md:mt-6 flex items-center gap-1">
-            <TrendingUp size={15} /> My Assigned Projects
+            <TrendingUp size={15} /> Assigned to me
           </p>
         </div>
 
@@ -84,10 +86,10 @@ const ManagerDashboard = () => {
         <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-6 hover:border-blue-400 transition-all group">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-medium text-gray-500">ACTIVE PROJECTS</p>
+              <p className="text-xs font-medium text-gray-500">ACTIVE TASKS</p>
               <p className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 md:mt-3">{stats.activeProjects}</p>
             </div>
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform flex-shrink-0">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
               <Clock size={24} className="text-white" />
             </div>
           </div>
@@ -98,10 +100,10 @@ const ManagerDashboard = () => {
         <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-6 hover:border-blue-400 transition-all group">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-medium text-gray-500">PROJECTS COMPLETED</p>
+              <p className="text-xs font-medium text-gray-500">COMPLETED</p>
               <p className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 md:mt-3">{stats.completedProjects}</p>
             </div>
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform flex-shrink-0">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
               <CheckCircle size={24} className="text-white" />
             </div>
           </div>
@@ -111,14 +113,14 @@ const ManagerDashboard = () => {
         </div>
       </div>
 
-      {/* Graphs Section - More Compact */}
+      {/* Graphs Section */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
         
-        {/* Project Completion (Smaller Circular) */}
+        {/* Project Completion Circle */}
         <div className="lg:col-span-2 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-8 hover:border-blue-400 hover:shadow-xl transition-all">
           <div className="flex justify-between items-center mb-5">
-            <h3 className="text-base md:text-lg font-semibold text-gray-800">Project Completion</h3>
-            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-2xl">Overall</span>
+            <h3 className="text-base md:text-lg font-semibold text-gray-800">My Task Completion</h3>
+            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-2xl">This Month</span>
           </div>
 
           <div className="flex justify-center my-6 md:my-8">
@@ -154,19 +156,19 @@ const ManagerDashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS - Thin Lines Chart */}
+        {/* Project Progress Trend */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-8 hover:border-blue-400 hover:shadow-xl transition-all">
           <div className="flex justify-between items-center mb-5">
             <div>
-              <h3 className="text-base md:text-lg font-semibold text-gray-800">PROJECT PROGRESS</h3>
-              <p className="text-xs text-gray-500">Last 6 weeks • My projects only</p>
+              <h3 className="text-base md:text-lg font-semibold text-gray-800">My Progress Trend</h3>
+              <p className="text-xs text-gray-500">Last 6 weeks • My assigned work</p>
             </div>
             <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-2xl text-xs font-medium">Live</div>
           </div>
 
           <div className="h-52 md:h-64 relative bg-white rounded-2xl p-4 md:p-6 border border-gray-100">
             <svg viewBox="0 0 750 280" className="w-full h-full">
-              {/* Light grid lines */}
+              {/* Grid lines */}
               {[0, 25, 50, 75, 100].map((val, i) => (
                 <line 
                   key={i}
@@ -205,7 +207,7 @@ const ManagerDashboard = () => {
                 </text>
               ))}
 
-              {/* Thin Progress Lines for each project */}
+              {/* Progress Lines */}
               {projectProgressData.map((project, idx) => (
                 <g key={idx}>
                   <polyline
@@ -218,7 +220,6 @@ const ManagerDashboard = () => {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {/* Dots on each point */}
                   {project.progress.map((val, i) => (
                     <circle
                       key={i}
@@ -253,4 +254,4 @@ const ManagerDashboard = () => {
   );
 };
 
-export default ManagerDashboard;
+export default EmployeeDashboard;

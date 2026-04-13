@@ -32,21 +32,35 @@ const Login = () => {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        const role = result.user.role.toLowerCase();
+        // Improved role detection for both users and employees table
+        let role = result.user?.role?.toLowerCase();
+
+        // If role is not present but employee_id exists → it's an Employee
+        if (!role && result.user?.employee_id) {
+          role = "employee";
+        }
+
+        // Fallback
+        if (!role) {
+          role = "employee";
+        }
 
         localStorage.setItem("token", result.token);
         localStorage.setItem("user", JSON.stringify(result.user));
         localStorage.setItem("role", role);
         window.dispatchEvent(new Event("auth-change"));
 
+        // Navigate based on role
         if (role === "admin") {
           navigate("/admin/dashboard", { replace: true });
         } else if (role === "manager") {
           navigate("/manager/dashboard", { replace: true });
         } else if (role === "reviewer") {
           navigate("/reviewer/dashboard", { replace: true });
+        } else if (role === "employee") {
+          navigate("/employee/dashboard", { replace: true });
         } else {
-          navigate("/", { replace: true });
+          navigate("/employee/dashboard", { replace: true }); // Default fallback
         }
       } else {
         setError(result.message || "Invalid email or password");

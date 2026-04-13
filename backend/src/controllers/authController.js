@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
 
-// Login Controller
+// Login Controller - Supports both Users table and Employees table
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
@@ -17,23 +17,73 @@ export const loginUser = async (req, res) => {
   }
 
   try {
-    // Find user by email
-    const [users] = await pool.execute(
+    // ==================== FIRST: Try in users table (Admin, Manager, Reviewer) ====================
+    let [users] = await pool.execute(
       'SELECT id, name, email, password, role FROM users WHERE email = ?', 
       [email]
     );
 
-    if (users.length === 0) {
+    if (users.length > 0) {
+      const user = users[0];
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(401).json({ 
+          success: false, 
+          message: "Invalid email or password" 
+        });
+      }
+
+      const token = jwt.sign(
+        { 
+          id: user.id, 
+          name: user.name,
+          email: user.email, 
+          role: user.role.toLowerCase() 
+        },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRES_IN }
+      );
+
+      return res.json({
+        success: true,
+        message: "Login successful",
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role.charAt(0).toUpperCase() + user.role.slice(1)
+        }
+      });
+    }
+
+    // ==================== SECOND: Try in employees table ====================
+    let [employees] = await pool.execute(
+      `SELECT 
+        id, 
+        employee_id,
+        name, 
+        email, 
+        password, 
+        designation,
+        profile_picture 
+       FROM employees 
+       WHERE email = ?`, 
+      [email]
+    );
+
+    if (employees.length === 0) {
       return res.status(401).json({ 
         success: false, 
         message: "Invalid email or password" 
       });
     }
 
-    const user = users[0];
+    const employee = employees[0];
 
     // Compare password
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, employee.password);
     if (!isMatch) {
       return res.status(401).json({ 
         success: false, 
@@ -41,13 +91,15 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Generate JWT token
+    // Generate JWT token for Employee
     const token = jwt.sign(
       { 
-        id: user.id, 
-        name: user.name,
-        email: user.email, 
-        role: user.role.toLowerCase() 
+        id: employee.id, 
+        employee_id: employee.employee_id,
+        name: employee.name,
+        email: employee.email, 
+        role: "employee",
+        designation: employee.designation
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
@@ -58,10 +110,13 @@ export const loginUser = async (req, res) => {
       message: "Login successful",
       token,
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role.charAt(0).toUpperCase() + user.role.slice(1)
+        id: employee.id,
+        employee_id: employee.employee_id,
+        name: employee.name,
+        email: employee.email,
+        role: "Employee",
+        designation: employee.designation || "Employee",
+        profile_picture: employee.profile_picture
       }
     });
 

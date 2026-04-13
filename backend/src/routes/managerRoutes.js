@@ -1,34 +1,60 @@
 // backend/src/routes/managerRoutes.js
 import express from 'express';
-import { createProject, getMyProjects, getAllEmployees, getProjectById, addTask, getProjectTasks, getProjectEmployees, updateTaskStatus, updateTask,deleteTask, updateProject, deleteProject, getTaskInsights } from '../controllers/managerController.js';
+import upload from '../middleware/profileUpload.js';
+import { 
+  createProject, 
+  getMyProjects, 
+  getProjectById, 
+  addTask, 
+  getProjectTasks, 
+  getProjectEmployees, 
+  updateTask,          // Keep for editing task details
+  deleteTask, 
+  updateProject, 
+  deleteProject, 
+  getTaskInsights, 
+  createEmployee,
+  getTeamEmployees, 
+  updateEmployee,    
+  deleteEmployee 
+} from '../controllers/managerController.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Create a new project
+// ====================== PROJECT ROUTES ======================
 router.post('/projects', protect, createProject);
-
 router.get('/projects', protect, getMyProjects);
 router.put('/projects/:id', protect, updateProject);      
 router.delete('/projects/:id', protect, deleteProject);
 
-router.get('/employees', protect, getAllEmployees);
-
-// NEW route for single project detail
+// Single project detail
 router.get('/projects/:id', protect, getProjectById);
 
-// NEW Task Routes
+// ====================== TASK ROUTES ======================
+// Create new task
 router.post('/projects/:id/tasks', protect, addTask);           
+
+// Get all tasks for a project
 router.get('/projects/:id/tasks', protect, getProjectTasks);
 
+// Get employees assigned to a project (for dropdown)
 router.get('/projects/:id/employees', protect, getProjectEmployees);
 
-router.put('/tasks/:taskId/status', protect, updateTaskStatus);
+// Edit task (title, description, assignee, due date)
+router.put('/tasks/:taskId', protect, updateTask);       
 
-router.put('/tasks/:taskId', protect, updateTask);       // Edit task
-router.delete('/tasks/:taskId', protect, deleteTask);    // Delete task
+// Delete task
+router.delete('/tasks/:taskId', protect, deleteTask);    
 
+// ====================== TASK INSIGHTS ======================
 router.get('/task-insights', protect, getTaskInsights);
+
+// EMPLOYEE MANAGEMENT ======================
+router.post('/employees', protect, upload.single('profile_picture'), createEmployee);
+router.get('/employees', protect, getTeamEmployees);   
+router.put('/employees/:id', protect, upload.single('profile_picture'), updateEmployee);
+router.delete('/employees/:id', protect, deleteEmployee);
 
 
 export default router;

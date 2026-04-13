@@ -10,6 +10,8 @@ import {
   User 
 } from "lucide-react";
 
+import apiConfig from "../../config/apiConfig";
+
 const ProjectDetail = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -28,8 +30,7 @@ const ProjectDetail = () => {
     title: "",
     description: "",
     assignee: "",
-    dueDate: "",
-    status: "In Progress"
+    dueDate: ""
   });
 
   // Fetch Project Details
@@ -39,9 +40,12 @@ const ProjectDetail = () => {
       try {
         setLoading(true);
         const token = localStorage.getItem("token");
-        const response = await fetch(`http://localhost:5000/api/manager/projects/${projectId}`, {
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectId}`, {
           method: "GET",
-          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
+          headers: { 
+            "Authorization": `Bearer ${token}`, 
+            "Content-Type": "application/json" 
+          }
         });
         const result = await response.json();
         if (result.success) setProject(result.data);
@@ -62,7 +66,7 @@ const ProjectDetail = () => {
       if (!projectId) return;
       try {
         const token = localStorage.getItem("token");
-        const response = await fetch(`http://localhost:5000/api/manager/projects/${projectId}/tasks`, {
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectId}/tasks`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         const result = await response.json();
@@ -80,7 +84,7 @@ const ProjectDetail = () => {
       if (!projectId) return;
       try {
         const token = localStorage.getItem("token");
-        const response = await fetch(`http://localhost:5000/api/manager/projects/${projectId}/employees`, {
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectId}/employees`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         const result = await response.json();
@@ -92,7 +96,7 @@ const ProjectDetail = () => {
     if (project) fetchProjectEmployees();
   }, [project, projectId]);
 
-  // Create / Update Task - FIXED
+  // Create / Update Task
   const handleAddOrUpdateTask = async (e) => {
     e.preventDefault();
 
@@ -106,13 +110,13 @@ const ProjectDetail = () => {
       
       const isEdit = !!editingTask;
       const url = isEdit 
-        ? `http://localhost:5000/api/manager/tasks/${editingTask.id}` 
-        : `http://localhost:5000/api/manager/projects/${projectId}/tasks`;
+        ? `${apiConfig.API_BASE_URL}/api/manager/tasks/${editingTask.id}` 
+        : `${apiConfig.API_BASE_URL}/api/manager/projects/${projectId}/tasks`;
 
       const method = isEdit ? "PUT" : "POST";
 
       const payload = {
-        project_id: parseInt(projectId),           // ← This was missing!
+        project_id: parseInt(projectId),
         title: newTask.title.trim(),
         description: newTask.description.trim() || null,
         assigned_to: parseInt(newTask.assignee),
@@ -134,7 +138,7 @@ const ProjectDetail = () => {
         alert(isEdit ? "Task updated successfully!" : "Task created successfully!");
 
         // Refresh tasks list
-        const refreshRes = await fetch(`http://localhost:5000/api/manager/projects/${projectId}/tasks`, {
+        const refreshRes = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectId}/tasks`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         const refreshData = await refreshRes.json();
@@ -147,8 +151,7 @@ const ProjectDetail = () => {
           title: "", 
           description: "", 
           assignee: "", 
-          dueDate: "", 
-          status: "In Progress" 
+          dueDate: "" 
         });
       } else {
         alert(result.message || "Failed to save task");
@@ -159,48 +162,13 @@ const ProjectDetail = () => {
     }
   };
 
-  // Update Task Status (Toggle)
-  const toggleComplete = async (id) => {
-    const task = tasks.find(t => t.id === id);
-    if (!task) return;
-
-    const newStatus = task.status === "Completed" ? "In Progress" : "Completed";
-
-    try {
-      const token = localStorage.getItem("token");
-
-      const response = await fetch(`http://localhost:5000/api/manager/tasks/${id}/status`, {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setTasks(tasks.map(t => 
-          t.id === id ? { ...t, status: newStatus } : t
-        ));
-      } else {
-        alert("Failed to update status");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update status");
-    }
-  };
-
   const openEditTask = (task) => {
     setEditingTask(task);
     setNewTask({ 
       title: task.title,
       description: task.description || "",
       assignee: task.assigned_to?.toString() || "",
-      dueDate: task.due_date || "",
-      status: task.status || "In Progress"
+      dueDate: task.due_date || ""
     });
     setShowAddModal(true);
   };
@@ -212,7 +180,7 @@ const ProjectDetail = () => {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:5000/api/manager/tasks/${taskToDelete.id}`, {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/tasks/${taskToDelete.id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` }
       });
@@ -243,14 +211,20 @@ const ProjectDetail = () => {
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <button onClick={() => navigate(-1)} className="text-blue-600 hover:text-blue-700 mb-8 flex items-center gap-1">
+          <button 
+            onClick={() => navigate(-1)} 
+            className="text-blue-600 hover:text-blue-700 mb-8 flex items-center gap-1"
+          >
             ← Back to Projects
           </button>
           <h1 className="text-3xl font-semibold text-blue-700">{project.name}</h1>
           <p className="text-gray-600 mt-1">{project.description}</p>
         </div>
 
-        <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl text-sm font-medium">
+        <button 
+          onClick={() => setShowAddModal(true)} 
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl text-sm font-medium"
+        >
           <Plus size={18} /> Add New Task
         </button>
       </div>
@@ -262,20 +236,15 @@ const ProjectDetail = () => {
           const isOverdue = dueDate && dueDate < new Date() && task.status !== "Completed";
 
           return (
-            <div key={task.id} className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-blue-300 transition-all group">
+            <div 
+              key={task.id} 
+              className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-blue-300 transition-all group"
+            >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <input 
-                      type="checkbox" 
-                      checked={task.status === "Completed"}
-                      onChange={() => toggleComplete(task.id)}
-                      className="w-5 h-5 accent-blue-600 cursor-pointer"
-                    />
-                    <h3 className={`text-lg font-medium ${task.status === "Completed" ? "line-through text-gray-400" : "text-gray-900"}`}>
-                      {task.title}
-                    </h3>
-                  </div>
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {task.title}
+                  </h3>
 
                   <div className="flex items-center gap-6 mt-4 text-sm text-gray-600">
                     <div className="flex items-center gap-1.5">
@@ -304,8 +273,24 @@ const ProjectDetail = () => {
                   </span>
 
                   <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                    <button onClick={(e) => { e.stopPropagation(); openEditTask(task); }} className="p-2 hover:bg-blue-100 rounded-xl text-blue-600"><Edit2 size={18} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); openDeleteModal(task); }} className="p-2 hover:bg-red-100 rounded-xl text-red-600"><Trash2 size={18} /></button>
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        openEditTask(task); 
+                      }} 
+                      className="p-2 hover:bg-blue-100 rounded-xl text-blue-600"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        openDeleteModal(task); 
+                      }} 
+                      className="p-2 hover:bg-red-100 rounded-xl text-red-600"
+                    >
+                      <Trash2 size={18} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -319,8 +304,16 @@ const ProjectDetail = () => {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
             <div className="p-6 border-b flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-              <h2 className="text-xl font-semibold">{editingTask ? "Edit Task" : "Add New Task"}</h2>
-              <button onClick={() => { setShowAddModal(false); setEditingTask(null); }} className="hover:bg-white/20 p-2 rounded-full transition">
+              <h2 className="text-xl font-semibold">
+                {editingTask ? "Edit Task" : "Add New Task"}
+              </h2>
+              <button 
+                onClick={() => { 
+                  setShowAddModal(false); 
+                  setEditingTask(null); 
+                }} 
+                className="hover:bg-white/20 p-2 rounded-full transition"
+              >
                 <X size={24} />
               </button>
             </div>
@@ -376,7 +369,10 @@ const ProjectDetail = () => {
               <div className="flex gap-4 pt-6">
                 <button 
                   type="button" 
-                  onClick={() => { setShowAddModal(false); setEditingTask(null); }} 
+                  onClick={() => { 
+                    setShowAddModal(false); 
+                    setEditingTask(null); 
+                  }} 
                   className="flex-1 py-3.5 border border-gray-300 rounded-2xl font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
@@ -402,10 +398,23 @@ const ProjectDetail = () => {
                 <Trash2 size={32} className="text-red-600" />
               </div>
               <h3 className="text-2xl font-semibold text-gray-900 mb-2">Delete Task?</h3>
-              <p className="text-gray-600 mb-8">Are you sure you want to delete <strong>"{taskToDelete.title}"</strong>? This action cannot be undone.</p>
+              <p className="text-gray-600 mb-8">
+                Are you sure you want to delete <strong>"{taskToDelete.title}"</strong>? 
+                This action cannot be undone.
+              </p>
               <div className="flex gap-3">
-                <button onClick={cancelDelete} className="flex-1 py-3.5 border border-gray-300 rounded-2xl font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-                <button onClick={confirmDelete} className="flex-1 py-3.5 bg-red-600 text-white rounded-2xl font-medium hover:bg-red-700">Yes, Delete Task</button>
+                <button 
+                  onClick={cancelDelete} 
+                  className="flex-1 py-3.5 border border-gray-300 rounded-2xl font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDelete} 
+                  className="flex-1 py-3.5 bg-red-600 text-white rounded-2xl font-medium hover:bg-red-700"
+                >
+                  Yes, Delete Task
+                </button>
               </div>
             </div>
           </div>

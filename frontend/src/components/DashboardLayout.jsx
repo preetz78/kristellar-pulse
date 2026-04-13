@@ -9,7 +9,7 @@ const DashboardLayout = () => {
   const profileMenuRef = useRef(null);
   const location = useLocation();
 
-  const role = localStorage.getItem("role") || "admin";
+  const role = localStorage.getItem("role")?.toLowerCase() || "employee";
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -47,6 +47,7 @@ const DashboardLayout = () => {
     { path: '/manager/dashboard', label: 'Dashboard', icon: '📊' },
     { path: '/manager/projects', label: 'Projects', icon: '📁' },
     { path: '/manager/task-insights', label: 'Task Insights', icon: '🔍' },
+    { path: '/manager/team', label: 'Team Management', icon: '👥' },
   ];
 
   const reviewerMenu = [
@@ -55,12 +56,25 @@ const DashboardLayout = () => {
     { path: '/reviewer/task-insights', label: 'Task Insights', icon: '🔍' },
   ];
 
-  // Select correct menu based on role
-  let menuItems = adminMenu;
-  if (role === "manager") menuItems = managerMenu;
-  if (role === "reviewer") menuItems = reviewerMenu;
+  const employeeMenu = [
+    { path: '/employee/dashboard', label: 'Dashboard', icon: '📊' },
+    { path: '/employee/projects', label: 'Projects', icon: '📁' },
+    { path: '/employee/task-insights', label: 'Task Insights', icon: '🔍' },
+  ];
 
-  // Improved function to show correct tab name even on sub-routes (e.g. /projects/1)
+  // Select correct menu based on role
+  let menuItems = employeeMenu; // Default for employee
+
+  if (role === "admin") {
+    menuItems = adminMenu;
+  } else if (role === "manager") {
+    menuItems = managerMenu;
+  } else if (role === "reviewer") {
+    menuItems = reviewerMenu;
+  }
+  // If role is "employee" or anything else → use employeeMenu
+
+  // Improved function to show correct tab name even on sub-routes
   const getCurrentPageLabel = () => {
     const pathname = location.pathname.toLowerCase();
 
@@ -162,12 +176,14 @@ const DashboardLayout = () => {
                 className="flex items-center gap-3 cursor-pointer group"
               >
                 <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-semibold shadow-sm">
-                  AD
+                  {role === "employee" ? "EM" : "AD"}
                 </div>
 
                 <div className="hidden md:block">
                   <div className="flex items-center gap-1">
-                    <p className="font-semibold text-gray-800 text-sm">Asher Rhodes</p>
+                    <p className="font-semibold text-gray-800 text-sm">
+                      {role === "employee" ? "Employee" : "Asher Rhodes"}
+                    </p>
                     <ChevronDown 
                       size={16} 
                       className={`text-gray-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} 
@@ -183,11 +199,15 @@ const DashboardLayout = () => {
                   <div className="p-6 bg-gradient-to-br from-blue-50 to-white border-b border-blue-100">
                     <div className="flex gap-4">
                       <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-semibold shadow">
-                        AD
+                        {role === "employee" ? "EM" : "AD"}
                       </div>
                       <div className="pt-1">
-                        <p className="font-semibold text-xl text-gray-900">Asher Rhodes</p>
-                        <p className="text-gray-600 text-sm">asher.rhodes@company.com</p>
+                        <p className="font-semibold text-xl text-gray-900">
+                          {role === "employee" ? "Employee Portal" : "Asher Rhodes"}
+                        </p>
+                        <p className="text-gray-600 text-sm">
+                          {role === "employee" ? "employee@company.com" : "asher.rhodes@company.com"}
+                        </p>
                         <p className="text-blue-600 text-xs font-medium mt-1 capitalize">{role}</p>
                       </div>
                     </div>

@@ -1,6 +1,7 @@
 // src/pages/Manager/TaskInsights.jsx
 import { useState, useEffect } from "react";
 import { Search, Clock, User, MessageSquare, X, Send } from "lucide-react";
+import apiConfig from "../../config/apiConfig";
 
 const ManagerTaskInsights = () => {
   const [tasks, setTasks] = useState([]);
@@ -17,7 +18,7 @@ const ManagerTaskInsights = () => {
         setLoading(true);
         const token = localStorage.getItem("token");
 
-        const response = await fetch("http://localhost:5000/api/manager/task-insights", {
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/task-insights`, {
           method: "GET",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -46,7 +47,7 @@ const ManagerTaskInsights = () => {
   // Filter and group tasks by project
   const filteredTasks = tasks.filter(task =>
     task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    task.project_name.toLowerCase().includes(searchQuery.toLowerCase())
+    (task.project_name && task.project_name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const groupedTasks = filteredTasks.reduce((acc, task) => {
@@ -155,7 +156,7 @@ const ManagerTaskInsights = () => {
                           </div>
                           <div className="flex items-center gap-1.5">
                             <MessageSquare className="w-4 h-4" />
-                            {task.comment_count || 0}
+                            {task.comment_count || 0} comments
                           </div>
                         </div>
                       </div>
@@ -180,7 +181,7 @@ const ManagerTaskInsights = () => {
         )}
       </div>
 
-      {/* Right Sidebar with Comments (kept as-is, can be enhanced later) */}
+      {/* Right Sidebar - Comments */}
       {selectedTaskId && selectedTask && (
         <div className="fixed inset-0 bg-black/40 z-50 flex justify-end">
           <div 
@@ -226,7 +227,9 @@ const ManagerTaskInsights = () => {
 
               <div>
                 <p className="text-xs font-medium text-slate-500 mb-2">DESCRIPTION</p>
-                <p className="text-slate-600 leading-relaxed">{selectedTask.description || 'No description provided.'}</p>
+                <p className="text-slate-600 leading-relaxed">
+                  {selectedTask.description || 'No description provided.'}
+                </p>
               </div>
 
               <div>
