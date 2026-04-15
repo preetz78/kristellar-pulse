@@ -27,7 +27,7 @@ const Projects = () => {
         setLoading(true);
         setError(null);
 
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
 
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/projects`, {
           method: "GET",

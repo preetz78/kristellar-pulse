@@ -23,7 +23,7 @@ const ReviewerDashboard = () => {
     const fetchReviewerDashboard = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
 
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/dashboard`, {
           method: "GET",
@@ -65,7 +65,7 @@ const ReviewerDashboard = () => {
       }
 
       try {
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
         const response = await fetch(
           `${apiConfig.API_BASE_URL}/api/reviewer/project-progress?projectId=${selectedProjectId}`,
           {

@@ -1,3 +1,4 @@
+// src/pages/Login.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import apiConfig from "../config/apiConfig";
@@ -23,51 +24,38 @@ const Login = () => {
     try {
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/auth/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
       const result = await response.json();
 
       if (response.ok && result.success) {
-        // Improved role detection for both users and employees table
-        let role = result.user?.role?.toLowerCase();
+        const userData = result.user;
+        let role = (userData.role || "").toLowerCase();
 
-        // If role is not present but employee_id exists → it's an Employee
-        if (!role && result.user?.employee_id) {
-          role = "employee";
-        }
+        // Handle employee role fallback
+        if (!role && userData.employee_id) role = "employee";
 
-        // Fallback
-        if (!role) {
-          role = "employee";
-        }
+        // Save to sessionStorage
+        sessionStorage.setItem("token", result.token);
+        sessionStorage.setItem("user", JSON.stringify(userData));
+        sessionStorage.setItem("role", role);
 
-        localStorage.setItem("token", result.token);
-        localStorage.setItem("user", JSON.stringify(result.user));
-        localStorage.setItem("role", role);
+        // Notify App.jsx
         window.dispatchEvent(new Event("auth-change"));
 
-        // Navigate based on role
-        if (role === "admin") {
-          navigate("/admin/dashboard", { replace: true });
-        } else if (role === "manager") {
-          navigate("/manager/dashboard", { replace: true });
-        } else if (role === "reviewer") {
-          navigate("/reviewer/dashboard", { replace: true });
-        } else if (role === "employee") {
-          navigate("/employee/dashboard", { replace: true });
-        } else {
-          navigate("/employee/dashboard", { replace: true }); // Default fallback
-        }
+        // Redirect based on role
+        if (role === "admin") navigate("/admin/dashboard", { replace: true });
+        else if (role === "manager") navigate("/manager/dashboard", { replace: true });
+        else if (role === "reviewer") navigate("/reviewer/dashboard", { replace: true });
+        else navigate("/employee/dashboard", { replace: true });
       } else {
         setError(result.message || "Invalid email or password");
       }
     } catch (err) {
       console.error("Login error:", err);
-      setError("Failed to connect to server. Please make sure backend is running.");
+      setError("Cannot connect to server. Is backend running?");
     } finally {
       setLoading(false);
     }
@@ -75,18 +63,15 @@ const Login = () => {
 
   return (
     <div className="h-screen flex items-center justify-center relative overflow-hidden">
-      <img
-        src="/bg.jpg"
-        alt="background"
-        className="absolute w-full h-full object-cover scale-110"
+      <img 
+        src="/bg.jpg" 
+        alt="background" 
+        className="absolute w-full h-full object-cover scale-110" 
       />
-
       <div className="absolute inset-0 bg-black/40" />
 
       <div className="relative w-[360px] bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl p-8">
-        <h2 className="text-2xl font-bold text-white text-center mb-6">
-          Welcome Back
-        </h2>
+        <h2 className="text-2xl font-bold text-white text-center mb-6">Welcome Back</h2>
 
         {error && <div className="mb-4 text-sm text-red-300 text-center">{error}</div>}
 
@@ -129,7 +114,7 @@ const Login = () => {
         </button>
 
         <p className="text-center text-white/60 text-sm mt-6">
-          Project Management System
+          Kristellar Pulse - Project Management System
         </p>
       </div>
     </div>

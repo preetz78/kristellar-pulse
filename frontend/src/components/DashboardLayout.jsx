@@ -3,13 +3,34 @@ import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { Bell, Search, User, Settings, LogOut, ChevronDown } from 'lucide-react';
 
-const DashboardLayout = () => {
+const DashboardLayout = ({ logout }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef(null);
   const location = useLocation();
 
-  const role = localStorage.getItem("role")?.toLowerCase() || "employee";
+  // Get role and user data from sessionStorage
+  const role = sessionStorage.getItem("role")?.toLowerCase() || "employee";
+  const userStr = sessionStorage.getItem("user");
+  let userData = {};
+
+  try {
+    if (userStr) {
+      userData = JSON.parse(userStr);
+    }
+  } catch (e) {
+    console.error("Failed to parse user data in DashboardLayout");
+  }
+
+  const userName = userData.name || userData.username || 
+    (role === "employee" ? "Employee" : "Admin User");
+  
+  const userEmail = userData.email || 
+    (role === "employee" ? "employee@company.com" : "admin@company.com");
+
+  const displayInitials = role === "employee" 
+    ? "EM" 
+    : (userName === "Admin User" ? "AD" : userName.substring(0, 2).toUpperCase());
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -63,7 +84,7 @@ const DashboardLayout = () => {
   ];
 
   // Select correct menu based on role
-  let menuItems = employeeMenu; // Default for employee
+  let menuItems = employeeMenu;
 
   if (role === "admin") {
     menuItems = adminMenu;
@@ -72,7 +93,6 @@ const DashboardLayout = () => {
   } else if (role === "reviewer") {
     menuItems = reviewerMenu;
   }
-  // If role is "employee" or anything else → use employeeMenu
 
   // Improved function to show correct tab name even on sub-routes
   const getCurrentPageLabel = () => {
@@ -84,6 +104,18 @@ const DashboardLayout = () => {
     if (pathname.includes('/team')) return 'Team Management';
 
     return 'Dashboard';
+  };
+
+  // Safe logout handler
+  const handleLogout = () => {
+    if (typeof logout === 'function') {
+      logout();
+    } else {
+      // Fallback if logout prop is not passed
+      sessionStorage.clear();
+      window.location.href = '/login';
+    }
+    setShowProfileMenu(false);
   };
 
   return (
@@ -176,13 +208,13 @@ const DashboardLayout = () => {
                 className="flex items-center gap-3 cursor-pointer group"
               >
                 <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white font-semibold shadow-sm">
-                  {role === "employee" ? "EM" : "AD"}
+                  {displayInitials}
                 </div>
 
                 <div className="hidden md:block">
                   <div className="flex items-center gap-1">
                     <p className="font-semibold text-gray-800 text-sm">
-                      {role === "employee" ? "Employee" : "Asher Rhodes"}
+                      {userName}
                     </p>
                     <ChevronDown 
                       size={16} 
@@ -199,14 +231,14 @@ const DashboardLayout = () => {
                   <div className="p-6 bg-gradient-to-br from-blue-50 to-white border-b border-blue-100">
                     <div className="flex gap-4">
                       <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-semibold shadow">
-                        {role === "employee" ? "EM" : "AD"}
+                        {displayInitials}
                       </div>
                       <div className="pt-1">
                         <p className="font-semibold text-xl text-gray-900">
-                          {role === "employee" ? "Employee Portal" : "Asher Rhodes"}
+                          {userName}
                         </p>
                         <p className="text-gray-600 text-sm">
-                          {role === "employee" ? "employee@company.com" : "asher.rhodes@company.com"}
+                          {userEmail}
                         </p>
                         <p className="text-blue-600 text-xs font-medium mt-1 capitalize">{role}</p>
                       </div>
@@ -235,13 +267,7 @@ const DashboardLayout = () => {
 
                   <div className="border-t border-gray-100">
                     <button
-                      onClick={() => {
-                        localStorage.removeItem("token");
-                        localStorage.removeItem("user");
-                        localStorage.removeItem("role");
-                        window.dispatchEvent(new Event("auth-change"));
-                        window.location.href = "/login";
-                      }}
+                      onClick={handleLogout}
                       className="w-full px-6 py-4 flex items-center gap-3 text-red-600 hover:bg-red-50 transition font-medium"
                     >
                       <LogOut size={18} />

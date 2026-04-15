@@ -1,59 +1,105 @@
-import { useEffect, useState } from "react";
+// src/App.jsx
+import { useEffect, useState, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import DashboardLayout from "./components/DashboardLayout";
 import Login from "./pages/Login";
 
-// Admin Pages
+// Import all pages
 import AdminDashboard from "./pages/Admin/Dashboard";
 import AdminProjects from "./pages/Admin/Projects";
 import TaskInsights from "./pages/Admin/TaskInsights";
 import AdminTeam from "./pages/Admin/Team";
 
-// Manager Pages
 import ManagerDashboard from "./pages/Manager/Dashboard";
 import ManagerProjects from "./pages/Manager/Projects";
 import ProjectDetail from "./pages/Manager/ProjectDetail";
 import ManagerTaskInsights from "./pages/Manager/TaskInsights";
 import ManagerTeamManagement from "./pages/Manager/TeamManagement";
 
-// Reviewer Pages
 import ReviewerDashboard from "./pages/Reviewer/Dashboard";
 import ReviewerProjects from "./pages/Reviewer/Projects";
 import ReviewerTaskInsights from "./pages/Reviewer/TaskInsights";
 
-// EMPLOYEE PAGES 
 import EmployeeDashboard from "./pages/Employee/Dashboard";
 import EmployeeProjects from "./pages/Employee/Projects";
 import EmployeeTaskInsights from "./pages/Employee/TaskInsights";
 
-const getStoredRole = () => {
-  const role = localStorage.getItem("role");
-  return role ? role.toLowerCase() : null;
-};
+const App = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-const getDefaultRoute = (role) => {
-  if (role === "admin") return "/admin/dashboard";
-  if (role === "manager") return "/manager/dashboard";
-  if (role === "reviewer") return "/reviewer/dashboard";
-  if (role === "employee") return "/employee/dashboard";
-  return "/login";
-};
+  // Reusable function to check authentication
+  const checkAuth = useCallback(() => {
+    const token = sessionStorage.getItem("token");
+    const userStr = sessionStorage.getItem("user");
 
-function App() {
-  const [role, setRole] = useState(getStoredRole);
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        let role = (user.role || sessionStorage.getItem("role") || "").toLowerCase();
 
+        // Fallback for employee role
+        if (!role && user.employee_id) role = "employee";
+
+        setIsAuthenticated(true);
+        setUserRole(role);
+        return true;
+      } catch (e) {
+        console.error("Failed to parse user data:", e);
+        sessionStorage.clear();
+      }
+    }
+
+    setIsAuthenticated(false);
+    setUserRole(null);
+    return false;
+  }, []);
+
+  // Initial auth check on app load
   useEffect(() => {
-    const syncRole = () => setRole(getStoredRole());
+    checkAuth();
+    setLoading(false);
+  }, [checkAuth]);
 
-    window.addEventListener("storage", syncRole);
-    window.addEventListener("auth-change", syncRole);
+  // Listen for auth changes from Login page
+  useEffect(() => {
+    const handleAuthChange = () => {
+      checkAuth();
+    };
+
+    window.addEventListener("auth-change", handleAuthChange);
 
     return () => {
-      window.removeEventListener("storage", syncRole);
-      window.removeEventListener("auth-change", syncRole);
+      window.removeEventListener("auth-change", handleAuthChange);
     };
-  }, []);
+  }, [checkAuth]);
+
+  // Logout function
+  const handleLogout = () => {
+    sessionStorage.clear();
+    setIsAuthenticated(false);
+    setUserRole(null);
+    window.dispatchEvent(new Event("auth-change")); // Notify listeners
+  };
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        Loading...
+      </div>
+    );
+  }
+
+  const getDefaultRoute = () => {
+    if (!isAuthenticated || !userRole) return "/login";
+
+    if (userRole === "admin") return "/admin/dashboard";
+    if (userRole === "manager") return "/manager/dashboard";
+    if (userRole === "reviewer") return "/reviewer/dashboard";
+    return "/employee/dashboard"; // default for employee or unknown role
+  };
 
   return (
     <BrowserRouter>
@@ -61,58 +107,91 @@ function App() {
         {/* Login Route */}
         <Route
           path="/login"
-          element={role ? <Navigate to={getDefaultRoute(role)} replace /> : <Login />}
+          element={
+            isAuthenticated ? (
+              <Navigate to={getDefaultRoute()} replace />
+            ) : (
+              <Login />
+            )
+          }
         />
 
-        {/* Root Redirect */}
-        <Route path="/" element={<Navigate to={getDefaultRoute(role)} replace />} />
+        {/* Root Route */}
+        <Route path="/" element={<Navigate to={getDefaultRoute()} replace />} />
 
-        {/* ADMIN ROUTES */}
-        {role === "admin" && (
-          <Route path="/admin" element={<DashboardLayout />}>
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="projects" element={<AdminProjects />} />
-            <Route path="projects/:projectId" element={<ProjectDetail />} />
-            <Route path="task-insights" element={<TaskInsights />} />
-            <Route path="team" element={<AdminTeam />} />
-          </Route>
-        )}
+        {/* ==================== ADMIN ROUTES ==================== */}
+        <Route
+          path="/admin/*"
+          element={
+            isAuthenticated && userRole === "admin" ? (
+              <DashboardLayout logout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        >
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="projects" element={<AdminProjects />} />
+          <Route path="projects/:projectId" element={<ProjectDetail />} />
+          <Route path="task-insights" element={<TaskInsights />} />
+          <Route path="team" element={<AdminTeam />} />
+        </Route>
 
-        {/* MANAGER ROUTES */}
-        {role === "manager" && (
-          <Route path="/manager" element={<DashboardLayout />}>
-            <Route path="dashboard" element={<ManagerDashboard />} />
-            <Route path="projects" element={<ManagerProjects />} />
-            <Route path="projects/:projectId" element={<ProjectDetail />} />
-            <Route path="task-insights" element={<ManagerTaskInsights />} />
-            <Route path="team" element={<ManagerTeamManagement />} />
-          </Route>
-        )}
+        {/* ==================== MANAGER ROUTES ==================== */}
+        <Route
+          path="/manager/*"
+          element={
+            isAuthenticated && userRole === "manager" ? (
+              <DashboardLayout logout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        >
+          <Route path="dashboard" element={<ManagerDashboard />} />
+          <Route path="projects" element={<ManagerProjects />} />
+          <Route path="projects/:projectId" element={<ProjectDetail />} />
+          <Route path="task-insights" element={<ManagerTaskInsights />} />
+          <Route path="team" element={<ManagerTeamManagement />} />
+        </Route>
 
-        {/* REVIEWER ROUTES */}
-        {role === "reviewer" && (
-          <Route path="/reviewer" element={<DashboardLayout />}>
-            <Route path="dashboard" element={<ReviewerDashboard />} />
-            <Route path="projects" element={<ReviewerProjects />} />
-            <Route path="task-insights" element={<ReviewerTaskInsights />} />
-          </Route>
-        )}
+        {/* ==================== REVIEWER ROUTES ==================== */}
+        <Route
+          path="/reviewer/*"
+          element={
+            isAuthenticated && userRole === "reviewer" ? (
+              <DashboardLayout logout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        >
+          <Route path="dashboard" element={<ReviewerDashboard />} />
+          <Route path="projects" element={<ReviewerProjects />} />
+          <Route path="task-insights" element={<ReviewerTaskInsights />} />
+        </Route>
 
-        {/* EMPLOYEE ROUTES - Only Dashboard, Projects, Task Insights */}
-        {role === "employee" && (
-          <Route path="/employee" element={<DashboardLayout />}>
-            <Route path="dashboard" element={<EmployeeDashboard />} />
-            <Route path="projects" element={<EmployeeProjects />} />
-            <Route path="task-insights" element={<EmployeeTaskInsights />} />
-            {/* No Team Management for employees */}
-          </Route>
-        )}
+        {/* ==================== EMPLOYEE ROUTES ==================== */}
+        <Route
+          path="/employee/*"
+          element={
+            isAuthenticated && userRole === "employee" ? (
+              <DashboardLayout logout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        >
+          <Route path="dashboard" element={<EmployeeDashboard />} />
+          <Route path="projects" element={<EmployeeProjects />} />
+          <Route path="task-insights" element={<EmployeeTaskInsights />} />
+        </Route>
 
-        {/* Catch-all Redirect */}
-        <Route path="*" element={<Navigate to={getDefaultRoute(role)} replace />} />
+        {/* Catch-all Route */}
+        <Route path="*" element={<Navigate to={getDefaultRoute()} replace />} />
       </Routes>
     </BrowserRouter>
   );
-}
+};
 
 export default App;

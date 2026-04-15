@@ -42,7 +42,7 @@ const ManagerTeamManagement = () => {
     try {
       setLoading(true);
       setError(null);
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
 
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/employees`, {
         method: 'GET',
@@ -91,7 +91,7 @@ const ManagerTeamManagement = () => {
     }
 
     setSubmitting(true);
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     const formData = new FormData();
 
     formData.append('name', newEmployee.name);
@@ -132,7 +132,7 @@ const ManagerTeamManagement = () => {
     if (!editingEmployee) return;
 
     setSubmitting(true);
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     const formData = new FormData();
 
     formData.append('name', editingEmployee.name);
@@ -171,7 +171,7 @@ const ManagerTeamManagement = () => {
     if (!deletingEmployeeId) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/employees/${deletingEmployeeId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },

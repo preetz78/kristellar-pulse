@@ -23,7 +23,7 @@ const EmployeeTaskInsights = () => {
         setLoading(true);
         setError("");
 
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
         if (!token) {
           setError("Please login again to view your tasks.");
           setTasks([]);
@@ -91,7 +91,7 @@ const EmployeeTaskInsights = () => {
     if (!isChecked) return;
 
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       const response = await fetch(
         `${apiConfig.API_BASE_URL}/api/employee/tasks/${taskId}/complete`,
         {

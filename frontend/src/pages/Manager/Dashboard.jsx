@@ -23,7 +23,7 @@ const ManagerDashboard = () => {
     const fetchManagerDashboard = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
 
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/dashboard`, {
           method: "GET",
@@ -65,7 +65,7 @@ const ManagerDashboard = () => {
       }
 
       try {
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
         const response = await fetch(
           `${apiConfig.API_BASE_URL}/api/manager/project-progress?projectId=${selectedProjectId}`,
           {

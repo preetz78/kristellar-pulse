@@ -361,9 +361,10 @@ export const getProjectEmployees = async (req, res) => {
 };
 
 // Update Task (Edit)
+// Update Task (Edit) - FIXED
 export const updateTask = async (req, res) => {
   const { taskId } = req.params;
-  const { title, description, assigned_to, due_date } = req.body;
+  let { title, description, assigned_to, due_date } = req.body;
 
   if (!title || !assigned_to) {
     return res.status(400).json({
@@ -373,6 +374,18 @@ export const updateTask = async (req, res) => {
   }
 
   try {
+    // === FIX: Clean the due_date properly ===
+    let formattedDueDate = null;
+
+    if (due_date) {
+      // Handle both "YYYY-MM-DD" and full ISO string
+      if (due_date.includes('T')) {
+        formattedDueDate = due_date.split('T')[0];        // Extract only YYYY-MM-DD
+      } else {
+        formattedDueDate = due_date;
+      }
+    }
+
     const [result] = await pool.execute(
       `UPDATE tasks 
        SET title = ?, 
@@ -380,7 +393,13 @@ export const updateTask = async (req, res) => {
            assigned_to = ?, 
            due_date = ? 
        WHERE id = ?`,
-      [title, description || null, assigned_to, due_date || null, taskId]
+      [
+        title.trim(),
+        description ? description.trim() : null,
+        assigned_to,
+        formattedDueDate,     // ← Clean date
+        taskId
+      ]
     );
 
     if (result.affectedRows === 0) {
@@ -397,7 +416,11 @@ export const updateTask = async (req, res) => {
 
   } catch (error) {
     console.error("Update task error:", error);
-    res.status(500).json({ success: false, message: "Failed to update task" });
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to update task",
+      error: error.message   // Helpful for debugging
+    });
   }
 };
 

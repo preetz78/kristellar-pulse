@@ -72,7 +72,7 @@ const ManagerProjects = () => {
   const fetchProjects = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
 
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects`, {
         method: "GET",
@@ -99,7 +99,7 @@ const ManagerProjects = () => {
 
   const fetchEmployees = async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/employees`, {
         method: "GET",
         headers: {
@@ -162,7 +162,7 @@ const ManagerProjects = () => {
     }
 
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
 
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects`, {
         method: "POST",
@@ -219,7 +219,7 @@ const ManagerProjects = () => {
     }
 
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
 
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${editingProject.id}`, {
         method: "PUT",
@@ -260,7 +260,7 @@ const ManagerProjects = () => {
     if (!projectToDelete) return;
 
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
 
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectToDelete.id}`, {
         method: "DELETE",

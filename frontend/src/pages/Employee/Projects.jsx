@@ -21,7 +21,7 @@ const EmployeeProjects = () => {
         setLoading(true);
         setError("");
 
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
         if (!token) {
           setError("Please login again to view your projects.");
           return;

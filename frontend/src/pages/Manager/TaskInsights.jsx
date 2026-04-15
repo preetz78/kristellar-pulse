@@ -16,7 +16,7 @@ const ManagerTaskInsights = () => {
     const fetchTaskInsights = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
 
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/task-insights`, {
           method: "GET",

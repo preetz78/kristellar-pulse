@@ -36,7 +36,7 @@ export default function TaskInsights() {
     const fetchTasks = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
 
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/tasks`, {
           method: "GET",

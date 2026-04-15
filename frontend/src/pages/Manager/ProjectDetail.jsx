@@ -39,7 +39,7 @@ const ProjectDetail = () => {
       if (!projectId) return;
       try {
         setLoading(true);
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectId}`, {
           method: "GET",
           headers: { 
@@ -65,7 +65,7 @@ const ProjectDetail = () => {
     const fetchTasks = async () => {
       if (!projectId) return;
       try {
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectId}/tasks`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
@@ -83,7 +83,7 @@ const ProjectDetail = () => {
     const fetchProjectEmployees = async () => {
       if (!projectId) return;
       try {
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectId}/employees`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
@@ -96,7 +96,7 @@ const ProjectDetail = () => {
     if (project) fetchProjectEmployees();
   }, [project, projectId]);
 
-  // Create / Update Task
+  // Create / Update Task - FIXED DATE HANDLING
   const handleAddOrUpdateTask = async (e) => {
     e.preventDefault();
 
@@ -106,7 +106,7 @@ const ProjectDetail = () => {
     }
 
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       
       const isEdit = !!editingTask;
       const url = isEdit 
@@ -115,12 +115,20 @@ const ProjectDetail = () => {
 
       const method = isEdit ? "PUT" : "POST";
 
+      // Clean due_date - ensure only YYYY-MM-DD is sent
+      let cleanDueDate = null;
+      if (newTask.dueDate) {
+        cleanDueDate = newTask.dueDate.includes('T') 
+          ? newTask.dueDate.split('T')[0] 
+          : newTask.dueDate;
+      }
+
       const payload = {
         project_id: parseInt(projectId),
         title: newTask.title.trim(),
         description: newTask.description.trim() || null,
         assigned_to: parseInt(newTask.assignee),
-        due_date: newTask.dueDate || null
+        due_date: cleanDueDate
       };
 
       const response = await fetch(url, {
@@ -157,18 +165,27 @@ const ProjectDetail = () => {
         alert(result.message || "Failed to save task");
       }
     } catch (err) {
-      console.error(err);
-      alert("Failed to connect to server");
+      console.error("Save task error:", err);
+      alert("Failed to connect to server. Please check if backend is running.");
     }
   };
 
   const openEditTask = (task) => {
+    let dueDateValue = "";
+
+    if (task.due_date) {
+      // Handle both YYYY-MM-DD and full ISO format from backend
+      dueDateValue = task.due_date.includes('T') 
+        ? task.due_date.split('T')[0] 
+        : task.due_date;
+    }
+
     setEditingTask(task);
     setNewTask({ 
-      title: task.title,
+      title: task.title || "",
       description: task.description || "",
       assignee: task.assigned_to?.toString() || "",
-      dueDate: task.due_date || ""
+      dueDate: dueDateValue
     });
     setShowAddModal(true);
   };
@@ -179,7 +196,7 @@ const ProjectDetail = () => {
     if (!taskToDelete) return;
 
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/tasks/${taskToDelete.id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` }

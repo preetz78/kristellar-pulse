@@ -54,7 +54,7 @@ export default function ReviewerTaskInsights() {
     const fetchTasks = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/tasks`, {
           method: 'GET',
           headers: {
@@ -92,7 +92,7 @@ export default function ReviewerTaskInsights() {
     const fetchComments = async () => {
       setLoadingComments(true);
       try {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         const response = await fetch(
           `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTaskId}/comments`,
           {
@@ -157,7 +157,7 @@ export default function ReviewerTaskInsights() {
     if (!newComment.trim() || !selectedTaskId) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const response = await fetch(
         `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTaskId}/comments`,
         {

@@ -14,17 +14,17 @@ const EmployeeDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Project Progress Section - Same as Manager / Admin
-  const [myProjects, setMyProjects] = useState([]);                    // Real projects assigned to this employee
+  // Project Progress Section
+  const [myProjects, setMyProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState("all");
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
-  // Fetch real dashboard stats for the logged-in employee
+  // Fetch real dashboard stats
   useEffect(() => {
     const fetchEmployeeDashboard = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");   // ← Fixed: sessionStorage
 
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/dashboard`, {
           method: "GET",
@@ -56,11 +56,12 @@ const EmployeeDashboard = () => {
     fetchEmployeeDashboard();
   }, []);
 
-  // Fetch employee's assigned projects for dropdown
+  // Fetch employee's assigned projects for dropdown (runs only once)
   useEffect(() => {
     const fetchMyProjects = async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");   // ← Fixed: sessionStorage
+
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/projects`, {
           method: "GET",
           headers: {
@@ -71,21 +72,23 @@ const EmployeeDashboard = () => {
 
         const result = await response.json();
 
-        if (result.success) {
+        if (result.success && result.data) {
           setMyProjects(result.data || []);
-          if (result.data && result.data.length > 0) {
-            setSelectedProjectId(result.data[0].id);
+
+          // Set first project safely (only if none selected yet)
+          if (result.data.length > 0) {
+            setSelectedProjectId(prev => prev === "all" ? result.data[0].id : prev);
           }
         }
       } catch (err) {
-        console.error("Failed to fetch my projects for dropdown:", err);
+        console.error("Failed to fetch my projects:", err);
       }
     };
 
     fetchMyProjects();
-  }, []);
+  }, []);   // Empty dependency - runs only once
 
-  // Fetch weekly progress for selected project (based on employee's task completions only)
+  // Fetch weekly progress for selected project
   useEffect(() => {
     if (selectedProjectId === "all" || !selectedProjectId) {
       setSelectedProjectProgress(null);
@@ -94,7 +97,8 @@ const EmployeeDashboard = () => {
 
     const fetchProjectProgress = async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token = sessionStorage.getItem("token");   // ← Fixed: sessionStorage
+
         const response = await fetch(
           `${apiConfig.API_BASE_URL}/api/employee/project-progress?projectId=${selectedProjectId}`,
           {
@@ -160,7 +164,6 @@ const EmployeeDashboard = () => {
 
       {/* Top Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
-        {/* Total Projects */}
         <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-6 hover:border-blue-400 transition-all group">
           <div className="flex justify-between items-start">
             <div>
@@ -176,7 +179,6 @@ const EmployeeDashboard = () => {
           </p>
         </div>
 
-        {/* Active Tasks */}
         <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-6 hover:border-blue-400 transition-all group">
           <div className="flex justify-between items-start">
             <div>
@@ -190,7 +192,6 @@ const EmployeeDashboard = () => {
           <p className="text-xs md:text-sm text-emerald-600 mt-4 md:mt-6">Currently in progress</p>
         </div>
 
-        {/* Completed Tasks */}
         <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-6 hover:border-blue-400 transition-all group">
           <div className="flex justify-between items-start">
             <div>
@@ -250,7 +251,7 @@ const EmployeeDashboard = () => {
           </div>
         </div>
 
-        {/* My Progress Trend Graph - Same design as Manager/Admin but based on employee's task completion */}
+        {/* My Progress Trend Graph */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-8 hover:border-blue-400 hover:shadow-xl transition-all">
           <div className="flex justify-between items-center mb-5">
             <div>
@@ -258,7 +259,6 @@ const EmployeeDashboard = () => {
               <p className="text-xs text-gray-500">Weekly progress based on my task completions</p>
             </div>
 
-            {/* Project Dropdown */}
             <select
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -276,7 +276,6 @@ const EmployeeDashboard = () => {
           <div className="h-52 md:h-64 relative bg-white rounded-2xl p-4 md:p-6 border border-gray-100">
             {selectedProjectProgress ? (
               <svg viewBox="0 0 750 280" className="w-full h-full">
-                {/* Grid lines */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <line 
                     key={i}
@@ -289,7 +288,6 @@ const EmployeeDashboard = () => {
                   />
                 ))}
 
-                {/* X-axis labels */}
                 {selectedProjectProgress.weeks && selectedProjectProgress.weeks.map((week, i) => (
                   <text 
                     key={i} 
@@ -302,7 +300,6 @@ const EmployeeDashboard = () => {
                   </text>
                 ))}
 
-                {/* Y-axis labels */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <text 
                     key={i} 
@@ -315,7 +312,6 @@ const EmployeeDashboard = () => {
                   </text>
                 ))}
 
-                {/* Progress Line - Based on employee's task completions only */}
                 <g>
                   <polyline
                     points={selectedProjectProgress.progress.map((val, i) => 
@@ -347,14 +343,13 @@ const EmployeeDashboard = () => {
             )}
           </div>
 
-          {/* Legend */}
           {selectedProjectProgress && (
-            <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3 justify-center">
-              <div className="flex items-center gap-2">
+            <div className="mt-6 flex justify-center">
+              <div className="flex items-center gap-2 bg-white px-6 py-2 rounded-2xl border border-gray-100">
                 <div 
                   className="w-4 h-0.5 rounded" 
                   style={{ backgroundColor: selectedProjectProgress.color || "#3b82f6" }}
-                ></div>
+                />
                 <span className="text-xs text-gray-700 font-medium">
                   {selectedProjectProgress.name}
                 </span>
