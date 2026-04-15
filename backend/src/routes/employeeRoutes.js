@@ -3,7 +3,9 @@ import express from 'express';
 import { 
   getMyAssignedProjects, 
   getMyTasks, 
-  completeTask     // ← Added this
+  completeTask,
+  getEmployeeDashboardStats ,
+  getEmployeeProjectProgress   
 } from '../controllers/employeeController.js';
 
 import { protect } from '../middleware/auth.js';
@@ -18,5 +20,9 @@ router.get('/tasks', protect, getMyTasks);
 
 // NEW ROUTE: Mark a task as Completed when employee ticks checkbox
 router.patch('/tasks/:id/complete', protect, completeTask);
+
+router.get('/dashboard', protect, getEmployeeDashboardStats);
+
+router.get('/project-progress', protect, getEmployeeProjectProgress);
 
 export default router;

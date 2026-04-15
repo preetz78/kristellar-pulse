@@ -1,24 +1,120 @@
 // src/pages/Admin/Dashboard.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Briefcase, Clock, CheckCircle, TrendingUp } from "lucide-react";
+import apiConfig from "../../config/apiConfig";
 
 const Dashboard = () => {
-  const [stats] = useState({
-    totalProjects: 24,
-    activeProjects: 15,
-    completedProjects: 9,
+  const [stats, setStats] = useState({
+    totalProjects: 0,
+    activeProjects: 0,
+    completedProjects: 0,
+    overallCompletion: 0,
   });
 
-  const [completionRate] = useState(68);
+  const [projects, setProjects] = useState([]);                    
+  const [selectedProjectId, setSelectedProjectId] = useState("all");
+  const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
-  // Weekly PROJECT PROGRESS Data for thin lines chart
-  const projectProgressData = [
-    { name: "WorkSync Project Hub", color: "#3b82f6", progress: [22, 35, 48, 59, 68, 75] },
-    { name: "AI Chatbot Development", color: "#10b981", progress: [12, 28, 39, 52, 61, 68] },
-    { name: "Enterprise Resource Planning System", color: "#8b5cf6", progress: [5, 18, 29, 41, 52, 58] },
-    { name: "Marketing Automation Platform", color: "#f59e0b", progress: [8, 19, 26, 34, 45, 53] },
-    { name: "E-commerce Dashboard", color: "#ef4444", progress: [3, 11, 18, 25, 31, 43] }
-  ];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch dashboard stats + projects list
+  useEffect(() => {
+    const fetchDashboardStats = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem("token");
+
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/dashboard`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server responded with status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+          setStats(result.stats);
+          setProjects(result.projects || []);
+        } else {
+          setError(result.message || "Failed to load dashboard statistics");
+        }
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+        setError("Failed to connect to server. Please check if backend is running.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardStats();
+  }, []);
+
+  // Fetch REAL project progress when a project is selected
+  useEffect(() => {
+    const fetchProjectProgress = async () => {
+      if (selectedProjectId === "all") {
+        setSelectedProjectProgress(null);
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${apiConfig.API_BASE_URL}/api/admin/project-progress?projectId=${selectedProjectId}`,
+          {
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json"
+            }
+          }
+        );
+
+        if (!response.ok) throw new Error("Failed to fetch progress");
+
+        const result = await response.json();
+
+        if (result.success && result.data && result.data.length > 0) {
+          setSelectedProjectProgress(result.data[0]);
+        } else {
+          setSelectedProjectProgress(null);
+        }
+      } catch (err) {
+        console.error("Project progress fetch error:", err);
+        setSelectedProjectProgress(null);
+      }
+    };
+
+    fetchProjectProgress();
+  }, [selectedProjectId]);
+
+  if (loading) {
+    return (
+      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
+        <div className="text-center text-red-600">
+          <p className="text-xl font-medium mb-2">Error</p>
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-white min-h-screen">
@@ -86,7 +182,7 @@ const Dashboard = () => {
 
       {/* Main Graphs Section */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Project Completion (Circular) */}
+        {/* Project Completion (Circular) - UNCHANGED */}
         <div className="lg:col-span-2 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-semibold text-gray-800 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text">
@@ -109,7 +205,7 @@ const Dashboard = () => {
                   stroke="url(#completionGradient)"
                   strokeWidth="11"
                   strokeDasharray="326.73"
-                  strokeDashoffset={326.73 - (326.73 * completionRate) / 100}
+                  strokeDashoffset={326.73 - (326.73 * stats.overallCompletion) / 100}
                   strokeLinecap="round"
                 />
                 <defs>
@@ -121,7 +217,7 @@ const Dashboard = () => {
               </svg>
 
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-5xl font-bold text-gray-900">{completionRate}%</span>
+                <span className="text-5xl font-bold text-gray-900">{stats.overallCompletion}%</span>
                 <span className="text-sm text-gray-500 font-medium mt-1">COMPLETED</span>
               </div>
             </div>
@@ -139,101 +235,117 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS - Thin Multi-Line Chart */}
+        {/* PROJECT PROGRESS - REAL GRAPH */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="text-lg font-semibold text-gray-800">PROJECT PROGRESS</h3>
-              <p className="text-xs text-gray-500">Last 6 weeks • All projects</p>
+              <p className="text-xs text-gray-500">Weekly task completion progress</p>
             </div>
-            <div className="px-3 py-1 bg-blue-600 text-white text-xs rounded-full animate-pulse">
-              Live
-            </div>
+
+            {/* Real Projects Dropdown */}
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl focus:outline-none focus:border-blue-500 font-medium"
+            >
+              <option value="all">All Projects</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
-            <svg viewBox="0 0 750 280" className="w-full h-full">
-              {/* Light grid lines */}
-              {[0, 25, 50, 75, 100].map((val, i) => (
-                <line 
-                  key={i}
-                  x1="50" 
-                  y1={250 - val * 2} 
-                  x2="710" 
-                  y2={250 - val * 2} 
-                  stroke="#f1f5f9" 
-                  strokeWidth="1.5" 
-                />
-              ))}
+            {selectedProjectProgress ? (
+              <svg viewBox="0 0 750 280" className="w-full h-full">
+                {/* Light grid lines */}
+                {[0, 25, 50, 75, 100].map((val, i) => (
+                  <line 
+                    key={i}
+                    x1="50" 
+                    y1={250 - val * 2} 
+                    x2="710" 
+                    y2={250 - val * 2} 
+                    stroke="#f1f5f9" 
+                    strokeWidth="1.5" 
+                  />
+                ))}
 
-              {/* X-axis labels */}
-              {["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"].map((week, i) => (
-                <text 
-                  key={i} 
-                  x={80 + i * 115} 
-                  y="272" 
-                  className="text-xs fill-gray-500" 
-                  textAnchor="middle"
-                >
-                  {week}
-                </text>
-              ))}
+                {/* Dynamic X-axis based on actual weeks */}
+                {selectedProjectProgress.weeks?.map((week, i) => (
+                  <text 
+                    key={i} 
+                    x={80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1))} 
+                    y="272" 
+                    className="text-xs fill-gray-500" 
+                    textAnchor="middle"
+                  >
+                    {week}
+                  </text>
+                ))}
 
-              {/* Y-axis labels */}
-              {[0, 25, 50, 75, 100].map((val, i) => (
-                <text 
-                  key={i} 
-                  x="38" 
-                  y={255 - val * 2} 
-                  className="text-xs fill-gray-500" 
-                  textAnchor="end"
-                >
-                  {val}%
-                </text>
-              ))}
+                {/* Y-axis labels */}
+                {[0, 25, 50, 75, 100].map((val, i) => (
+                  <text 
+                    key={i} 
+                    x="38" 
+                    y={255 - val * 2} 
+                    className="text-xs fill-gray-500" 
+                    textAnchor="end"
+                  >
+                    {val}%
+                  </text>
+                ))}
 
-              {/* Thin Progress Lines for each project */}
-              {projectProgressData.map((project, idx) => (
-                <g key={idx}>
+                {/* Single Progress Line */}
+                <g>
                   <polyline
-                    points={project.progress.map((val, i) => 
-                      `${80 + i * 115},${250 - (val * 2)}`
+                    points={selectedProjectProgress.progress.map((val, i) => 
+                      `${80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1))},${250 - (val * 2)}`
                     ).join(" ")}
                     fill="none"
-                    stroke={project.color}
-                    strokeWidth="3.5"
+                    stroke={selectedProjectProgress.color}
+                    strokeWidth="4.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {/* Small dots */}
-                  {project.progress.map((val, i) => (
+                  {selectedProjectProgress.progress.map((val, i) => (
                     <circle
                       key={i}
-                      cx={80 + i * 115}
+                      cx={80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1))}
                       cy={250 - (val * 2)}
-                      r="4"
-                      fill={project.color}
+                      r="4.5"
+                      fill={selectedProjectProgress.color}
                       stroke="#ffffff"
                       strokeWidth="2"
                     />
                   ))}
                 </g>
-              ))}
-            </svg>
+              </svg>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-400">
+                Select a project to view its weekly progress
+              </div>
+            )}
           </div>
 
           {/* Legend */}
-          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3 justify-center">
-            {projectProgressData.map((project, i) => (
-              <div key={i} className="flex items-center gap-2">
+          {selectedProjectProgress && (
+            <div className="mt-6 flex justify-center">
+              <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border border-gray-100 shadow-sm">
                 <div 
-                  className="w-4 h-0.5 rounded" 
-                  style={{ backgroundColor: project.color }}
-                ></div>
-                <span className="text-xs text-gray-700 font-medium">{project.name}</span>
+                  className="w-5 h-0.5 rounded" 
+                  style={{ backgroundColor: selectedProjectProgress.color }}
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  {selectedProjectProgress.name}
+                </span>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

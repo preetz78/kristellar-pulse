@@ -1,5 +1,5 @@
 // src/pages/Manager/Projects.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Calendar, 
@@ -39,6 +39,7 @@ const ManagerProjects = () => {
     title: "",
     description: "",
     projectManagerName: managerName,
+    startDate: "",        // NEW: Start Date
     deadline: "",
     priority: "Medium",
     assignedEmployeeIds: []
@@ -52,6 +53,7 @@ const ManagerProjects = () => {
     title: "",
     description: "",
     projectManagerName: "",
+    startDate: "",        // NEW: Start Date
     deadline: "",
     priority: "Medium",
     assignedEmployeeIds: []
@@ -83,7 +85,7 @@ const ManagerProjects = () => {
       const result = await response.json();
 
       if (result.success) {
-        setProjects(result.data);
+        setProjects(result.data || []);
       } else {
         setError(result.message || "Failed to load projects");
       }
@@ -108,7 +110,7 @@ const ManagerProjects = () => {
 
       const result = await response.json();
       if (result.success) {
-        setEmployees(result.data);
+        setEmployees(result.data || []);
       }
     } catch (err) {
       console.error(err);
@@ -128,6 +130,27 @@ const ManagerProjects = () => {
     if (progress >= 40) return "bg-gradient-to-r from-amber-500 to-orange-500";
     return "bg-gradient-to-r from-blue-600 to-cyan-500";
   };
+
+  // Filtered projects (real-time filtering)
+  const filteredProjects = useMemo(() => {
+    let result = [...projects];
+
+    // Filter by selected project title
+    if (selectedProjectTitle !== "All Projects") {
+      result = result.filter(p => p.name === selectedProjectTitle);
+    }
+
+    // Additional filters
+    if (activeFilter === "In Progress") {
+      result = result.filter(p => (p.progress || 0) < 100);
+    } else if (activeFilter === "Completed") {
+      result = result.filter(p => (p.progress || 0) === 100);
+    } else if (activeFilter === "High Priority") {
+      result = result.filter(p => p.priority === "High");
+    }
+
+    return result;
+  }, [projects, selectedProjectTitle, activeFilter]);
 
   // Handle Add New Project
   const handleAddProject = async (e) => {
@@ -152,6 +175,7 @@ const ManagerProjects = () => {
           name: newProject.title,
           description: newProject.description,
           project_manager_name: newProject.projectManagerName,
+          start_date: newProject.startDate || null,        // NEW
           deadline: newProject.deadline,
           priority: newProject.priority,
           assigned_employee_ids: newProject.assignedEmployeeIds
@@ -169,6 +193,7 @@ const ManagerProjects = () => {
           title: "",
           description: "",
           projectManagerName: managerName,
+          startDate: "",           // NEW
           deadline: "",
           priority: "Medium",
           assignedEmployeeIds: []
@@ -207,6 +232,7 @@ const ManagerProjects = () => {
           name: editProjectData.title,
           description: editProjectData.description,
           project_manager_name: editProjectData.projectManagerName,
+          start_date: editProjectData.startDate || null,        // NEW
           deadline: editProjectData.deadline,
           priority: editProjectData.priority,
           assigned_employee_ids: editProjectData.assignedEmployeeIds || []
@@ -260,7 +286,7 @@ const ManagerProjects = () => {
     }
   };
 
-  // Open Edit Modal with pre-loaded assignees
+  // Open Edit Modal with pre-loaded assignees and start date
   const openEditModal = (project) => {
     setEditingProject(project);
     
@@ -273,6 +299,7 @@ const ManagerProjects = () => {
       title: project.name || "",
       description: project.description || "",
       projectManagerName: project.project_manager_name || managerName,
+      startDate: project.start_date ? project.start_date.split('T')[0] : "",   // NEW
       deadline: project.deadline ? project.deadline.split('T')[0] : "",
       priority: project.priority || "Medium",
       assignedEmployeeIds: existingAssignees
@@ -459,9 +486,11 @@ const ManagerProjects = () => {
 
       {/* PROJECT CARDS GRID - With Dynamic Progress */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.map((project, idx) => {
+        {filteredProjects.map((project, idx) => {
           const progress = project.progress || 0;
-          const isCompleted = progress === 100;
+          const totalTasks = project.total_tasks || 0;
+          const completedTasks = project.completed_tasks || 0;
+          const isCompleted = progress === 100 || completedTasks === totalTasks;
 
           return (
             <div
@@ -543,7 +572,7 @@ const ManagerProjects = () => {
                     />
                   </div>
                   <div className="text-xs text-gray-500 mt-1 text-right">
-                    {project.completed_tasks || 0} of {project.total_tasks || 0} tasks completed
+                    {completedTasks} of {totalTasks} tasks completed
                   </div>
                 </div>
               </div>
@@ -628,6 +657,17 @@ const ManagerProjects = () => {
                   type="text"
                   value={newProject.projectManagerName}
                   onChange={(e) => setNewProject({...newProject, projectManagerName: e.target.value})}
+                  className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* NEW: Start Date Field */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Start Date</label>
+                <input
+                  type="date"
+                  value={newProject.startDate}
+                  onChange={(e) => setNewProject({...newProject, startDate: e.target.value})}
                   className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -775,6 +815,17 @@ const ManagerProjects = () => {
                   type="text"
                   value={editProjectData.projectManagerName}
                   onChange={(e) => setEditProjectData({...editProjectData, projectManagerName: e.target.value})}
+                  className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* NEW: Start Date Field in Edit Modal */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Start Date</label>
+                <input
+                  type="date"
+                  value={editProjectData.startDate}
+                  onChange={(e) => setEditProjectData({...editProjectData, startDate: e.target.value})}
                   className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500"
                 />
               </div>

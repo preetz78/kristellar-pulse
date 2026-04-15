@@ -1,12 +1,14 @@
 import pool from '../config/db.js';
 
 // Create New Project with Multiple Assignees
+// Create New Project with Start Date
 export const createProject = async (req, res) => {
   const { 
     project_id, 
     name, 
     description, 
     project_manager_name, 
+    start_date,      // ← NEW
     deadline, 
     priority,
     assigned_employee_ids   
@@ -27,13 +29,24 @@ export const createProject = async (req, res) => {
   try {
     const [result] = await pool.execute(
       `INSERT INTO projects 
-       (project_id, name, description, manager_id, project_manager_name, deadline, team_size, priority) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [project_id, name, description || null, manager_id, finalManagerName, deadline, teamSize, priority || 'Medium']
+       (project_id, name, description, manager_id, project_manager_name, start_date, deadline, team_size, priority) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        project_id, 
+        name, 
+        description || null, 
+        manager_id, 
+        finalManagerName, 
+        start_date || null,        
+        deadline, 
+        teamSize, 
+        priority || 'Medium'
+      ]
     );
 
     const newProjectDbId = result.insertId;
 
+    // Assign employees
     if (teamSize > 0 && Array.isArray(assigned_employee_ids)) {
       const values = assigned_employee_ids.map(empId => [
         newProjectDbId, 
@@ -74,14 +87,21 @@ export const getMyProjects = async (req, res) => {
     const [projects] = await pool.execute(`
       SELECT 
         p.*,
-        u.name as manager_name,
-        IFNULL(GROUP_CONCAT(DISTINCT pa.employee_id), '') as assigned_employee_ids,
-        COUNT(t.id) as total_tasks,
-        SUM(CASE WHEN t.status = 'Completed' THEN 1 ELSE 0 END) as completed_tasks
+        u.name AS manager_name,
+        IFNULL(GROUP_CONCAT(DISTINCT pa.employee_id), '') AS assigned_employee_ids,
+        IFNULL(tc.total_tasks, 0) AS total_tasks,
+        IFNULL(tc.completed_tasks, 0) AS completed_tasks
       FROM projects p
       LEFT JOIN users u ON p.manager_id = u.id
       LEFT JOIN project_assignments pa ON p.id = pa.project_id
-      LEFT JOIN tasks t ON p.id = t.project_id
+      LEFT JOIN (
+        SELECT 
+          project_id,
+          COUNT(*) AS total_tasks,
+          SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks
+        FROM tasks
+        GROUP BY project_id
+      ) tc ON p.id = tc.project_id
       WHERE p.manager_id = ?
       GROUP BY p.id
       ORDER BY p.created_at DESC
@@ -124,9 +144,19 @@ export const getMyProjects = async (req, res) => {
 };
 
 // Update Project
+// Update Project - Add start_date support
 export const updateProject = async (req, res) => {
   const { id } = req.params;
-  const { project_id, name, description, project_manager_name, deadline, priority, assigned_employee_ids } = req.body;
+  const { 
+    project_id, 
+    name, 
+    description, 
+    project_manager_name, 
+    start_date,     // ← NEW
+    deadline, 
+    priority, 
+    assigned_employee_ids 
+  } = req.body;
 
   if (!project_id || !name || !deadline) {
     return res.status(400).json({ 
@@ -141,12 +171,23 @@ export const updateProject = async (req, res) => {
     await pool.execute(
       `UPDATE projects 
        SET project_id = ?, name = ?, description = ?, 
-           project_manager_name = ?, deadline = ?, 
+           project_manager_name = ?, start_date = ?, deadline = ?, 
            team_size = ?, priority = ? 
        WHERE id = ?`,
-      [project_id, name, description || null, project_manager_name, deadline, teamSize, priority || 'Medium', id]
+      [
+        project_id, 
+        name, 
+        description || null, 
+        project_manager_name, 
+        start_date || null,           // ← NEW
+        deadline, 
+        teamSize, 
+        priority || 'Medium', 
+        id
+      ]
     );
 
+    // Re-assign employees (same as before)
     await pool.execute(`DELETE FROM project_assignments WHERE project_id = ?`, [id]);
 
     if (Array.isArray(assigned_employee_ids) && assigned_employee_ids.length > 0) {
@@ -402,17 +443,39 @@ export const getTaskInsights = async (req, res) => {
         t.due_date,
         p.name AS project_name,
         e.name AS assignee_name,
-        e.employee_id AS assignee_employee_id
+        e.employee_id AS assignee_employee_id,
+        COUNT(c.id) AS comment_count,
+        JSON_ARRAYAGG(
+          CASE 
+            WHEN c.id IS NOT NULL THEN JSON_OBJECT(
+              'id', c.id,
+              'reviewer_name', c.reviewer_name,
+              'comment_text', c.comment_text,
+              'created_at', c.created_at
+            )
+          END
+        ) AS comments
       FROM tasks t
       JOIN projects p ON t.project_id = p.id
       LEFT JOIN employees e ON t.assigned_to = e.id
+      LEFT JOIN comments c ON t.id = c.task_id
       WHERE p.manager_id = ?
+      GROUP BY t.id, t.title, t.description, t.status, t.due_date, 
+               p.name, e.name, e.employee_id
       ORDER BY p.name ASC, t.created_at DESC
     `, [manager_id]);
 
+    // Clean and filter out null/empty comments
+    const normalizedData = data.map(task => ({
+      ...task,
+      comments: Array.isArray(task.comments) 
+        ? task.comments.filter(c => c && c.comment_text && c.comment_text.trim() !== "")
+        : []
+    }));
+
     res.json({ 
       success: true, 
-      data 
+      data: normalizedData 
     });
   } catch (error) {
     console.error("Task insights error:", error);
@@ -423,7 +486,7 @@ export const getTaskInsights = async (req, res) => {
     });
   }
 };
-// ==================== EMPLOYEE MANAGEMENT ====================
+// EMPLOYEE MANAGEMENT 
 
 export const createEmployee = async (req, res) => {
   const { name, employee_id, email, password, phone, designation } = req.body;
@@ -591,5 +654,194 @@ export const deleteEmployee = async (req, res) => {
   } catch (error) {
     console.error("Delete employee error:", error);
     res.status(500).json({ success: false, message: "Failed to delete employee" });
+  }
+};
+
+// NEW: Get Dashboard Stats for Logged-in Manager Only
+
+export const getManagerDashboardStats = async (req, res) => {
+  const manager_id = req.user.id;
+
+  try {
+    // Stats for this manager's projects only
+    const [projectStats] = await pool.execute(`
+      SELECT 
+        COUNT(*) AS total_projects,
+        SUM(CASE WHEN EXISTS (
+          SELECT 1 FROM tasks t 
+          WHERE t.project_id = p.id AND t.status = 'In Progress'
+        ) THEN 1 ELSE 0 END) AS active_projects,
+        SUM(CASE WHEN EXISTS (
+          SELECT 1 FROM tasks t WHERE t.project_id = p.id
+        ) 
+        AND NOT EXISTS (
+          SELECT 1 FROM tasks t 
+          WHERE t.project_id = p.id AND t.status != 'Completed'
+        ) THEN 1 ELSE 0 END) AS completed_projects
+      FROM projects p
+      WHERE p.manager_id = ?
+    `, [manager_id]);
+
+    // Overall Completion % for this manager's tasks only
+    const [completionStats] = await pool.execute(`
+      SELECT 
+        COUNT(*) AS total_tasks,
+        SUM(CASE WHEN t.status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks,
+        ROUND(
+          IFNULL(
+            SUM(CASE WHEN t.status = 'Completed' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0),
+            0
+          ), 0) AS overall_completion
+      FROM tasks t
+      JOIN projects p ON t.project_id = p.id
+      WHERE p.manager_id = ?
+    `, [manager_id]);
+
+    // Projects list for dropdown (only this manager's projects)
+    const [managerProjects] = await pool.execute(`
+      SELECT id, name 
+      FROM projects 
+      WHERE manager_id = ?
+      ORDER BY name ASC
+    `, [manager_id]);
+
+    const stats = projectStats[0] || {};
+    const completion = completionStats[0] || {};
+
+    res.json({
+      success: true,
+      stats: {
+        totalProjects: Number(stats.total_projects) || 0,
+        activeProjects: Number(stats.active_projects) || 0,
+        completedProjects: Number(stats.completed_projects) || 0,   // Fixed key
+        overallCompletion: Number(completion.overall_completion) || 0,
+      },
+      projects: managerProjects
+    });
+
+  } catch (error) {
+    console.error("Manager dashboard stats error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch manager dashboard statistics" 
+    });
+  }
+};
+
+// Get Project Progress for Manager's Projects Only
+export const getManagerProjectProgress = async (req, res) => {
+  const manager_id = req.user.id;
+  const { projectId } = req.query;
+
+  try {
+    let sql = `
+      SELECT 
+        p.id,
+        p.name,
+        p.start_date,
+        p.deadline,
+        t.id AS task_id,
+        t.status,
+        t.completed_at
+      FROM projects p
+      LEFT JOIN tasks t ON t.project_id = p.id
+      WHERE p.manager_id = ?
+    `;
+
+    const params = [manager_id];
+
+    if (projectId) {
+      sql += ` AND p.id = ?`;
+      params.push(projectId);
+    }
+
+    const [rows] = await pool.execute(sql, params);
+
+    const projectsProgress = [];
+    const projectGroups = {};
+
+    rows.forEach(row => {
+      if (!projectGroups[row.id]) {
+        projectGroups[row.id] = {
+          id: row.id,
+          name: row.name,
+          start_date: row.start_date,
+          deadline: row.deadline,
+          tasks: []
+        };
+      }
+      if (row.task_id) {
+        projectGroups[row.id].tasks.push({
+          status: row.status,
+          completed_at: row.completed_at
+        });
+      }
+    });
+
+    for (const proj of Object.values(projectGroups)) {
+      const totalTasks = proj.tasks.length;
+
+      if (!proj.start_date || !proj.deadline || totalTasks === 0) {
+        projectsProgress.push({
+          id: proj.id,
+          name: proj.name,
+          color: "#3b82f6",
+          weeks: ["Week 1", "Week 2", "Week 3", "Week 4"],
+          progress: [0, 0, 0, 0]
+        });
+        continue;
+      }
+
+      const start = new Date(proj.start_date);
+      const end = new Date(proj.deadline);
+
+      const totalDays = Math.max(7, Math.ceil((end - start) / (1000 * 3600 * 24)));
+      const numWeeks = Math.max(4, Math.ceil(totalDays / 7));
+
+      const weeklyProgress = [];
+      let prevWeekEnd = new Date(start);
+
+      for (let i = 1; i <= numWeeks; i++) {
+        const weekEnd = new Date(start);
+        weekEnd.setDate(weekEnd.getDate() + Math.floor((totalDays / numWeeks) * i));
+
+        const completedThisWeek = proj.tasks.filter(task => {
+          if (task.status !== 'Completed' || !task.completed_at) return false;
+          const completedDate = new Date(task.completed_at);
+          return completedDate > prevWeekEnd && completedDate <= weekEnd;
+        }).length;
+
+        const percentage = totalTasks > 0
+          ? Math.round((completedThisWeek / totalTasks) * 100)
+          : 0;
+
+        weeklyProgress.push(Math.min(100, percentage));
+
+        prevWeekEnd = weekEnd;
+      }
+
+      const colors = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444"];
+      const color = colors[(proj.id % colors.length)];
+
+      projectsProgress.push({
+        id: proj.id,
+        name: proj.name,
+        color: color,
+        weeks: Array.from({ length: numWeeks }, (_, i) => `Week ${i + 1}`),
+        progress: weeklyProgress
+      });
+    }
+
+    res.json({
+      success: true,
+      data: projectsProgress
+    });
+
+  } catch (error) {
+    console.error("Manager project progress error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to generate progress graph" 
+    });
   }
 };

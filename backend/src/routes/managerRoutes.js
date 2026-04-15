@@ -16,7 +16,9 @@ import {
   createEmployee,
   getTeamEmployees, 
   updateEmployee,    
-  deleteEmployee 
+  deleteEmployee ,
+  getManagerDashboardStats,
+  getManagerProjectProgress
 } from '../controllers/managerController.js';
 import { protect } from '../middleware/auth.js';
 
@@ -55,6 +57,9 @@ router.post('/employees', protect, upload.single('profile_picture'), createEmplo
 router.get('/employees', protect, getTeamEmployees);   
 router.put('/employees/:id', protect, upload.single('profile_picture'), updateEmployee);
 router.delete('/employees/:id', protect, deleteEmployee);
+
+router.get('/dashboard', protect, getManagerDashboardStats);
+router.get('/project-progress', protect, getManagerProjectProgress);
 
 
 export default router;

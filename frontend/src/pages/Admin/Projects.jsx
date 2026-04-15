@@ -1,57 +1,63 @@
 // src/pages/Admin/Projects.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Calendar, 
   Users, 
   TrendingUp 
 } from "lucide-react";
 
-const Projects = () => {
-  const [projects, setProjects] = useState([
-    {
-      id: 1,
-      org: "TechFlow Solutions",
-      title: "Cloud Migration",
-      idCode: "PRJ-001",
-      manager: "John Doe",
-      teamSize: "8 Experts",
-      deadline: "2026-04-25",
-      progress: 65,
-      priority: "High",
-      status: "In Progress",
-    },
-    {
-      id: 2,
-      org: "GreenGrid Energy",
-      title: "Solar Array Install",
-      idCode: "PRJ-002",
-      manager: "Sarah Connor",
-      teamSize: "12 Engineers",
-      deadline: "2026-05-15",
-      progress: 42,
-      priority: "Medium",
-      status: "In Progress",
-    },
-    {
-      id: 3,
-      org: "NextGen AI",
-      title: "ML Model Training",
-      idCode: "PRJ-003",
-      manager: "Alex Kumar",
-      teamSize: "6 Data Scientists",
-      deadline: "2026-06-30",
-      progress: 85,
-      priority: "High",
-      status: "In Progress",
-    },
-  ]);
+import apiConfig from "../../config/apiConfig";
 
+const Projects = () => {
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
   const [hoveredCard, setHoveredCard] = useState(null);
   
   // Filter states
   const [selectedOrg, setSelectedOrg] = useState("All Organizations");
   const [activeFilter, setActiveFilter] = useState("All Projects");
   const [selectedProjectTitle, setSelectedProjectTitle] = useState("All Projects");
+
+  // Fetch projects from backend
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const token = localStorage.getItem("token");
+
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/projects`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server responded with status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+          setProjects(result.data || []);
+        } else {
+          setError(result.message || "Failed to load projects");
+        }
+      } catch (err) {
+        console.error("Error fetching projects:", err);
+        setError("Failed to connect to server. Please check if backend is running.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, []);
 
   const getPriorityStyle = (priority) => {
     if (priority === "High") return "bg-red-100 text-red-700 border border-red-300";
@@ -78,6 +84,33 @@ const Projects = () => {
     return matchesOrg && matchesFilter && matchesProject;
   });
 
+  // Calculate stats from real data
+  const totalProjects = projects.length;
+  const inProgressCount = projects.filter((p) => p.status === "In Progress").length;
+  const highPriorityCount = projects.filter((p) => p.priority === "High").length;
+
+  if (loading) {
+    return (
+      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading projects...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
+        <div className="text-center text-red-600">
+          <p className="text-xl font-medium mb-2">⚠️ Error</p>
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 bg-white min-h-screen">
       {/* Header */}
@@ -100,7 +133,7 @@ const Projects = () => {
             </div>
             <div>
               <p className="text-sm text-gray-600">Total Projects</p>
-              <p className="text-2xl font-semibold text-gray-900">{projects.length}</p>
+              <p className="text-2xl font-semibold text-gray-900">{totalProjects}</p>
             </div>
           </div>
 
@@ -110,9 +143,7 @@ const Projects = () => {
             </div>
             <div>
               <p className="text-sm text-gray-600">In Progress</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {projects.filter((p) => p.status === "In Progress").length}
-              </p>
+              <p className="text-2xl font-semibold text-gray-900">{inProgressCount}</p>
             </div>
           </div>
 
@@ -122,9 +153,7 @@ const Projects = () => {
             </div>
             <div>
               <p className="text-sm text-gray-600">High Priority</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {projects.filter((p) => p.priority === "High").length}
-              </p>
+              <p className="text-2xl font-semibold text-gray-900">{highPriorityCount}</p>
             </div>
           </div>
         </div>
@@ -200,83 +229,91 @@ const Projects = () => {
 
       {/* PROJECT CARDS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProjects.map((project, idx) => (
-          <div
-            key={project.id}
-            onMouseEnter={() => setHoveredCard(idx)}
-            onMouseLeave={() => setHoveredCard(null)}
-            className={`relative group bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl ${
-              hoveredCard === idx ? "shadow-2xl -translate-y-1 border-blue-400" : ""
-            }`}
-          >
-            <div className="h-1.5 bg-gradient-to-r from-blue-600 to-blue-500"></div>
+        {filteredProjects.length === 0 ? (
+          <div className="col-span-3 text-center py-12 text-gray-500">
+            No projects found matching your filters.
+          </div>
+        ) : (
+          filteredProjects.map((project, idx) => (
+            <div
+              key={project.id}
+              onMouseEnter={() => setHoveredCard(idx)}
+              onMouseLeave={() => setHoveredCard(null)}
+              className={`relative group bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl ${
+                hoveredCard === idx ? "shadow-2xl -translate-y-1 border-blue-400" : ""
+              }`}
+            >
+              <div className="h-1.5 bg-gradient-to-r from-blue-600 to-blue-500"></div>
 
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-6">
-                <div className="flex-1">
-                  <h3 className="text-xl font-semibold text-gray-900 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
-                    {project.title}
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-1">ID: {project.idCode}</p>
-                </div>
-
-                <span className={`text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ml-4 ${getPriorityStyle(project.priority)}`}>
-                  {project.priority}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
-                  <p className="text-xs text-gray-500 font-medium">Project Manager</p>
-                  <p className="font-semibold text-gray-900 mt-1 text-sm">{project.manager}</p>
-                </div>
-
-                <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Users size={15} className="text-blue-600" />
-                    <p className="text-xs text-gray-500 font-medium">Team Size</p>
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex-1">
+                    <h3 className="text-xl font-semibold text-gray-900 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+                      {project.title}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">ID: {project.idCode}</p>
                   </div>
-                  <p className="font-semibold text-gray-900 text-sm">{project.teamSize}</p>
-                </div>
-              </div>
 
-              <div className="flex items-center justify-between mb-6 pb-6 border-b border-blue-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Calendar size={16} className="text-blue-600" />
+                  <span className={`text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ml-4 ${getPriorityStyle(project.priority)}`}>
+                    {project.priority}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
+                    <p className="text-xs text-gray-500 font-medium">Project Manager</p>
+                    <p className="font-semibold text-gray-900 mt-1 text-sm">{project.manager}</p>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Deadline</p>
-                    <p className="font-semibold text-gray-900 text-sm">{project.deadline}</p>
+
+                  <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Users size={15} className="text-blue-600" />
+                      <p className="text-xs text-gray-500 font-medium">Team Size</p>
+                    </div>
+                    <p className="font-semibold text-gray-900 text-sm">{project.teamSize}</p>
                   </div>
                 </div>
 
-                <span className={`px-4 py-1.5 text-xs font-semibold rounded-xl border ${
-                  project.status === "In Progress" ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-amber-100 text-amber-700 border-amber-200"
-                }`}>
-                  {project.status}
-                </span>
-              </div>
-
-              <div className="mb-6">
-                <div className="flex justify-between items-center mb-2.5">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp size={16} className="text-blue-600" />
-                    <span className="text-xs font-medium text-gray-600">Progress</span>
+                <div className="flex items-center justify-between mb-6 pb-6 border-b border-blue-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Calendar size={16} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Deadline</p>
+                      <p className="font-semibold text-gray-900 text-sm">{project.deadline}</p>
+                    </div>
                   </div>
-                  <span className="text-2xl font-bold text-blue-600">{project.progress}%</span>
+
+                  <span className={`px-4 py-1.5 text-xs font-semibold rounded-xl border ${
+                    project.status === "In Progress" 
+                      ? "bg-blue-100 text-blue-700 border-blue-200" 
+                      : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                  }`}>
+                    {project.status}
+                  </span>
                 </div>
 
-                <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full bg-gradient-to-r ${getProgressGradient(project.progress)} rounded-full transition-all duration-500`}
-                    style={{ width: `${project.progress}%` }}
-                  />
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp size={16} className="text-blue-600" />
+                      <span className="text-xs font-medium text-gray-600">Progress</span>
+                    </div>
+                    <span className="text-2xl font-bold text-blue-600">{project.progress}%</span>
+                  </div>
+
+                  <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full bg-gradient-to-r ${getProgressGradient(project.progress)} rounded-full transition-all duration-500`}
+                      style={{ width: `${project.progress}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

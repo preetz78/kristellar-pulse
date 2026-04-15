@@ -6,6 +6,12 @@ import {
     getTaskComments,
     addTaskComment
  } from '../controllers/reviewerController.js';
+
+import { 
+  getDashboardStats,
+  getProjectProgress 
+} from '../controllers/adminController.js';
+
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -17,5 +23,8 @@ router.get('/tasks', protect, getAllTasksForReviewer);
 
 router.get('/tasks/:taskId/comments', protect, getTaskComments);
 router.post('/tasks/:taskId/comments', protect, addTaskComment);
+
+router.get('/dashboard', protect, getDashboardStats);
+router.get('/project-progress', protect, getProjectProgress);
 
 export default router;

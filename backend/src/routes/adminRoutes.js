@@ -4,7 +4,11 @@ import {
   getAllUsers, 
   createUser, 
   updateUser,     
-  deleteUser 
+  deleteUser,
+  getAllProjects,
+  getAllAdminTasks,
+  getDashboardStats,
+  getProjectProgress
 } from '../controllers/adminController.js';
 
 import upload from '../middleware/profileUpload.js';  
@@ -22,5 +26,13 @@ router.put('/users/:id', upload.single('profile_picture'), updateUser);
 
 // DELETE user by ID
 router.delete('/users/:id', deleteUser);
+
+router.get('/projects', getAllProjects);
+
+router.get('/tasks', getAllAdminTasks);
+
+router.get('/dashboard', getDashboardStats);
+
+router.get('/project-progress', getProjectProgress);
 
 export default router;

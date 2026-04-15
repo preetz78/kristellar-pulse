@@ -11,7 +11,7 @@ const ManagerTaskInsights = () => {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [newComment, setNewComment] = useState('');
 
-  // Fetch real tasks for manager's projects
+  // Fetch real tasks for manager's projects with reviewer comments
   useEffect(() => {
     const fetchTaskInsights = async () => {
       try {
@@ -29,7 +29,30 @@ const ManagerTaskInsights = () => {
         const result = await response.json();
 
         if (result.success) {
-          setTasks(result.data);
+          const normalizedTasks = (result.data || []).map((task) => {
+            let comments = [];
+
+            if (Array.isArray(task.comments)) {
+              comments = task.comments.filter((c) => c !== null && c !== undefined);
+            } else if (typeof task.comments === 'string') {
+              try {
+                const parsedComments = JSON.parse(task.comments);
+                comments = Array.isArray(parsedComments)
+                  ? parsedComments.filter((c) => c !== null && c !== undefined)
+                  : [];
+              } catch {
+                comments = [];
+              }
+            }
+
+            return {
+              ...task,
+              comments,
+              // Ensure progress is 100% if task is Completed
+              progress: task.status === "Completed" ? 100 : (task.progress || 0)
+            };
+          });
+          setTasks(normalizedTasks);
         } else {
           setError(result.message || "Failed to load task insights");
         }
@@ -71,7 +94,8 @@ const ManagerTaskInsights = () => {
   const handleAddComment = (e) => {
     e.preventDefault();
     if (!newComment.trim() || !selectedTask) return;
-    alert("Comment added successfully! (This is a demo - backend comment saving coming soon)");
+    
+    alert("Comment added successfully! (Backend integration coming soon)");
     setNewComment('');
   };
 
@@ -82,8 +106,8 @@ const ManagerTaskInsights = () => {
     return "bg-gray-100 text-gray-700";
   };
 
-  const getProgressColor = (progress) => {
-    if (progress === 100) return "bg-emerald-500";
+  const getProgressColor = (status, progress) => {
+    if (status === "Completed") return "bg-emerald-500";
     if (progress >= 70) return "bg-blue-500";
     if (progress >= 40) return "bg-amber-500";
     return "bg-red-500";
@@ -134,61 +158,65 @@ const ManagerTaskInsights = () => {
               </div>
 
               <div className="space-y-3">
-                {projectTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    onClick={() => handleOpenTask(task.id)}
-                    className="group bg-white border border-slate-200 hover:border-blue-400 rounded-3xl p-6 transition-all cursor-pointer hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
-                          {task.title}
-                        </h3>
-                        <div className="flex items-center gap-5 mt-4 text-sm text-slate-500">
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="w-4 h-4" />
-                            {task.due_date ? new Date(task.due_date).toLocaleDateString('en-GB') : 'No due date'}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <User className="w-4 h-4" />
-                            {task.assignee_name || 'Unassigned'}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <MessageSquare className="w-4 h-4" />
-                            {task.comment_count || 0} comments
+                {projectTasks.map((task) => {
+                  const displayProgress = task.status === "Completed" ? 100 : (task.progress || 0);
+
+                  return (
+                    <div
+                      key={task.id}
+                      onClick={() => handleOpenTask(task.id)}
+                      className="group bg-white border border-slate-200 hover:border-blue-400 rounded-3xl p-6 transition-all cursor-pointer hover:shadow-md"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
+                            {task.title}
+                          </h3>
+                          <div className="flex items-center gap-5 mt-4 text-sm text-slate-500">
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-4 h-4" />
+                              {task.due_date ? new Date(task.due_date).toLocaleDateString('en-GB') : 'No due date'}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <User className="w-4 h-4" />
+                              {task.assignee_name || 'Unassigned'}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <MessageSquare className="w-4 h-4" />
+                              {task.comment_count || 0} comments
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex flex-col items-end gap-3">
-                        <span className={`px-4 py-1.5 text-xs font-semibold rounded-2xl ${getStatusColor(task.status)}`}>
-                          {task.status}
-                        </span>
-                        <div className="w-28 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all ${getProgressColor(task.progress || 0)}`}
-                            style={{ width: `${task.progress || 0}%` }}
-                          />
+                        <div className="flex flex-col items-end gap-3">
+                          <span className={`px-4 py-1.5 text-xs font-semibold rounded-2xl ${getStatusColor(task.status)}`}>
+                            {task.status}
+                          </span>
+                          <div className="w-28 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all ${getProgressColor(task.status, displayProgress)}`}
+                              style={{ width: `${displayProgress}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ))
         )}
       </div>
 
-      {/* Right Sidebar - Comments */}
+      {/* Right Sidebar - Reviewer Comments */}
       {selectedTaskId && selectedTask && (
         <div className="fixed inset-0 bg-black/40 z-50 flex justify-end">
           <div 
             className="bg-white w-full max-w-lg h-full shadow-2xl flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            <div className="p-6 border-b flex items-center justify-between bg-slate-50">
+            <div className="p-6 flex items-center justify-between bg-slate-50">
               <div>
                 <p className="text-xs font-medium text-blue-600">TASK DETAIL</p>
                 <h2 className="font-bold text-xl text-slate-900 mt-1">{selectedTask.title}</h2>
@@ -215,12 +243,14 @@ const ManagerTaskInsights = () => {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="font-medium">Progress</span>
-                  <span className="font-bold text-blue-600">{selectedTask.progress || 0}%</span>
+                  <span className="font-bold text-blue-600">
+                    {selectedTask.status === "Completed" ? 100 : (selectedTask.progress || 0)}%
+                  </span>
                 </div>
                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div 
-                    className={`h-full transition-all ${getProgressColor(selectedTask.progress || 0)}`}
-                    style={{ width: `${selectedTask.progress || 0}%` }}
+                    className={`h-full transition-all ${getProgressColor(selectedTask.status, selectedTask.status === "Completed" ? 100 : (selectedTask.progress || 0))}`}
+                    style={{ width: `${selectedTask.status === "Completed" ? 100 : (selectedTask.progress || 0)}%` }}
                   />
                 </div>
               </div>
@@ -241,42 +271,31 @@ const ManagerTaskInsights = () => {
                     selectedTask.comments.map((comment) => (
                       <div key={comment.id} className="bg-slate-50 p-4 rounded-2xl">
                         <div className="flex justify-between text-xs">
-                          <span className="font-medium text-slate-700">{comment.user}</span>
-                          <span className="text-slate-400">{comment.timestamp}</span>
+                          <span className="font-medium text-slate-700">
+                            {comment.reviewer_name || "Reviewer"}
+                          </span>
+                          <span className="text-slate-400">
+                            {comment.created_at 
+                              ? new Date(comment.created_at).toLocaleString() 
+                              : "Just now"}
+                          </span>
                         </div>
-                        <p className="mt-2 text-slate-600 text-sm">{comment.text}</p>
+                        <p className="mt-2 text-slate-600 text-sm">{comment.comment_text}</p>
                       </div>
                     ))
                   ) : (
-                    <p className="text-gray-500 text-center py-4">No comments yet.</p>
+                    <div className="text-center py-8 text-gray-500">
+                      No comments from reviewer yet.
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-
-            <div className="p-4 border-t bg-white">
-              <form onSubmit={handleAddComment} className="flex gap-2">
-                <input 
-                  type="text"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a review or comment..."
-                  className="flex-1 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500"
-                />
-                <button 
-                  type="submit"
-                  disabled={!newComment.trim()}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-5 rounded-2xl transition-all"
-                >
-                  <Send size={18} />
-                </button>
-              </form>
             </div>
           </div>
         </div>
       )}
     </div>
   );
-}
+};
 
 export default ManagerTaskInsights;

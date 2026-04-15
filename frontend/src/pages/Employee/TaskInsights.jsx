@@ -41,16 +41,12 @@ const EmployeeTaskInsights = () => {
           }
         });
 
-        console.log("📡 Response status:", response.status);
-
         const text = await response.text();
-        console.log("📄 Raw response (first 300 chars):", text.substring(0, 300));
-
         let result;
         try {
           result = JSON.parse(text);
         } catch (e) {
-          throw new Error("Server returned HTML instead of JSON. Check apiConfig.API_BASE_URL");
+          throw new Error("Server returned HTML instead of JSON.");
         }
 
         if (!response.ok) {
@@ -68,16 +64,13 @@ const EmployeeTaskInsights = () => {
           if (normalizedTasks.length > 0) {
             setSelectedTask(normalizedTasks[0]);
             setShowSidebar(true);
-          } else {
-            setSelectedTask(null);
-            setShowSidebar(false);
           }
         } else {
           setError(result.message || "Failed to load your tasks");
         }
       } catch (err) {
         console.error("❌ Fetch error:", err);
-        setError(err.message || "Failed to connect to server. Check if backend is running on port 5000.");
+        setError(err.message || "Failed to connect to server.");
       } finally {
         setLoading(false);
       }
@@ -129,8 +122,8 @@ const EmployeeTaskInsights = () => {
     }
   };
 
+  // Click any task → open sidebar with comments
   const handleTaskClick = (task) => {
-    if (task.status === "Completed") return;
     setSelectedTask(task);
     setShowSidebar(true);
   };
@@ -255,6 +248,7 @@ const EmployeeTaskInsights = () => {
           </div>
         </div>
 
+        {/* Sidebar - Shows Reviewer Comments */}
         {showSidebar && selectedTask && (
           <div className="w-96 bg-white border border-gray-200 rounded-3xl p-6 shadow-lg relative">
             <button 
@@ -266,14 +260,41 @@ const EmployeeTaskInsights = () => {
 
             <div className="flex items-center gap-3 mb-6">
               <MessageSquare size={22} className="text-blue-600" />
-              <h2 className="text-xl font-semibold">Manager Comments</h2>
+              <h2 className="text-xl font-semibold">Reviewer Comments</h2>
             </div>
 
-            <h3 className="font-medium text-lg">{selectedTask.title}</h3>
-
-            <div className="mt-4 text-sm text-gray-500 text-center">
-              No comments from manager yet.
+            <div className="mb-6">
+              <h3 className="font-medium text-lg">{selectedTask.title}</h3>
+              <p className="text-sm text-gray-500 mt-1">{selectedTask.project_name}</p>
             </div>
+
+            <div className="space-y-5 max-h-[calc(100vh-280px)] overflow-y-auto pr-2">
+              {selectedTask.comments && selectedTask.comments.length > 0 ? (
+                selectedTask.comments.map((comment) => (
+                  <div key={comment.id} className="bg-gray-50 rounded-2xl p-4">
+                    <div className="flex justify-between text-xs text-gray-500 mb-2">
+                      <span className="font-medium">
+                        {comment.reviewer_name || "Reviewer"}
+                      </span>
+                      <span>
+                        {comment.created_at 
+                          ? new Date(comment.created_at).toLocaleString() 
+                          : "Just now"}
+                      </span>
+                    </div>
+                    <p className="text-gray-700 text-sm leading-relaxed">
+                      {comment.comment_text}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-12 text-gray-400">
+                  No comments from reviewer yet.
+                </div>
+              )}
+            </div>
+
+            
           </div>
         )}
       </div>

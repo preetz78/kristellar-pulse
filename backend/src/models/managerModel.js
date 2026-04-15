@@ -11,6 +11,7 @@ const createProjectsTable = async () => {
         description TEXT,
         manager_id INT NOT NULL,
         project_manager_name VARCHAR(100) NOT NULL,
+        start_date DATE,                    
         deadline DATE NOT NULL,
         team_size INT DEFAULT 0,
         priority ENUM('High', 'Medium', 'Low') DEFAULT 'Medium',   
@@ -59,6 +60,7 @@ const createTasksTable = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         due_date DATE,
         status ENUM('In Progress', 'Completed', 'Delayed') DEFAULT 'In Progress',
+        completed_at TIMESTAMP NULL,           -- NEW: Timestamp when employee marks task as Completed
         progress INT DEFAULT 0,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
         FOREIGN KEY (assigned_to) REFERENCES employees(id) ON DELETE CASCADE,
@@ -77,9 +79,9 @@ const initializeModels = async () => {
   await createTasksTable();
 };
 
-
 export default {
   createProjectsTable,
   createProjectAssignmentsTable,
-  createTasksTable
+  createTasksTable,
+  initializeModels
 };
