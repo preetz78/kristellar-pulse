@@ -10,20 +10,24 @@ import AdminDashboard from "./pages/Admin/Dashboard";
 import AdminProjects from "./pages/Admin/Projects";
 import TaskInsights from "./pages/Admin/TaskInsights";
 import AdminTeam from "./pages/Admin/Team";
+import AdminProfile from "./pages/Admin/Profile";
 
 import ManagerDashboard from "./pages/Manager/Dashboard";
 import ManagerProjects from "./pages/Manager/Projects";
 import ProjectDetail from "./pages/Manager/ProjectDetail";
 import ManagerTaskInsights from "./pages/Manager/TaskInsights";
 import ManagerTeamManagement from "./pages/Manager/TeamManagement";
+import ManagerProfile from "./pages/Manager/Profile";
 
 import ReviewerDashboard from "./pages/Reviewer/Dashboard";
 import ReviewerProjects from "./pages/Reviewer/Projects";
 import ReviewerTaskInsights from "./pages/Reviewer/TaskInsights";
+import ReviewerProfile from "./pages/Reviewer/Profile";
 
 import EmployeeDashboard from "./pages/Employee/Dashboard";
 import EmployeeProjects from "./pages/Employee/Projects";
 import EmployeeTaskInsights from "./pages/Employee/TaskInsights";
+import EmployeeProfile from "./pages/Employee/Profile";
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -135,6 +139,7 @@ const App = () => {
           <Route path="projects/:projectId" element={<ProjectDetail />} />
           <Route path="task-insights" element={<TaskInsights />} />
           <Route path="team" element={<AdminTeam />} />
+          <Route path="profile" element={<AdminProfile />} />
         </Route>
 
         {/* ==================== MANAGER ROUTES ==================== */}
@@ -153,6 +158,7 @@ const App = () => {
           <Route path="projects/:projectId" element={<ProjectDetail />} />
           <Route path="task-insights" element={<ManagerTaskInsights />} />
           <Route path="team" element={<ManagerTeamManagement />} />
+          <Route path="profile" element={<ManagerProfile />} />
         </Route>
 
         {/* ==================== REVIEWER ROUTES ==================== */}
@@ -169,6 +175,7 @@ const App = () => {
           <Route path="dashboard" element={<ReviewerDashboard />} />
           <Route path="projects" element={<ReviewerProjects />} />
           <Route path="task-insights" element={<ReviewerTaskInsights />} />
+          <Route path="profile" element={<ReviewerProfile />} />
         </Route>
 
         {/* ==================== EMPLOYEE ROUTES ==================== */}
@@ -185,6 +192,7 @@ const App = () => {
           <Route path="dashboard" element={<EmployeeDashboard />} />
           <Route path="projects" element={<EmployeeProjects />} />
           <Route path="task-insights" element={<EmployeeTaskInsights />} />
+          <Route path="profile" element={<EmployeeProfile />} />
         </Route>
 
         {/* Catch-all Route */}

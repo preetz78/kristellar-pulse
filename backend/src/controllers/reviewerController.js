@@ -1,5 +1,7 @@
 // backend/src/controllers/reviewerController.js
 import pool from '../config/db.js';
+import { addNotificationForEmployee } from './employeeController.js';
+import { addNotificationForManager } from './managerController.js';
 
 // Get ALL projects for Reviewer 
 export const getAllProjectsForReviewer = async (req, res) => {
@@ -122,6 +124,8 @@ export const getTaskComments = async (req, res) => {
 };
 
 // Add New Comment
+// Add New Comment + Send Notification to Employee
+// Add New Comment + Send Notifications to Employee AND Manager
 export const addTaskComment = async (req, res) => {
   const { taskId } = req.params;
   const { comment_text } = req.body;
@@ -137,10 +141,46 @@ export const addTaskComment = async (req, res) => {
   }
 
   try {
+    // Insert comment
     await pool.execute(`
       INSERT INTO comments (task_id, user_id, reviewer_name, comment_text)
       VALUES (?, ?, ?, ?)
     `, [taskId, userId, reviewerName, comment_text.trim()]);
+
+    // Get task details + project manager
+    const [taskRows] = await pool.execute(`
+      SELECT 
+        t.title,
+        t.assigned_to,
+        p.manager_id
+      FROM tasks t
+      JOIN projects p ON t.project_id = p.id
+      WHERE t.id = ?
+    `, [taskId]);
+
+    if (taskRows.length > 0) {
+      const { title: taskTitle, assigned_to: employeeId, manager_id } = taskRows[0];
+
+      // 1. Notification to Employee
+      if (employeeId) {
+        await addNotificationForEmployee(
+          `New feedback received on task: "${taskTitle}"`,
+          'feedback',
+          'medium',
+          employeeId
+        );
+      }
+
+      // 2. Notification to Project Manager
+      if (manager_id) {
+        await addNotificationForManager(
+          `New comment on task: "${taskTitle}" by ${reviewerName}`,
+          'feedback',
+          'medium',
+          manager_id
+        );
+      }
+    }
 
     res.json({ 
       success: true, 
@@ -149,6 +189,107 @@ export const addTaskComment = async (req, res) => {
   } catch (error) {
     console.error("Add comment error:", error);
     res.status(500).json({ success: false, message: "Failed to add comment" });
+  }
+};
+
+// ====================== REVIEWER NOTIFICATIONS ======================
+
+// Helper: Send notification to a single reviewer
+export const addNotificationForReviewer = async (
+  message,
+  type = 'info',
+  priority = 'medium',
+  reviewerId
+) => {
+  if (!reviewerId) return;
+
+  try {
+    await pool.query(
+      `INSERT INTO notifications 
+        (recipient_type, recipient_id, message, type, priority, status)
+       VALUES (?, ?, ?, ?, ?, 'unread')`,
+      ['reviewer', reviewerId, message.trim(), type, priority]
+    );
+    console.log(`✅ Notification sent to reviewer ${reviewerId}: ${message}`);
+  } catch (err) {
+    console.error('Reviewer notification failed:', err.message);
+  }
+};
+
+// Get notifications for the logged-in reviewer
+export const getReviewerNotifications = async (req, res) => {
+  try {
+    const reviewerId = req.user.id;
+    const { limit = 20 } = req.query;
+
+    const [rows] = await pool.query(`
+      SELECT 
+        id, 
+        message, 
+        type, 
+        priority, 
+        status, 
+        created_at 
+      FROM notifications
+      WHERE recipient_type = 'reviewer' 
+        AND recipient_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `, [reviewerId, Number(limit)]);
+
+    res.json({ 
+      success: true, 
+      notifications: rows || [] 
+    });
+  } catch (err) {
+    console.error('Get reviewer notifications error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to load notifications',
+      notifications: [] 
+    });
+  }
+};
+
+// Mark notification as read
+export const markReviewerNotificationAsRead = async (req, res) => {
+  try {
+    const reviewerId = req.user.id;
+    const { notificationId } = req.params;
+
+    if (!notificationId || isNaN(notificationId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid notification ID' 
+      });
+    }
+
+    const [result] = await pool.query(`
+      UPDATE notifications
+      SET status = 'read'
+      WHERE id = ? 
+        AND recipient_type = 'reviewer'
+        AND recipient_id = ?
+        AND status = 'unread'
+    `, [notificationId, reviewerId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Notification not found, already read, or not yours'
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Notification marked as read' 
+    });
+  } catch (error) {
+    console.error('Mark reviewer notification read error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Server error' 
+    });
   }
 };
 

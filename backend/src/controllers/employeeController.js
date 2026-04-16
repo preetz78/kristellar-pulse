@@ -1,5 +1,8 @@
 // backend/src/controllers/employeeController.js
 import pool from '../config/db.js';
+import { addNotificationForManager } from './managerController.js';
+import { addNotificationForAdmin } from './adminController.js';
+import { addNotificationForReviewer } from './reviewerController.js';
 
 // Get all projects assigned to the logged-in employee
 export const getMyAssignedProjects = async (req, res) => {
@@ -114,46 +117,78 @@ export const getMyTasks = async (req, res) => {
   }
 };
 
-// Mark task as Completed when employee ticks the checkbox
+
+// Mark task as Completed + Notify Employee, Manager, AND Reviewer
 export const completeTask = async (req, res) => {
   const { id } = req.params;
   const employee_id = req.user.id;
 
-  console.log(`[CompleteTask] Request - Task ID: ${id}, Employee ID: ${employee_id}`);
-
   try {
-    // Verify the task belongs to this employee
-    const [taskCheck] = await pool.execute(
-      `SELECT id FROM tasks WHERE id = ? AND assigned_to = ?`,
-      [id, employee_id]
-    );
+    // Get task, project, manager, and reviewer details
+    const [taskData] = await pool.execute(`
+      SELECT 
+        t.title,
+        t.project_id,
+        p.name AS project_name,
+        p.manager_id,
+        e.name AS employee_name
+      FROM tasks t
+      JOIN projects p ON t.project_id = p.id
+      JOIN employees e ON t.assigned_to = e.id
+      WHERE t.id = ? AND t.assigned_to = ?
+    `, [id, employee_id]);
 
-    if (taskCheck.length === 0) {
-      console.log("❌ Authorization failed for task", id);
+    if (taskData.length === 0) {
       return res.status(403).json({
         success: false,
         message: "You are not authorized to update this task"
       });
     }
 
-    // ✅ Corrected SQL - No trailing comma
-    const [result] = await pool.execute(`
+    const { title: taskTitle, project_name, manager_id, employee_name } = taskData[0];
+
+    // Update task status
+    await pool.execute(`
       UPDATE tasks 
-      SET 
-        status = 'Completed',
-        completed_at = CURRENT_TIMESTAMP,
-        progress = 100
+      SET status = 'Completed', 
+          completed_at = CURRENT_TIMESTAMP, 
+          progress = 100 
       WHERE id = ?
     `, [id]);
 
-    console.log(`✅ Task ${id} updated successfully. Affected rows: ${result.affectedRows}`);
+    // 1. Notification to Employee
+    await addNotificationForEmployee(
+      `You have completed the task: "${taskTitle}"`,
+      'task_completed',
+      'medium',
+      employee_id
+    );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Task not found"
-      });
+    // 2. Notification to Manager
+    if (manager_id) {
+      await addNotificationForManager(
+        `Task '${taskTitle}' marked as completed by ${employee_name || 'Employee'}`,
+        'task_completed',
+        'medium',
+        manager_id
+      );
     }
+
+    // 3. Notification to Reviewer - THIS IS THE NEW PART
+    // We assume reviewer is linked to the project. For now, we'll notify all reviewers (you can improve later)
+    // If you have a reviewer assigned to project, replace with specific reviewer_id
+    const [reviewers] = await pool.execute(`SELECT id FROM users WHERE role = 'reviewer'`);
+    
+    for (const reviewer of reviewers) {
+      await addNotificationForReviewer(
+        `Employee ${employee_name || 'Employee'} completed task: "${taskTitle}". Please review it.`,
+        'task_review',
+        'high',
+        reviewer.id
+      );
+    }
+
+    console.log(`✅ Reviewer notified about task completion: "${taskTitle}"`);
 
     res.json({
       success: true,
@@ -161,7 +196,7 @@ export const completeTask = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Complete task error:", error.message);
+    console.error("Complete task error:", error.message);
     res.status(500).json({
       success: false,
       message: "Failed to complete task",
@@ -321,10 +356,147 @@ export const getEmployeeProjectProgress = async (req, res) => {
   }
 };
 
+// EMPLOYEE NOTIFICATIONS 
+
+// Send notification to a single employee
+export const addNotificationForEmployee = async (
+  message,
+  type = 'info',
+  priority = 'medium',
+  employeeId
+) => {
+  if (!employeeId) return;
+
+  try {
+    await pool.query(
+      `INSERT INTO notifications 
+        (recipient_type, recipient_id, message, type, priority, status)
+       VALUES (?, ?, ?, ?, ?, 'unread')`,
+      ['employee', employeeId, message.trim(), type, priority]
+    );
+    console.log(`✅ Notification sent to employee ${employeeId}: ${message}`);
+  } catch (err) {
+    console.error('Employee notification failed:', err.message);
+  }
+};
+
+// Helper: Send notification to multiple employees (bulk)
+export const addNotificationForEmployees = async (
+  message,
+  type = 'info',
+  priority = 'medium',
+  employeeIds = []
+) => {
+  if (!Array.isArray(employeeIds) || employeeIds.length === 0) return;
+
+  const values = employeeIds.map(id => [
+    'employee',
+    Number(id),
+    message.trim(),
+    type,
+    priority,
+    'unread'
+  ]);
+
+  const placeholders = values.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
+
+  try {
+    await pool.query(`
+      INSERT INTO notifications 
+        (recipient_type, recipient_id, message, type, priority, status)
+      VALUES ${placeholders}
+    `, values.flat());
+    console.log(`✅ Sent notification to ${employeeIds.length} employees`);
+  } catch (err) {
+    console.error('Bulk employee notification failed:', err.message);
+  }
+};
+
+// Get all notifications for the logged-in employee
+export const getEmployeeNotifications = async (req, res) => {
+  try {
+    const employeeId = req.user.id;
+    const { limit = 20 } = req.query;
+
+    const [rows] = await pool.query(`
+      SELECT 
+        id, 
+        message, 
+        type, 
+        priority, 
+        status, 
+        created_at 
+      FROM notifications
+      WHERE recipient_type = 'employee' 
+        AND recipient_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `, [employeeId, Number(limit)]);
+
+    res.json({ 
+      success: true, 
+      notifications: rows || [] 
+    });
+  } catch (err) {
+    console.error('Get employee notifications error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to load notifications',
+      notifications: [] 
+    });
+  }
+};
+
+// Mark a specific notification as read
+export const markEmployeeNotificationAsRead = async (req, res) => {
+  try {
+    const employeeId = req.user.id;
+    const { notificationId } = req.params;
+
+    if (!notificationId || isNaN(notificationId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid notification ID' 
+      });
+    }
+
+    const [result] = await pool.query(`
+      UPDATE notifications
+      SET status = 'read'
+      WHERE id = ? 
+        AND recipient_type = 'employee'
+        AND recipient_id = ?
+        AND status = 'unread'
+    `, [notificationId, employeeId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Notification not found, already read, or not yours'
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Notification marked as read' 
+    });
+  } catch (error) {
+    console.error('Mark employee notification read error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Server error' 
+    });
+  }
+};
+
 export default {
   getMyAssignedProjects,
   getMyTasks,
   completeTask,
+  getEmployeeDashboardStats,
   getEmployeeProjectProgress,
-  getEmployeeDashboardStats
+  getEmployeeNotifications,           
+  markEmployeeNotificationAsRead,     
+  addNotificationForEmployee,         
+  addNotificationForEmployees         
 };

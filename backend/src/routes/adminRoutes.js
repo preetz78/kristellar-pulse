@@ -8,10 +8,14 @@ import {
   getAllProjects,
   getAllAdminTasks,
   getDashboardStats,
-  getProjectProgress
+  getProjectProgress,
+  getAdminProfile,
+  getAdminNotifications,
+  markAdminNotificationAsRead 
 } from '../controllers/adminController.js';
 
-import upload from '../middleware/profileUpload.js';  
+import upload from '../middleware/profileUpload.js'; 
+import { protect } from '../middleware/auth.js'; 
 
 const router = express.Router();
 
@@ -34,5 +38,12 @@ router.get('/tasks', getAllAdminTasks);
 router.get('/dashboard', getDashboardStats);
 
 router.get('/project-progress', getProjectProgress);
+
+router.get('/profile', protect, getAdminProfile);
+// router.put('/profile', protect, updateAdminProfile);
+// router.post('/change-password', protect, changeAdminPassword); 
+
+router.get('/notifications', protect, getAdminNotifications);
+router.patch('/notifications/:notificationId/read', protect, markAdminNotificationAsRead);
 
 export default router;

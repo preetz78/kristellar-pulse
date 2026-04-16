@@ -482,3 +482,258 @@ export const getProjectProgress = async (req, res) => {
     });
   }
 };
+
+
+// Get Admin Profile
+export const getAdminProfile = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    const [rows] = await pool.execute(
+      `SELECT id, name, email, role, created_at 
+       FROM users 
+       WHERE id = ? AND role = 'admin'`,
+      [adminId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin profile not found"
+      });
+    }
+
+    const admin = rows[0];
+
+    res.json({
+      success: true,
+      data: {
+        id: admin.id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+        created_at: admin.created_at
+      }
+    });
+  } catch (error) {
+    console.error("Get admin profile error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch admin profile"
+    });
+  }
+};
+
+// Change Admin Password
+export const changeAdminPassword = async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const adminId = req.user.id;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      message: "Current password and new password are required"
+    });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: "New password must be at least 6 characters long"
+    });
+  }
+
+  try {
+    // Get current hashed password
+    const [rows] = await pool.execute(
+      'SELECT password FROM users WHERE id = ? AND role = "admin"',
+      [adminId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found"
+      });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, rows[0].password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password is incorrect"
+      });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Update password
+    await pool.execute(
+      'UPDATE users SET password = ? WHERE id = ?',
+      [hashedPassword, adminId]
+    );
+
+    res.json({
+      success: true,
+      message: "Password changed successfully"
+    });
+
+  } catch (error) {
+    console.error("Change admin password error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to change password"
+    });
+  }
+};
+
+// ====================== ADMIN NOTIFICATIONS ======================
+
+const getAdminIds = async () => {
+  const [admins] = await pool.query(
+    `SELECT id FROM users WHERE role = 'admin'`
+  );
+  return admins.map(admin => admin.id);
+};
+
+// Helper: Send notification to Admin
+export const addNotificationForAdmin = async (
+  message,
+  type = 'info',
+  priority = 'medium',
+  adminId
+) => {
+  try {
+    let adminIds = [];
+
+    if (adminId) {
+      const [rows] = await pool.query(
+        `SELECT id FROM users WHERE id = ? AND role = 'admin'`,
+        [adminId]
+      );
+
+      if (rows.length > 0) {
+        adminIds = [adminId];
+      }
+    }
+
+    if (adminIds.length === 0) {
+      adminIds = await getAdminIds();
+    }
+
+    if (adminIds.length === 0) {
+      console.warn('No admin users found. Skipping admin notification.');
+      return;
+    }
+
+    const values = adminIds.map((id) => [
+      'admin',
+      id,
+      message.trim(),
+      type,
+      priority,
+      'unread'
+    ]);
+
+    const placeholders = values.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
+
+    await pool.query(
+      `INSERT INTO notifications 
+        (recipient_type, recipient_id, message, type, priority, status)
+       VALUES ${placeholders}`,
+      values.flat()
+    );
+
+    console.log(`✅ Notification sent to admin(s) ${adminIds.join(', ')}: ${message}`);
+  } catch (err) {
+    console.error('Admin notification failed:', err.message);
+  }
+};
+
+// Get notifications for the logged-in admin
+export const getAdminNotifications = async (req, res) => {
+  try {
+    const { limit = 20 } = req.query;
+    const adminIds = await getAdminIds();
+
+    if (adminIds.length === 0) {
+      return res.json({
+        success: true,
+        notifications: []
+      });
+    }
+
+    const placeholders = adminIds.map(() => '?').join(',');
+    const [rows] = await pool.query(`
+      SELECT 
+        id, 
+        message, 
+        type, 
+        priority, 
+        status, 
+        created_at 
+      FROM notifications
+      WHERE recipient_type = 'admin'
+        AND recipient_id IN (${placeholders})
+      ORDER BY created_at DESC
+      LIMIT ?
+    `, [...adminIds, Number(limit)]);
+
+    res.json({ 
+      success: true, 
+      notifications: rows || [] 
+    });
+  } catch (err) {
+    console.error('Get admin notifications error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to load notifications',
+      notifications: [] 
+    });
+  }
+};
+
+// Mark notification as read
+export const markAdminNotificationAsRead = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { notificationId } = req.params;
+
+    if (!notificationId || isNaN(notificationId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid notification ID' 
+      });
+    }
+
+    const [result] = await pool.query(`
+      UPDATE notifications
+      SET status = 'read'
+      WHERE id = ? 
+        AND recipient_type = 'admin'
+        AND recipient_id = ?
+        AND status = 'unread'
+    `, [notificationId, adminId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Notification not found, already read, or not yours'
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Notification marked as read' 
+    });
+  } catch (error) {
+    console.error('Mark admin notification read error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Server error' 
+    });
+  }
+};

@@ -5,7 +5,9 @@ import {
   getMyTasks, 
   completeTask,
   getEmployeeDashboardStats ,
-  getEmployeeProjectProgress   
+  getEmployeeProjectProgress,
+  getEmployeeNotifications,
+  markEmployeeNotificationAsRead   
 } from '../controllers/employeeController.js';
 
 import { protect } from '../middleware/auth.js';
@@ -24,5 +26,8 @@ router.patch('/tasks/:id/complete', protect, completeTask);
 router.get('/dashboard', protect, getEmployeeDashboardStats);
 
 router.get('/project-progress', protect, getEmployeeProjectProgress);
+
+router.get('/notifications', protect, getEmployeeNotifications);
+router.patch('/notifications/:notificationId/read', protect, markEmployeeNotificationAsRead);
 
 export default router;

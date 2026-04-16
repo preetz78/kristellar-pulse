@@ -1,14 +1,16 @@
 import pool from '../config/db.js';
-
-// Create New Project with Multiple Assignees
-// Create New Project with Start Date
+import { 
+  addNotificationForEmployee 
+} from './employeeController.js';
+import { addNotificationForAdmin } from './adminController.js';
+// Create New Project + Notify Employees + Notify Admin
 export const createProject = async (req, res) => {
   const { 
     project_id, 
     name, 
     description, 
     project_manager_name, 
-    start_date,      // ← NEW
+    start_date,      
     deadline, 
     priority,
     assigned_employee_ids   
@@ -32,33 +34,45 @@ export const createProject = async (req, res) => {
        (project_id, name, description, manager_id, project_manager_name, start_date, deadline, team_size, priority) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        project_id, 
-        name, 
-        description || null, 
-        manager_id, 
-        finalManagerName, 
-        start_date || null,        
-        deadline, 
-        teamSize, 
-        priority || 'Medium'
+        project_id, name, description || null, manager_id, finalManagerName, 
+        start_date || null, deadline, teamSize, priority || 'Medium'
       ]
     );
 
     const newProjectDbId = result.insertId;
 
-    // Assign employees
+    // Assign employees + Send Notifications to Employees
     if (teamSize > 0 && Array.isArray(assigned_employee_ids)) {
-      const values = assigned_employee_ids.map(empId => [
-        newProjectDbId, 
-        empId, 
-        manager_id
-      ]);
+      const values = assigned_employee_ids.map(empId => [newProjectDbId, empId, manager_id]);
 
       await pool.query(
         `INSERT INTO project_assignments (project_id, employee_id, assigned_by) VALUES ?`,
         [values]
       );
+
+      for (const empId of assigned_employee_ids) {
+        try {
+          await addNotificationForEmployee(
+            `You have been assigned to project: "${name}"`,
+            'project',
+            'medium',
+            empId
+          );
+        } catch (e) {
+          console.error(`Failed to notify employee ${empId}`, e.message);
+        }
+      }
     }
+
+    // ====================== NOTIFY ADMIN ======================
+    await addNotificationForAdmin(
+      `New project '${name}' created by ${finalManagerName}`,
+      'project',
+      'medium',
+      req.user.id   // Admin who is currently logged in (or fixed admin ID)
+    );
+
+    console.log(`✅ Admin notified about new project: "${name}"`);
 
     res.status(201).json({
       success: true,
@@ -69,10 +83,7 @@ export const createProject = async (req, res) => {
 
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ 
-        success: false, 
-        message: "Project ID already exists" 
-      });
+      return res.status(409).json({ success: false, message: "Project ID already exists" });
     }
     console.error("Create project error:", error);
     res.status(500).json({ success: false, message: "Failed to create project" });
@@ -270,6 +281,7 @@ export const getProjectById = async (req, res) => {
 };
 
 // Add Task
+// Add Task - With Notification to Employee
 export const addTask = async (req, res) => {
   const { 
     project_id, 
@@ -296,10 +308,30 @@ export const addTask = async (req, res) => {
       [project_id, title, description || null, assigned_to, created_by, due_date || null]
     );
 
+    const newTaskId = result.insertId;
+
+    // ==================== SEND NOTIFICATION TO EMPLOYEE ====================
+    // First, get employee name for better message
+    const [employeeRows] = await pool.execute(
+      `SELECT name FROM employees WHERE id = ?`,
+      [assigned_to]
+    );
+
+    const employeeName = employeeRows.length > 0 ? employeeRows[0].name : 'Employee';
+
+    await addNotificationForEmployee(
+      `New task assigned: "${title}"`,
+      'task',           // type
+      'high',           // priority
+      assigned_to       // employee ID
+    );
+
+    console.log(`Notification sent for new task "${title}" to employee ID: ${assigned_to}`);
+
     res.status(201).json({
       success: true,
       message: "Task created successfully",
-      taskId: result.insertId
+      taskId: newTaskId
     });
 
   } catch (error) {
@@ -511,6 +543,7 @@ export const getTaskInsights = async (req, res) => {
 };
 // EMPLOYEE MANAGEMENT 
 
+// Create Employee + Notify Admin
 export const createEmployee = async (req, res) => {
   const { name, employee_id, email, password, phone, designation } = req.body;
   const profilePicPath = req.file ? `/uploads/employee/${req.file.filename}` : null;
@@ -547,6 +580,16 @@ export const createEmployee = async (req, res) => {
       phone || null, designation || null, 
       profilePicPath, created_by_manager_id
     ]);
+
+    // ====================== NOTIFY ADMIN ======================
+    await addNotificationForAdmin(
+      `New employee account created: ${name} by ${req.user.name || 'Manager'}`,
+      'employee',
+      'medium',
+      req.user.id   // You can change this to a fixed super admin ID if needed
+    );
+
+    console.log(`✅ Admin notified about new employee: ${name}`);
 
     res.json({ 
       success: true, 
@@ -865,6 +908,133 @@ export const getManagerProjectProgress = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: "Failed to generate progress graph" 
+    });
+  }
+};
+
+// In managerController.js
+export const getManagerProfile = async (req, res) => {
+  try {
+    const managerId = req.user.id;
+
+    const [rows] = await pool.execute(
+      `SELECT id, name, email, phone, designation, location, bio, created_at 
+       FROM users 
+       WHERE id = ? AND role = 'manager'`,
+      [managerId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Manager not found" });
+    }
+
+    res.json({
+      success: true,
+      data: rows[0]
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Failed to fetch profile" });
+  }
+};
+
+// ====================== MANAGER NOTIFICATIONS ======================
+
+// Helper: Send notification to a single manager
+export const addNotificationForManager = async (
+  message,
+  type = 'info',
+  priority = 'medium',
+  managerId
+) => {
+  if (!managerId) return;
+
+  try {
+    await pool.query(
+      `INSERT INTO notifications 
+        (recipient_type, recipient_id, message, type, priority, status)
+       VALUES (?, ?, ?, ?, ?, 'unread')`,
+      ['manager', managerId, message.trim(), type, priority]
+    );
+    console.log(`✅ Notification sent to manager ${managerId}: ${message}`);
+  } catch (err) {
+    console.error('Manager notification failed:', err.message);
+  }
+};
+
+// Get notifications for the logged-in manager (only his own projects/tasks)
+export const getManagerNotifications = async (req, res) => {
+  try {
+    const managerId = req.user.id;
+    const { limit = 20 } = req.query;
+
+    const [rows] = await pool.query(`
+      SELECT 
+        id, 
+        message, 
+        type, 
+        priority, 
+        status, 
+        created_at 
+      FROM notifications
+      WHERE recipient_type = 'manager' 
+        AND recipient_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `, [managerId, Number(limit)]);
+
+    res.json({ 
+      success: true, 
+      notifications: rows || [] 
+    });
+  } catch (err) {
+    console.error('Get manager notifications error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to load notifications',
+      notifications: [] 
+    });
+  }
+};
+
+// Mark notification as read
+export const markManagerNotificationAsRead = async (req, res) => {
+  try {
+    const managerId = req.user.id;
+    const { notificationId } = req.params;
+
+    if (!notificationId || isNaN(notificationId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid notification ID' 
+      });
+    }
+
+    const [result] = await pool.query(`
+      UPDATE notifications
+      SET status = 'read'
+      WHERE id = ? 
+        AND recipient_type = 'manager'
+        AND recipient_id = ?
+        AND status = 'unread'
+    `, [notificationId, managerId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Notification not found, already read, or not yours'
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Notification marked as read' 
+    });
+  } catch (error) {
+    console.error('Mark manager notification read error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Server error' 
     });
   }
 };

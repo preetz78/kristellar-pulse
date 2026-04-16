@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import path from "path";
 
 import pool from "./src/config/db.js";
+import './src/utils/cronJobs.js';
 
 // Routes
 import adminRoutes from "./src/routes/adminRoutes.js";  
@@ -67,6 +68,11 @@ const initDatabase = async () => {
     const reviewerModule = await import("./src/models/reviewerModel.js");
     const reviewerModel = reviewerModule.default ?? reviewerModule;
     await reviewerModel.createReviewerTables?.();
+
+    // 5. Notifications Table  ←←← ADD THIS LINE
+    const notificationModule = await import("./src/models/notificationModel.js");
+    const notificationModel = notificationModule.default ?? notificationModule;
+    await notificationModel.createNotificationsTable?.();
 
     // Final Success Message
     console.log("✅ All database tables initialized successfully");

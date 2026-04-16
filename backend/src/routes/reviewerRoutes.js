@@ -4,7 +4,9 @@ import {
     getAllProjectsForReviewer,
     getAllTasksForReviewer,
     getTaskComments,
-    addTaskComment
+    addTaskComment,
+    getReviewerNotifications,
+    markReviewerNotificationAsRead
  } from '../controllers/reviewerController.js';
 
 import { 
@@ -26,5 +28,8 @@ router.post('/tasks/:taskId/comments', protect, addTaskComment);
 
 router.get('/dashboard', protect, getDashboardStats);
 router.get('/project-progress', protect, getProjectProgress);
+
+router.get('/notifications', protect, getReviewerNotifications);
+router.patch('/notifications/:notificationId/read', protect, markReviewerNotificationAsRead);
 
 export default router;

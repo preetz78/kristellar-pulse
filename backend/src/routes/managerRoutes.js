@@ -18,7 +18,10 @@ import {
   updateEmployee,    
   deleteEmployee ,
   getManagerDashboardStats,
-  getManagerProjectProgress
+  getManagerProjectProgress,
+  getManagerProfile,
+  getManagerNotifications,
+  markManagerNotificationAsRead
 } from '../controllers/managerController.js';
 import { protect } from '../middleware/auth.js';
 
@@ -60,6 +63,11 @@ router.delete('/employees/:id', protect, deleteEmployee);
 
 router.get('/dashboard', protect, getManagerDashboardStats);
 router.get('/project-progress', protect, getManagerProjectProgress);
+
+router.get('/profile', protect, getManagerProfile);
+
+router.get('/notifications', protect, getManagerNotifications);
+router.patch('/notifications/:notificationId/read', protect, markManagerNotificationAsRead);
 
 
 export default router;

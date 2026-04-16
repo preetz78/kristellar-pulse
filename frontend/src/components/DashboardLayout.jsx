@@ -1,16 +1,26 @@
 // src/components/DashboardLayout.jsx
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
-import { Bell, Search, User, Settings, LogOut, ChevronDown } from 'lucide-react';
+import { Bell, Search, User, LogOut, ChevronDown, X } from 'lucide-react';
+import axios from 'axios';
+import apiConfig from '../config/apiConfig';
 
 const DashboardLayout = ({ logout }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const API_BASE_URL = apiConfig.API_BASE_URL || 'http://localhost:5000';
+
   const profileMenuRef = useRef(null);
+  const notificationRef = useRef(null);
   const location = useLocation();
 
   // Get role and user data from sessionStorage
   const role = sessionStorage.getItem("role")?.toLowerCase() || "employee";
+  const token = sessionStorage.getItem("token");
   const userStr = sessionStorage.getItem("user");
   let userData = {};
 
@@ -32,8 +42,100 @@ const DashboardLayout = ({ logout }) => {
     ? "EM" 
     : (userName === "Admin User" ? "AD" : userName.substring(0, 2).toUpperCase());
 
+  // Determine notification API endpoint based on role
+  const getNotificationEndpoint = () => {
+    switch (role) {
+      case 'admin':
+        return '/api/admin/notifications';
+      case 'manager':
+        return '/api/manager/notifications';
+      case 'reviewer':
+        return '/api/reviewer/notifications';
+      case 'employee':
+      default:
+        return '/api/employee/notifications';
+    }
+  };
+
+  // Fetch notifications for the current role - IMPROVED VERSION
+  const fetchNotifications = async () => {
+    if (!token) {
+      console.warn("No token found, skipping notification fetch");
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const endpoint = `${API_BASE_URL}${getNotificationEndpoint()}`;
+      console.log(`Fetching notifications from: ${endpoint}`);
+
+      const res = await axios.get(endpoint, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      console.log("Notifications API response:", res.data);
+
+      // Handle different possible response structures
+      const data = res.data || {};
+      const notifs = data.notifications || data.data || [];
+
+      setNotifications(notifs);
+      
+      // Count unread notifications
+      const unread = notifs.filter(n => n && n.status === 'unread').length;
+      setUnreadCount(unread);
+
+      console.log(`Loaded ${notifs.length} notifications, ${unread} unread`);
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err.response?.data || err.message);
+      setNotifications([]);
+      setUnreadCount(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mark a single notification as read
+  const markAsRead = async (notificationId) => {
+    if (!token || !notificationId) return;
+
+    try {
+      const baseEndpoint = getNotificationEndpoint().replace('/notifications', '');
+      const endpoint = `${API_BASE_URL}${baseEndpoint}/notifications/${notificationId}/read`;
+      
+      await axios.patch(endpoint, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Update UI immediately
+      setNotifications(prev =>
+        prev.map(n =>
+          n.id === notificationId ? { ...n, status: 'read' } : n
+        )
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error("Failed to mark notification as read:", err);
+    }
+  };
+
+  // Fetch notifications when component mounts or role changes
+  useEffect(() => {
+    fetchNotifications();
+
+    // Auto-refresh notifications every 30 seconds
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [role]);
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
         setShowProfileMenu(false);
       }
@@ -41,20 +143,19 @@ const DashboardLayout = ({ logout }) => {
 
     const handleEscapeKey = (event) => {
       if (event.key === 'Escape') {
+        setShowNotifications(false);
         setShowProfileMenu(false);
       }
     };
 
-    if (showProfileMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscapeKey);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscapeKey);
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscapeKey);
     };
-  }, [showProfileMenu]);
+  }, []);
 
   // ==================== MENU BASED ON ROLE ====================
   const adminMenu = [
@@ -111,7 +212,6 @@ const DashboardLayout = ({ logout }) => {
     if (typeof logout === 'function') {
       logout();
     } else {
-      // Fallback if logout prop is not passed
       sessionStorage.clear();
       window.location.href = '/login';
     }
@@ -195,11 +295,90 @@ const DashboardLayout = ({ logout }) => {
               />
             </div>
 
-            {/* Notification */}
-            <button className="relative p-2.5 rounded-2xl hover:bg-blue-50 transition text-gray-600">
-              <Bell size={22} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>
-            </button>
+            {/* ==================== NOTIFICATION BELL ==================== */}
+            <div className="relative" ref={notificationRef}>
+              <button 
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  if (!showNotifications) {
+                    fetchNotifications();   // Force refresh on every click
+                  }
+                }}
+                className="relative p-2.5 rounded-2xl hover:bg-blue-50 transition text-gray-600"
+              >
+                <Bell size={22} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-medium rounded-full flex items-center justify-center ring-2 ring-white">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Dropdown */}
+              {showNotifications && (
+                <div className="absolute right-0 mt-3 w-96 bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden z-50 max-h-[420px] flex flex-col">
+                  
+                  <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-blue-50">
+                    <h3 className="font-semibold text-gray-800">Notifications</h3>
+                    <button onClick={() => setShowNotifications(false)}>
+                      <X size={18} className="text-gray-500 hover:text-gray-700" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-auto p-2">
+                    {loading ? (
+                      <div className="py-8 text-center text-gray-500">Loading notifications...</div>
+                    ) : notifications.length === 0 ? (
+                      <div className="py-12 text-center text-gray-500">
+                        No notifications yet
+                      </div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          onClick={() => markAsRead(notif.id)}
+                          className={`p-4 hover:bg-blue-50 rounded-2xl mb-1 cursor-pointer transition-all ${
+                            notif.status === 'unread' ? 'bg-blue-50/70' : ''
+                          }`}
+                        >
+                          <div className="flex gap-3">
+                            <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${notif.status === 'unread' ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                            <div className="flex-1">
+                              <p className="text-sm text-gray-800 leading-relaxed">
+                                {notif.message}
+                              </p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <span className="text-xs text-gray-500">
+                                  {new Date(notif.created_at).toLocaleDateString('en-IN', { 
+                                    day: 'numeric', 
+                                    month: 'short', 
+                                    hour: '2-digit', 
+                                    minute: '2-digit' 
+                                  })}
+                                </span>
+                                {notif.type && (
+                                  <span className="text-xs px-2 py-0.5 bg-gray-100 rounded-full text-gray-600">
+                                    {notif.type}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {notifications.length > 0 && (
+                    <div className="p-3 border-t border-gray-100 text-center">
+                      <button className="text-blue-600 text-sm font-medium hover:underline">
+                        View all notifications
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Profile Dropdown */}
             <div className="relative" ref={profileMenuRef}>
@@ -253,15 +432,6 @@ const DashboardLayout = ({ logout }) => {
                     >
                       <User size={18} />
                       <span className="font-medium">My Profile</span>
-                    </NavLink>
-
-                    <NavLink
-                      to={`/${role}/settings`}
-                      onClick={() => setShowProfileMenu(false)}
-                      className="w-full px-6 py-3 flex items-center gap-3 hover:bg-blue-50 text-gray-700 transition"
-                    >
-                      <Settings size={18} />
-                      <span className="font-medium">Settings</span>
                     </NavLink>
                   </div>
 
