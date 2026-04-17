@@ -826,6 +826,7 @@ export const getManagerProjectProgress = async (req, res) => {
     const projectsProgress = [];
     const projectGroups = {};
 
+    // 🔹 Group tasks by project
     rows.forEach(row => {
       if (!projectGroups[row.id]) {
         projectGroups[row.id] = {
@@ -836,6 +837,7 @@ export const getManagerProjectProgress = async (req, res) => {
           tasks: []
         };
       }
+
       if (row.task_id) {
         projectGroups[row.id].tasks.push({
           status: row.status,
@@ -844,6 +846,7 @@ export const getManagerProjectProgress = async (req, res) => {
       }
     });
 
+    // 🔹 Process each project
     for (const proj of Object.values(projectGroups)) {
       const totalTasks = proj.tasks.length;
 
@@ -861,29 +864,38 @@ export const getManagerProjectProgress = async (req, res) => {
       const start = new Date(proj.start_date);
       const end = new Date(proj.deadline);
 
-      const totalDays = Math.max(7, Math.ceil((end - start) / (1000 * 3600 * 24)));
-      const numWeeks = Math.max(4, Math.ceil(totalDays / 7));
+      const totalDays = Math.ceil((end - start) / (1000 * 3600 * 24));
+      const numWeeks = Math.ceil(totalDays / 7); // ✅ real weeks
 
       const weeklyProgress = [];
-      let prevWeekEnd = new Date(start);
+      let prevWeekStart = new Date(start);
+      let cumulativeCompleted = 0; // ✅ key fix
 
       for (let i = 1; i <= numWeeks; i++) {
         const weekEnd = new Date(start);
-        weekEnd.setDate(weekEnd.getDate() + Math.floor((totalDays / numWeeks) * i));
+        weekEnd.setDate(start.getDate() + (i * 7)); // ✅ proper weekly buckets
 
         const completedThisWeek = proj.tasks.filter(task => {
           if (task.status !== 'Completed' || !task.completed_at) return false;
+
           const completedDate = new Date(task.completed_at);
-          return completedDate > prevWeekEnd && completedDate <= weekEnd;
+
+          return (
+            completedDate >= prevWeekStart &&
+            completedDate < weekEnd
+          );
         }).length;
 
+        // ✅ cumulative logic
+        cumulativeCompleted += completedThisWeek;
+
         const percentage = totalTasks > 0
-          ? Math.round((completedThisWeek / totalTasks) * 100)
+          ? Math.round((cumulativeCompleted / totalTasks) * 100)
           : 0;
 
         weeklyProgress.push(Math.min(100, percentage));
 
-        prevWeekEnd = weekEnd;
+        prevWeekStart = weekEnd;
       }
 
       const colors = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444"];

@@ -6,7 +6,8 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
 
-// Login Controller - Supports both Users table and Employees table
+
+// Login Controller - Fixed to include profile_picture for all roles
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
@@ -20,7 +21,19 @@ export const loginUser = async (req, res) => {
   try {
     // ==================== FIRST: Try in users table (Admin, Manager, Reviewer) ====================
     let [users] = await pool.execute(
-      'SELECT id, name, email, password, role FROM users WHERE email = ?', 
+      `SELECT 
+        id, 
+        name, 
+        email, 
+        password, 
+        role,
+        profile_picture,     
+        phone,
+        designation,
+        location,
+        bio 
+       FROM users 
+       WHERE email = ?`, 
       [email]
     );
 
@@ -38,8 +51,6 @@ export const loginUser = async (req, res) => {
       const token = jwt.sign(
         { 
           id: user.id, 
-          name: user.name,
-          email: user.email, 
           role: user.role.toLowerCase() 
         },
         JWT_SECRET,
@@ -54,7 +65,12 @@ export const loginUser = async (req, res) => {
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role.charAt(0).toUpperCase() + user.role.slice(1)
+          role: user.role.charAt(0).toUpperCase() + user.role.slice(1),
+          profile_picture: user.profile_picture,     
+          phone: user.phone,
+          designation: user.designation,
+          location: user.location,
+          bio: user.bio
         }
       });
     }
@@ -68,7 +84,10 @@ export const loginUser = async (req, res) => {
         email, 
         password, 
         designation,
-        profile_picture 
+        profile_picture,      
+        phone,
+        location,
+        bio 
        FROM employees 
        WHERE email = ?`, 
       [email]
@@ -83,7 +102,6 @@ export const loginUser = async (req, res) => {
 
     const employee = employees[0];
 
-    // Compare password
     const isMatch = await bcrypt.compare(password, employee.password);
     if (!isMatch) {
       return res.status(401).json({ 
@@ -92,15 +110,10 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // Generate JWT token for Employee
     const token = jwt.sign(
       { 
         id: employee.id, 
-        employee_id: employee.employee_id,
-        name: employee.name,
-        email: employee.email, 
-        role: "employee",
-        designation: employee.designation
+        role: "employee" 
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
@@ -117,7 +130,10 @@ export const loginUser = async (req, res) => {
         email: employee.email,
         role: "Employee",
         designation: employee.designation || "Employee",
-        profile_picture: employee.profile_picture
+        profile_picture: employee.profile_picture,   // ← Already correct
+        phone: employee.phone,
+        location: employee.location,
+        bio: employee.bio
       }
     });
 

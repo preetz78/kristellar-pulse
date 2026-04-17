@@ -128,9 +128,6 @@ const ManagerDashboard = () => {
           </p>
         </div>
 
-        <button className="px-4 md:px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-sm font-medium rounded-2xl hover:from-blue-700 hover:to-blue-600 transition-all shadow-lg hover:shadow-xl">
-          Export Report
-        </button>
       </div>
 
       {/* Stats Cards */}
