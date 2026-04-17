@@ -7,8 +7,12 @@ import {
   getEmployeeDashboardStats ,
   getEmployeeProjectProgress,
   getEmployeeNotifications,
-  markEmployeeNotificationAsRead   
+  markEmployeeNotificationAsRead,
+  getEmployeeProfile,
+  updateEmployeeProfile   
 } from '../controllers/employeeController.js';
+
+import { changePassword } from '../controllers/authController.js';
 
 import { protect } from '../middleware/auth.js';
 
@@ -29,5 +33,10 @@ router.get('/project-progress', protect, getEmployeeProjectProgress);
 
 router.get('/notifications', protect, getEmployeeNotifications);
 router.patch('/notifications/:notificationId/read', protect, markEmployeeNotificationAsRead);
+
+router.get('/profile', protect, getEmployeeProfile);
+router.put('/profile', protect, updateEmployeeProfile);
+
+router.put('/change-password', protect, changePassword);
 
 export default router;

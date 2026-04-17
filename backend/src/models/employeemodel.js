@@ -27,4 +27,43 @@ export const createEmployeeTables = async () => {
   }
 };
 
-export default { createEmployeeTables };
+// Safe way to add location and bio columns
+export const alterEmployeeTable = async () => {
+  try {
+    // Add location column if not exists
+    const [locCheck] = await pool.execute(`
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'employees' 
+        AND COLUMN_NAME = 'location'
+    `);
+
+    if (locCheck.length === 0) {
+      await pool.execute(`ALTER TABLE employees ADD COLUMN location VARCHAR(100) NULL DEFAULT NULL`);
+      console.log("Added 'location' column to employees table");
+    }
+
+    // Add bio column if not exists
+    const [bioCheck] = await pool.execute(`
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'employees' 
+        AND COLUMN_NAME = 'bio'
+    `);
+
+    if (bioCheck.length === 0) {
+      await pool.execute(`ALTER TABLE employees ADD COLUMN bio TEXT NULL DEFAULT NULL`);
+      console.log("Added 'bio' column to employees table");
+    }
+
+  } catch (error) {
+    console.error("Error altering employees table:", error.message);
+  }
+};
+
+export default { 
+  createEmployeeTables, 
+  alterEmployeeTable 
+};

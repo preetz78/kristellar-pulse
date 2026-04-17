@@ -293,9 +293,108 @@ export const markReviewerNotificationAsRead = async (req, res) => {
   }
 };
 
+// ====================== REVIEWER PROFILE ======================
+
+// Get Reviewer Profile (with real data including picture, bio, location)
+export const getReviewerProfile = async (req, res) => {
+  try {
+    const reviewerId = req.user.id;
+
+    const [rows] = await pool.execute(`
+      SELECT 
+        id, 
+        name, 
+        email, 
+        phone, 
+        designation, 
+        location, 
+        bio, 
+        profile_picture, 
+        created_at 
+      FROM users 
+      WHERE id = ? AND role = 'reviewer'
+    `, [reviewerId]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Reviewer profile not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      data: rows[0]
+    });
+  } catch (error) {
+    console.error("Get reviewer profile error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch reviewer profile"
+    });
+  }
+};
+
+// Update Reviewer Profile
+export const updateReviewerProfile = async (req, res) => {
+  const reviewerId = req.user.id;
+  const { name, phone, designation, location, bio } = req.body;
+
+  try {
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Name is required"
+      });
+    }
+
+    const [result] = await pool.execute(
+      `UPDATE users 
+       SET name = ?, 
+           phone = ?, 
+           designation = ?, 
+           location = ?, 
+           bio = ? 
+       WHERE id = ? AND role = 'reviewer'`,
+      [name, phone || null, designation || null, location || null, bio || null, reviewerId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Reviewer profile not found or unauthorized"
+      });
+    }
+
+    // Return updated data
+    const [updatedRows] = await pool.execute(`
+      SELECT 
+        id, name, email, phone, designation, location, bio, 
+        profile_picture, created_at 
+      FROM users 
+      WHERE id = ?
+    `, [reviewerId]);
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updatedRows[0]
+    });
+
+  } catch (error) {
+    console.error("Update reviewer profile error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile"
+    });
+  }
+};
+
 export default {
   getAllProjectsForReviewer,
   getAllTasksForReviewer,
   getTaskComments,
-  addTaskComment
+  addTaskComment,
+  getReviewerProfile,          
+  updateReviewerProfile
 };

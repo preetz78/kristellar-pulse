@@ -17,9 +17,44 @@ const createUsersTable = async () => {
 
   try {
     await pool.execute(createTableQuery);
-    console.log("Users table created or already exists");
+    console.log("✅ Users table created or already exists");
   } catch (error) {
     console.error("❌ Error creating users table:", error.message);
+  }
+};
+
+// ====================== SAFE ALTER TABLE (Compatible with MySQL 5.7+) ======================
+const alterUsersTable = async () => {
+  try {
+    const columnsToAdd = [
+      { name: 'phone',       definition: 'VARCHAR(20) NULL DEFAULT NULL' },
+      { name: 'designation', definition: 'VARCHAR(100) NULL DEFAULT NULL' },
+      { name: 'location',    definition: 'VARCHAR(100) NULL DEFAULT NULL' },
+      { name: 'bio',         definition: 'TEXT NULL DEFAULT NULL' }
+    ];
+
+    for (const col of columnsToAdd) {
+      // Check if column already exists
+      const [existing] = await pool.execute(`
+        SELECT COLUMN_NAME 
+        FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+          AND TABLE_NAME = 'users' 
+          AND COLUMN_NAME = ?
+      `, [col.name]);
+
+      if (existing.length === 0) {
+        await pool.execute(`ALTER TABLE users ADD COLUMN ${col.name} ${col.definition}`);
+        console.log(`✅ Added new column: ${col.name}`);
+      } else {
+        console.log(`ℹ️ Column already exists: ${col.name}`);
+      }
+    }
+
+    console.log("✅ Users table altered successfully (phone, designation, location, bio)");
+
+  } catch (error) {
+    console.error("❌ Error altering users table:", error.message);
   }
 };
 
@@ -44,8 +79,7 @@ const seedAdminUser = async () => {
     );
 
     if (existing.length > 0) {
-      // Silent - no log when already exists (as you wanted)
-      return;
+      return; // Silent - already exists
     }
 
     // Hash password
@@ -66,14 +100,16 @@ const seedAdminUser = async () => {
   }
 };
 
-// Run table creation first, then seed (with small delay for safety)
+// Initialize Database - Run in correct order
 const initializeDatabase = async () => {
-  await createUsersTable();
-  setTimeout(seedAdminUser, 800);   // Small delay
+  await createUsersTable();     // First ensure table exists
+  await alterUsersTable();      // Then safely add new columns
+  setTimeout(seedAdminUser, 800); // Seed admin after table is ready
 };
-
 
 export default {
   createUsersTable,
-  seedAdminUser
+  alterUsersTable,
+  seedAdminUser,
+  initializeDatabase
 };

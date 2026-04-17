@@ -913,30 +913,30 @@ export const getManagerProjectProgress = async (req, res) => {
 };
 
 // In managerController.js
-export const getManagerProfile = async (req, res) => {
-  try {
-    const managerId = req.user.id;
+// export const getManagerProfile = async (req, res) => {
+//   try {
+//     const managerId = req.user.id;
 
-    const [rows] = await pool.execute(
-      `SELECT id, name, email, phone, designation, location, bio, created_at 
-       FROM users 
-       WHERE id = ? AND role = 'manager'`,
-      [managerId]
-    );
+//     const [rows] = await pool.execute(
+//       `SELECT id, name, email, phone, designation, location, bio, created_at 
+//        FROM users 
+//        WHERE id = ? AND role = 'manager'`,
+//       [managerId]
+//     );
 
-    if (rows.length === 0) {
-      return res.status(404).json({ success: false, message: "Manager not found" });
-    }
+//     if (rows.length === 0) {
+//       return res.status(404).json({ success: false, message: "Manager not found" });
+//     }
 
-    res.json({
-      success: true,
-      data: rows[0]
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Failed to fetch profile" });
-  }
-};
+//     res.json({
+//       success: true,
+//       data: rows[0]
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ success: false, message: "Failed to fetch profile" });
+//   }
+// };
 
 // ====================== MANAGER NOTIFICATIONS ======================
 
@@ -1035,6 +1035,138 @@ export const markManagerNotificationAsRead = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Server error' 
+    });
+  }
+};
+
+// ====================== MANAGER PROFILE ======================
+
+// Get Manager Profile (with profile picture)
+export const getManagerProfile = async (req, res) => {
+  try {
+    const managerId = req.user.id;
+
+    const [rows] = await pool.execute(
+      `SELECT id, name, email, phone, designation, location, bio, 
+              profile_picture, created_at 
+       FROM users 
+       WHERE id = ? AND role = 'manager'`,
+      [managerId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Manager profile not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      data: rows[0]
+    });
+  } catch (error) {
+    console.error("Get manager profile error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch manager profile"
+    });
+  }
+};
+
+// Update Manager Profile
+export const updateManagerProfile = async (req, res) => {
+  const managerId = req.user.id;
+  const { name, phone, designation, location, bio } = req.body;
+
+  try {
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Name is required"
+      });
+    }
+
+    const [result] = await pool.execute(
+      `UPDATE users 
+       SET name = ?, 
+           phone = ?, 
+           designation = ?, 
+           location = ?, 
+           bio = ? 
+       WHERE id = ? AND role = 'manager'`,
+      [name, phone || null, designation || null, location || null, bio || null, managerId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Manager profile not found or unauthorized"
+      });
+    }
+
+    // Return updated data
+    const [updatedRows] = await pool.execute(
+      `SELECT id, name, email, phone, designation, location, bio, 
+              profile_picture, created_at 
+       FROM users 
+       WHERE id = ?`,
+      [managerId]
+    );
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updatedRows[0]
+    });
+
+  } catch (error) {
+    console.error("Update manager profile error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile"
+    });
+  }
+};
+
+
+export const getManagerProfileStats = async (req, res) => {
+  const managerId = req.user.id;
+
+  try {
+    // 1. Total Projects created by this manager
+    const [projectResult] = await pool.execute(
+      "SELECT COUNT(*) as projects_managed FROM projects WHERE manager_id = ?",
+      [managerId]
+    );
+
+    // 2. Active Tasks in this manager's projects only
+    const [taskResult] = await pool.execute(`
+      SELECT COUNT(*) as active_tasks 
+      FROM tasks t
+      JOIN projects p ON t.project_id = p.id
+      WHERE p.manager_id = ? AND t.status = 'In Progress'
+    `, [managerId]);
+
+    // 3. Team Members (Employees created by this manager)
+    const [employeeResult] = await pool.execute(
+      "SELECT COUNT(*) as team_members FROM employees WHERE created_by_manager_id = ?",
+      [managerId]
+    );
+
+    res.json({
+      success: true,
+      stats: {
+        projectsManaged: projectResult[0].projects_managed || 0,
+        activeTasks: taskResult[0].active_tasks || 0,
+        teamMembers: employeeResult[0].team_members || 0
+      }
+    });
+  } catch (error) {
+    console.error("Manager profile stats error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch profile statistics"
     });
   }
 };

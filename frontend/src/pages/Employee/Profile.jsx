@@ -1,5 +1,5 @@
 // src/pages/Employee/Profile.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Mail,
   Calendar,
@@ -8,101 +8,295 @@ import {
   Phone,
   MapPin,
   Briefcase,
-  User
+  User,
+  Edit2
 } from "lucide-react";
+import apiConfig from "../../config/apiConfig";
 
 function EmployeeProfile() {
-  // Static data for now (backend will be connected later)
-  const employeeData = {
-    name: "Aditya Sinha",
-    email: "aditya.sinha@company.com",
-    phone: "+91 91234 56789",
-    location: "Kolkata, West Bengal",
-    designation: "Software Developer",
-    created_at: "2025-02-10",
-    bio: "Dedicated software developer with expertise in React, Node.js, and full-stack development. Passionate about building efficient and user-friendly applications."
+  const [employeeData, setEmployeeData] = useState(null);
+  const [stats, setStats] = useState({
+    projectsAssigned: 0,
+    tasksCompleted: 0,
+    completionRate: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  // Change Password Modal
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmNewPassword: ""
+  });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // Fetch Employee Profile + Stats
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = sessionStorage.getItem("token");
+
+        const profileRes = await fetch(`${apiConfig.API_BASE_URL}/api/employee/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const profileData = await profileRes.json();
+        if (profileData.success) {
+          setEmployeeData(profileData.data);
+          setEditForm(profileData.data);
+        }
+
+        const statsRes = await fetch(`${apiConfig.API_BASE_URL}/api/employee/dashboard`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const statsData = await statsRes.json();
+        if (statsData.success) {
+          setStats({
+            projectsAssigned: statsData.stats.totalProjects || 0,
+            tasksCompleted: statsData.stats.completedTasks || 0,
+            completionRate: statsData.stats.overallCompletion || 0
+          });
+        }
+
+      } catch (err) {
+        console.error("Data fetch error:", err);
+        setError("Failed to load data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const [showChangePassword, setShowChangePassword] = useState(false);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const token = sessionStorage.getItem("token");
+
+      const res = await fetch(`${apiConfig.API_BASE_URL}/api/employee/profile`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: editForm.name,
+          phone: editForm.phone,
+          designation: editForm.designation,
+          location: editForm.location,
+          bio: editForm.bio
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setEmployeeData(data.data || editForm);
+        setIsEditing(false);
+        alert("Profile updated successfully!");
+      } else {
+        alert(data.message || "Failed to update profile");
+      }
+    } catch (err) {
+      alert("Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditForm(employeeData);
+    setIsEditing(false);
+  };
+
+  // Fixed Change Password Handler
+  const handleChangePassword = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
+      alert("New passwords do not match!");
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      alert("New password must be at least 6 characters long");
+      return;
+    }
+
+    // NEW CHECK: Prevent same as current
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      alert("New password cannot be the same as current password!");
+      return;
+    }
+
+    setPasswordLoading(true);
+
+    try {
+      const token = sessionStorage.getItem("token");
+
+      const res = await fetch(`${apiConfig.API_BASE_URL}/api/employee/change-password`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        alert("Password changed successfully! Please use the new password to login next time.");
+        setShowChangePassword(false);
+        setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
+      } else {
+        alert(data.message || "Failed to change password");
+      }
+    } catch (err) {
+      alert("Failed to change password. Please try again.");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  if (loading) return <div className="p-12 text-center">Loading profile...</div>;
+  if (error) return <div className="p-12 text-center text-red-600">{error}</div>;
+  if (!employeeData) return <div className="p-12 text-center">No profile data found</div>;
 
   return (
     <div className="p-8">
 
-      {/* ─── HEADER ───────────────────────────────────── */}
+      {/* HEADER */}
       <div className="relative bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 rounded-2xl p-6 text-white shadow-xl">
-
         <div className="flex flex-col md:flex-row items-center gap-6">
-
-          {/* Avatar */}
-          <div className="w-24 h-24 rounded-2xl bg-white text-blue-600 flex items-center justify-center text-4xl font-bold shadow-lg">
-            {employeeData.name?.charAt(0)}
+          <div className="w-24 h-24 rounded-2xl bg-white text-blue-600 flex items-center justify-center text-4xl font-bold shadow-lg overflow-hidden">
+            {employeeData.profile_picture ? (
+              <img 
+                src={`${apiConfig.API_BASE_URL}${employeeData.profile_picture}`} 
+                alt="Profile" 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              employeeData.name?.charAt(0) || "A"
+            )}
           </div>
 
-          {/* Info */}
-          <div className="text-center md:text-left">
-            <h1 className="text-3xl font-bold">{employeeData.name}</h1>
+          <div className="text-center md:text-left flex-1">
+            <h1 className="text-3xl font-bold">
+              {isEditing ? (
+                <input
+                  type="text"
+                  name="name"
+                  value={editForm.name || ""}
+                  onChange={handleEditChange}
+                  className="bg-transparent border-b border-white text-white focus:outline-none text-3xl font-bold w-full"
+                />
+              ) : employeeData.name}
+            </h1>
             <p className="text-sm opacity-90 mt-0.5">
-              {employeeData.designation || "Software Developer"}
+              {isEditing ? (
+                <input
+                  type="text"
+                  name="designation"
+                  value={editForm.designation || ""}
+                  onChange={handleEditChange}
+                  className="bg-transparent border-b border-white text-white focus:outline-none"
+                />
+              ) : employeeData.designation}
             </p>
-            <p className="text-xs opacity-80 mt-0.5">
-              {employeeData.email}
-            </p>
+            <p className="text-xs opacity-80 mt-0.5">{employeeData.email}</p>
+          </div>
+
+          <div className="flex gap-3">
+            {!isEditing ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-5 py-2.5 rounded-xl text-sm transition"
+              >
+                <Edit2 size={16} />
+                Edit Profile
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition disabled:opacity-70"
+                >
+                  {saving ? "Saving..." : "Save Changes"}
+                </button>
+                <button
+                  onClick={handleCancel}
+                  className="bg-white/20 hover:bg-white/30 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ─── MAIN CONTENT ─────────────────────────────── */}
-      <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6 ">
-
-        {/* LEFT PANEL */}
+      {/* MAIN CONTENT */}
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white/90 backdrop-blur rounded-2xl p-6 shadow-lg">
-
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <User size={20} /> Profile Information
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700">
-
             <InfoRow icon={<Mail />} label="Email" value={employeeData.email} />
-            <InfoRow
-              icon={<Phone />}
-              label="Phone"
-              value={employeeData.phone || "+91 XXXXXXXXXX"}
+            <InfoRow 
+              icon={<Phone />} 
+              label="Phone" 
+              value={isEditing ? (
+                <input type="text" name="phone" value={editForm.phone || ""} onChange={handleEditChange}
+                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none" />
+              ) : (employeeData.phone || "")} 
             />
-            <InfoRow
-              icon={<MapPin />}
-              label="Location"
-              value={employeeData.location || "India"}
+            <InfoRow 
+              icon={<MapPin />} 
+              label="Location" 
+              value={isEditing ? (
+                <input type="text" name="location" value={editForm.location || ""} onChange={handleEditChange}
+                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none" />
+              ) : (employeeData.location || "")} 
             />
-            <InfoRow
-              icon={<Briefcase />}
-              label="Designation"
-              value={employeeData.designation || "Employee"}
+            <InfoRow 
+              icon={<Briefcase />} 
+              label="Designation" 
+              value={isEditing ? (
+                <input type="text" name="designation" value={editForm.designation || ""} onChange={handleEditChange}
+                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none" />
+              ) : (employeeData.designation || "")} 
             />
-            <InfoRow
-              icon={<Calendar />}
-              label="Joined"
-              value={new Date(employeeData.created_at).toDateString()}
-            />
-            <InfoRow
-              icon={<Shield />}
-              label="Role"
-              value="Employee"
-            />
-
+            <InfoRow icon={<Calendar />} label="Joined" value={employeeData.created_at ? new Date(employeeData.created_at).toDateString() : ""} />
+            <InfoRow icon={<Shield />} label="Role" value="Employee" />
           </div>
 
-          {/* BIO */}
           <div className="mt-6">
             <h3 className="font-semibold text-sm mb-1">Bio</h3>
-            <p className="text-gray-600 text-sm leading-relaxed">
-              {employeeData.bio}
-            </p>
+            {isEditing ? (
+              <textarea name="bio" value={editForm.bio || ""} onChange={handleEditChange} rows={4}
+                className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500 resize-y" />
+            ) : (
+              <p className="text-gray-600 text-sm leading-relaxed">{employeeData.bio || ""}</p>
+            )}
           </div>
 
-          {/* ACTION */}
           <button 
-            onClick={() => setShowChangePassword(!showChangePassword)}
+            onClick={() => setShowChangePassword(true)}
             className="mt-6 inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm hover:bg-blue-700 transition shadow"
           >
             <Lock size={16} />
@@ -110,36 +304,62 @@ function EmployeeProfile() {
           </button>
         </div>
 
-        {/* RIGHT PANEL */}
         <div className="space-y-4">
-
-          <StatCard title="Projects Assigned" value="7" />
-          <StatCard title="Tasks Completed" value="89" />
-          <StatCard title="Hours Worked" value="142" />
-
+          <StatCard title="Projects Assigned" value={stats.projectsAssigned} />
+          <StatCard title="Tasks Completed" value={stats.tasksCompleted} />
+          <StatCard title="Task Completion Rate (%)" value={stats.completionRate} />
         </div>
       </div>
 
-      {/* Simple Change Password Modal (Frontend only) */}
+      {/* Change Password Modal */}
       {showChangePassword && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-md text-center">
-            <h3 className="text-xl font-semibold mb-4">Change Password</h3>
-            <p className="text-gray-600 mb-8">Backend integration will be added later.</p>
-            <button 
-              onClick={() => setShowChangePassword(false)}
-              className="px-8 py-3 bg-gray-200 hover:bg-gray-300 rounded-xl font-medium"
-            >
-              Close
-            </button>
+          <div className="bg-white rounded-3xl p-8 w-full max-w-md">
+            <h3 className="text-2xl font-semibold mb-6">Change Password</h3>
+
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                <input type="password" value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500"
+                  placeholder="Enter current password" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <input type="password" value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500"
+                  placeholder="Enter new password" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                <input type="password" value={passwordForm.confirmNewPassword}
+                  onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmNewPassword: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500"
+                  placeholder="Confirm new password" />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-8">
+              <button onClick={() => {
+                setShowChangePassword(false);
+                setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
+              }}
+                className="flex-1 py-3 border border-gray-300 rounded-2xl font-medium text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={handleChangePassword} disabled={passwordLoading}
+                className="flex-1 py-3 bg-blue-600 text-white rounded-2xl font-medium hover:bg-blue-700 disabled:opacity-70">
+                {passwordLoading ? "Changing..." : "Change Password"}
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
-
-/* ─── SMALL COMPONENTS ───────────────────────────── (Exactly same as Admin) */
 
 const InfoRow = ({ icon, label, value }) => (
   <div className="flex items-center gap-6 bg-blue-50 p-3 rounded-lg shadow-sm">
@@ -152,7 +372,7 @@ const InfoRow = ({ icon, label, value }) => (
 );
 
 const StatCard = ({ title, value }) => (
-  <div className="bg-white p-10 rounded-2xl shadow-lg text-center">
+  <div className="bg-white p-9 rounded-2xl shadow-lg text-center">
     <p className="text-gray-500 text-md">{title}</p>
     <p className="text-3xl font-bold mt-1 text-blue-600">{value}</p>
   </div>

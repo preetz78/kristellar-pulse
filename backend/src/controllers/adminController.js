@@ -484,13 +484,13 @@ export const getProjectProgress = async (req, res) => {
 };
 
 
-// Get Admin Profile
+// Get Admin Profile - Fetch ALL columns including new ones
 export const getAdminProfile = async (req, res) => {
   try {
     const adminId = req.user.id;
 
     const [rows] = await pool.execute(
-      `SELECT id, name, email, role, created_at 
+      `SELECT id, name, email, phone, designation, location, bio, created_at 
        FROM users 
        WHERE id = ? AND role = 'admin'`,
       [adminId]
@@ -511,7 +511,10 @@ export const getAdminProfile = async (req, res) => {
         id: admin.id,
         name: admin.name,
         email: admin.email,
-        role: admin.role,
+        phone: admin.phone,
+        designation: admin.designation,
+        location: admin.location,
+        bio: admin.bio,
         created_at: admin.created_at
       }
     });
@@ -734,6 +737,102 @@ export const markAdminNotificationAsRead = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Server error' 
+    });
+  }
+};
+
+// Update Admin Profile
+export const updateAdminProfile = async (req, res) => {
+  const adminId = req.user.id;
+  const { name, phone, designation, location, bio } = req.body;
+
+  try {
+    // Basic validation
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Name is required"
+      });
+    }
+
+    const [result] = await pool.execute(
+      `UPDATE users 
+       SET name = ?, 
+           phone = ?, 
+           designation = ?, 
+           location = ?, 
+           bio = ? 
+       WHERE id = ? AND role = 'admin'`,
+      [name, phone || null, designation || null, location || null, bio || null, adminId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin profile not found or unauthorized"
+      });
+    }
+
+    // Fetch updated data to return
+    const [updatedRows] = await pool.execute(
+      `SELECT id, name, email, phone, designation, location, bio, created_at 
+       FROM users 
+       WHERE id = ?`,
+      [adminId]
+    );
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updatedRows[0]
+    });
+
+  } catch (error) {
+    console.error("Update admin profile error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile"
+    });
+  }
+};
+
+// Get Real Stats for Admin Profile (with correct Team Members count)
+export const getAdminDashboardStats = async (req, res) => {
+  try {
+    // Total Projects
+    const [projectResult] = await pool.execute("SELECT COUNT(*) as total_projects FROM projects");
+
+    // Total Completed Tasks
+    const [taskResult] = await pool.execute(
+      "SELECT COUNT(*) as total_completed_tasks FROM tasks WHERE status = 'Completed'"
+    );
+
+    // Total Users (from users table - managers, reviewers, admins)
+    const [userResult] = await pool.execute("SELECT COUNT(*) as total_users FROM users");
+
+    // Total Employees (from employees table)
+    const [employeeResult] = await pool.execute("SELECT COUNT(*) as total_employees FROM employees");
+
+    // Total Team Members = Users + Employees
+    const totalTeamMembers = 
+      (userResult[0].total_users || 0) + 
+      (employeeResult[0].total_employees || 0);
+
+    res.json({
+      success: true,
+      stats: {
+        totalProjects: projectResult[0].total_projects || 0,
+        totalCompletedTasks: taskResult[0].total_completed_tasks || 0,
+        totalUsers: userResult[0].total_users || 0,
+        totalEmployees: employeeResult[0].total_employees || 0,
+        totalTeamMembers: totalTeamMembers   // ← This is what we will show
+      }
+    });
+  } catch (error) {
+    console.error("Admin dashboard stats error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch dashboard statistics"
     });
   }
 };

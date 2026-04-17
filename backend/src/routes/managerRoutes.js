@@ -21,8 +21,13 @@ import {
   getManagerProjectProgress,
   getManagerProfile,
   getManagerNotifications,
-  markManagerNotificationAsRead
+  markManagerNotificationAsRead,
+  updateManagerProfile,
+  getManagerProfileStats
 } from '../controllers/managerController.js';
+
+import { changePassword } from '../controllers/authController.js';
+
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -69,5 +74,10 @@ router.get('/profile', protect, getManagerProfile);
 router.get('/notifications', protect, getManagerNotifications);
 router.patch('/notifications/:notificationId/read', protect, markManagerNotificationAsRead);
 
+// router.get('/profile', protect, getManagerProfile);
+router.put('/profile', protect, updateManagerProfile);
+router.get('/profile-stats', protect, getManagerProfileStats);
+
+router.put('/change-password', protect, changePassword);
 
 export default router;

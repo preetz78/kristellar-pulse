@@ -174,9 +174,6 @@ export const completeTask = async (req, res) => {
       );
     }
 
-    // 3. Notification to Reviewer - THIS IS THE NEW PART
-    // We assume reviewer is linked to the project. For now, we'll notify all reviewers (you can improve later)
-    // If you have a reviewer assigned to project, replace with specific reviewer_id
     const [reviewers] = await pool.execute(`SELECT id FROM users WHERE role = 'reviewer'`);
     
     for (const reviewer of reviewers) {
@@ -489,6 +486,104 @@ export const markEmployeeNotificationAsRead = async (req, res) => {
   }
 };
 
+// ====================== EMPLOYEE PROFILE ======================
+
+// Get Employee Profile (with real data including picture, bio, location)
+export const getEmployeeProfile = async (req, res) => {
+  try {
+    const employeeId = req.user.id;
+
+    const [rows] = await pool.execute(`
+      SELECT 
+        id, 
+        employee_id, 
+        name, 
+        email, 
+        phone, 
+        designation, 
+        location, 
+        bio, 
+        profile_picture, 
+        created_at 
+      FROM employees 
+      WHERE id = ?
+    `, [employeeId]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee profile not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      data: rows[0]
+    });
+  } catch (error) {
+    console.error("Get employee profile error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch employee profile"
+    });
+  }
+};
+
+// Update Employee Profile
+export const updateEmployeeProfile = async (req, res) => {
+  const employeeId = req.user.id;
+  const { name, phone, designation, location, bio } = req.body;
+
+  try {
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Name is required"
+      });
+    }
+
+    const [result] = await pool.execute(
+      `UPDATE employees 
+       SET name = ?, 
+           phone = ?, 
+           designation = ?, 
+           location = ?, 
+           bio = ? 
+       WHERE id = ?`,
+      [name, phone || null, designation || null, location || null, bio || null, employeeId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee profile not found"
+      });
+    }
+
+    // Return updated data
+    const [updatedRows] = await pool.execute(`
+      SELECT 
+        id, employee_id, name, email, phone, designation, 
+        location, bio, profile_picture, created_at 
+      FROM employees 
+      WHERE id = ?
+    `, [employeeId]);
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updatedRows[0]
+    });
+
+  } catch (error) {
+    console.error("Update employee profile error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile"
+    });
+  }
+};
+
 export default {
   getMyAssignedProjects,
   getMyTasks,
@@ -498,5 +593,7 @@ export default {
   getEmployeeNotifications,           
   markEmployeeNotificationAsRead,     
   addNotificationForEmployee,         
-  addNotificationForEmployees         
+  addNotificationForEmployees,
+  getEmployeeProfile,          
+  updateEmployeeProfile         
 };

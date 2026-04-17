@@ -47,34 +47,41 @@ const initDatabase = async () => {
   try {
     console.log("🔄 Starting database table initialization...");
 
-    // 1. Employees Table (Parent)
+    // 1. Employees Table
     const employeeModule = await import("./src/models/employeemodel.js");
     const employeeModel = employeeModule.default ?? employeeModule;
     await employeeModel.createEmployeeTables?.();
-
-    // 2. Users Table + Admin Seeding
+    await employeeModel.alterEmployeeTable?.();
+    
+    // 2. Users Table + Alter Table + Admin Seeding
     const adminModule = await import("./src/models/adminModel.js");
     const adminModel = adminModule.default ?? adminModule;
-    await adminModel.createUsersTable?.();
+
+    await adminModel.createUsersTable?.();     
+    await adminModel.alterUsersTable?.();      // ← Important: Add new columns safely
+    await adminModel.seedAdminUser?.();        // Seed admin user
 
     // 3. Manager Tables
     const managerModule = await import("./src/models/managerModel.js");
-    const managerModel = managerModule.default ?? managerModule;
+    const managerModel = managerModule.default ?? managerModel;
     await managerModel.createProjectsTable?.();
     await managerModel.createProjectAssignmentsTable?.();
     await managerModel.createTasksTable?.();
 
-    // 4. Reviewer Tables (Comments)
+    // 4. Reviewer Tables
     const reviewerModule = await import("./src/models/reviewerModel.js");
-    const reviewerModel = reviewerModule.default ?? reviewerModule;
+    const reviewerModel = reviewerModule.default ?? reviewerModel;
     await reviewerModel.createReviewerTables?.();
 
-    // 5. Notifications Table  ←←← ADD THIS LINE
-    const notificationModule = await import("./src/models/notificationModel.js");
-    const notificationModel = notificationModule.default ?? notificationModule;
-    await notificationModel.createNotificationsTable?.();
+    // 5. Notifications Table (Safe handling)
+    try {
+      const notificationModule = await import("./src/models/notificationModel.js");
+      const notificationModel = notificationModule.default ?? notificationModel;
+      await notificationModel.createNotificationsTable?.();
+    } catch (e) {
+      console.log("⚠️ Notification model skipped (may not exist yet)");
+    }
 
-    // Final Success Message
     console.log("✅ All database tables initialized successfully");
 
   } catch (error) {

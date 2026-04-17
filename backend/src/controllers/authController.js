@@ -129,3 +129,87 @@ export const loginUser = async (req, res) => {
     });
   }
 };
+
+export const changePassword = async (req, res) => {
+  const userId = req.user.id;
+  const userRole = req.user.role;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      message: "Current password and new password are required"
+    });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: "New password must be at least 6 characters long"
+    });
+  }
+
+  // NEW CHECK: Prevent setting new password same as current
+  if (currentPassword === newPassword) {
+    return res.status(400).json({
+      success: false,
+      message: "New password cannot be the same as current password"
+    });
+  }
+
+  try {
+    let tableName = 'users';
+    let roleCondition = '';
+
+    if (userRole === 'employee') {
+      tableName = 'employees';
+    } else {
+      roleCondition = `AND role = '${userRole}'`;
+    }
+
+    const [user] = await pool.execute(
+      `SELECT password FROM ${tableName} 
+       WHERE id = ? ${roleCondition}`,
+      [userId]
+    );
+
+    if (user.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    const bcrypt = (await import('bcryptjs')).default;
+
+    const isMatch = await bcrypt.compare(currentPassword, user[0].password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect"
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+
+    await pool.execute(
+      `UPDATE ${tableName} 
+       SET password = ? 
+       WHERE id = ? ${roleCondition}`,
+      [hashedNewPassword, userId]
+    );
+
+    res.json({
+      success: true,
+      message: "Password changed successfully. Please login again with the new password."
+    });
+
+  } catch (error) {
+    console.error("Change password error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to change password"
+    });
+  }
+};

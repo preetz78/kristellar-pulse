@@ -6,13 +6,17 @@ import {
     getTaskComments,
     addTaskComment,
     getReviewerNotifications,
-    markReviewerNotificationAsRead
+    markReviewerNotificationAsRead,
+    getReviewerProfile,
+    updateReviewerProfile
  } from '../controllers/reviewerController.js';
 
 import { 
   getDashboardStats,
   getProjectProgress 
 } from '../controllers/adminController.js';
+
+import { changePassword } from '../controllers/authController.js';
 
 import { protect } from '../middleware/auth.js';
 
@@ -31,5 +35,10 @@ router.get('/project-progress', protect, getProjectProgress);
 
 router.get('/notifications', protect, getReviewerNotifications);
 router.patch('/notifications/:notificationId/read', protect, markReviewerNotificationAsRead);
+
+router.get('/profile', protect, getReviewerProfile);
+router.put('/profile', protect, updateReviewerProfile);
+
+router.put('/change-password', protect, changePassword);
 
 export default router;

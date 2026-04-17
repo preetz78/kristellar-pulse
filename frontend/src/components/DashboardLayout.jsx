@@ -228,7 +228,7 @@ const DashboardLayout = ({ logout }) => {
         } bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(30,64,175,0.9)),linear-gradient(135deg,rgba(14,165,233,0.22),transparent)] text-white h-full transition-all duration-300 shadow-2xl flex-shrink-0`}
       >
         {/* LOGO */}
-        <div className="p-6 flex items-center gap-3 border-b border-white/10">
+        <div className="p-6 flex items-center gap-3  border-white/10">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center font-bold text-2xl shadow-lg">
             K
           </div>

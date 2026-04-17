@@ -11,8 +11,12 @@ import {
   getProjectProgress,
   getAdminProfile,
   getAdminNotifications,
-  markAdminNotificationAsRead 
+  markAdminNotificationAsRead ,
+  updateAdminProfile,
+  getAdminDashboardStats
 } from '../controllers/adminController.js';
+
+import { changePassword } from '../controllers/authController.js';
 
 import upload from '../middleware/profileUpload.js'; 
 import { protect } from '../middleware/auth.js'; 
@@ -45,5 +49,10 @@ router.get('/profile', protect, getAdminProfile);
 
 router.get('/notifications', protect, getAdminNotifications);
 router.patch('/notifications/:notificationId/read', protect, markAdminNotificationAsRead);
+
+router.put('/profile', protect, updateAdminProfile);
+router.get('/dashboard-stats', protect, getAdminDashboardStats);
+
+router.put('/change-password', protect, changePassword);
 
 export default router;
