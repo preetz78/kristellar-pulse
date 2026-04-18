@@ -11,20 +11,19 @@ const EmployeeDashboard = () => {
     overallCompletion: 0,
   });
 
+  const [myProjects, setMyProjects] = useState([]);                    
+  const [selectedProjectId, setSelectedProjectId] = useState(null);   // Will be set to newest project
+  const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Project Progress Section
-  const [myProjects, setMyProjects] = useState([]);
-  const [selectedProjectId, setSelectedProjectId] = useState("all");
-  const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
   // Fetch real dashboard stats
   useEffect(() => {
     const fetchEmployeeDashboard = async () => {
       try {
         setLoading(true);
-        const token = sessionStorage.getItem("token");   // ← Fixed: sessionStorage
+        const token = sessionStorage.getItem("token");
 
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/dashboard`, {
           method: "GET",
@@ -56,11 +55,11 @@ const EmployeeDashboard = () => {
     fetchEmployeeDashboard();
   }, []);
 
-  // Fetch employee's assigned projects for dropdown (runs only once)
+  // Fetch employee's assigned projects and auto-select newest one
   useEffect(() => {
     const fetchMyProjects = async () => {
       try {
-        const token = sessionStorage.getItem("token");   // ← Fixed: sessionStorage
+        const token = sessionStorage.getItem("token");
 
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/projects`, {
           method: "GET",
@@ -73,11 +72,18 @@ const EmployeeDashboard = () => {
         const result = await response.json();
 
         if (result.success && result.data) {
-          setMyProjects(result.data || []);
+          const allProjects = result.data || [];
 
-          // Set first project safely (only if none selected yet)
-          if (result.data.length > 0) {
-            setSelectedProjectId(prev => prev === "all" ? result.data[0].id : prev);
+          // Sort projects by created_at DESC (newest first)
+          const sortedProjects = [...allProjects].sort((a, b) => 
+            new Date(b.created_at || 0) - new Date(a.created_at || 0)
+          );
+
+          setMyProjects(sortedProjects);
+
+          // Auto-select the newest project
+          if (sortedProjects.length > 0) {
+            setSelectedProjectId(sortedProjects[0].id);
           }
         }
       } catch (err) {
@@ -86,18 +92,18 @@ const EmployeeDashboard = () => {
     };
 
     fetchMyProjects();
-  }, []);   // Empty dependency - runs only once
+  }, []);
 
   // Fetch weekly progress for selected project
   useEffect(() => {
-    if (selectedProjectId === "all" || !selectedProjectId) {
+    if (!selectedProjectId) {
       setSelectedProjectProgress(null);
       return;
     }
 
     const fetchProjectProgress = async () => {
       try {
-        const token = sessionStorage.getItem("token");   // ← Fixed: sessionStorage
+        const token = sessionStorage.getItem("token");
 
         const response = await fetch(
           `${apiConfig.API_BASE_URL}/api/employee/project-progress?projectId=${selectedProjectId}`,
@@ -247,7 +253,7 @@ const EmployeeDashboard = () => {
           </div>
         </div>
 
-        {/* My Progress Trend Graph */}
+        {/* My Progress Trend Graph - Dropdown with newest project selected by default */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-8 hover:border-blue-400 hover:shadow-xl transition-all">
           <div className="flex justify-between items-center mb-5">
             <div>
@@ -255,12 +261,12 @@ const EmployeeDashboard = () => {
               <p className="text-xs text-gray-500">Weekly progress based on my task completions</p>
             </div>
 
+            {/* Dropdown - Newest project selected by default */}
             <select
-              value={selectedProjectId}
+              value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
               className="bg-white border border-gray-300 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
             >
-              <option value="all">Select a Project</option>
               {myProjects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.title || project.name || `Project ${project.id}`}

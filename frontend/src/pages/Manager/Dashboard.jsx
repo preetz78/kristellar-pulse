@@ -12,7 +12,7 @@ const ManagerDashboard = () => {
   });
 
   const [projects, setProjects] = useState([]);                    
-  const [selectedProjectId, setSelectedProjectId] = useState("all");
+  const [selectedProjectId, setSelectedProjectId] = useState(null);   // Will be set to newest project
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
   const [loading, setLoading] = useState(true);
@@ -41,7 +41,19 @@ const ManagerDashboard = () => {
 
         if (result.success) {
           setStats(result.stats);
-          setProjects(result.projects || []);
+          const allProjects = result.projects || [];
+
+          // Sort projects by created_at DESC (newest first)
+          const sortedProjects = [...allProjects].sort((a, b) => 
+            new Date(b.created_at) - new Date(a.created_at)
+          );
+
+          setProjects(sortedProjects);
+
+          // Auto-select the newest project
+          if (sortedProjects.length > 0) {
+            setSelectedProjectId(sortedProjects[0].id);
+          }
         } else {
           setError(result.message || "Failed to load dashboard");
         }
@@ -59,7 +71,7 @@ const ManagerDashboard = () => {
   // Fetch REAL project progress when a project is selected
   useEffect(() => {
     const fetchProjectProgress = async () => {
-      if (selectedProjectId === "all") {
+      if (!selectedProjectId) {
         setSelectedProjectProgress(null);
         return;
       }
@@ -127,7 +139,6 @@ const ManagerDashboard = () => {
             My Projects Overview
           </p>
         </div>
-
       </div>
 
       {/* Stats Cards */}
@@ -218,7 +229,7 @@ const ManagerDashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS - Same as Admin */}
+        {/* PROJECT PROGRESS - Dropdown with newest project selected by default */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-8 hover:border-blue-400 hover:shadow-xl transition-all">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -226,12 +237,12 @@ const ManagerDashboard = () => {
               <p className="text-xs text-gray-500">Weekly task completion progress</p>
             </div>
 
+            {/* Dropdown - Newest project selected by default */}
             <select
-              value={selectedProjectId}
+              value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
               className="bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl focus:outline-none focus:border-blue-500 font-medium"
             >
-              <option value="all">All My Projects</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
@@ -282,7 +293,7 @@ const ManagerDashboard = () => {
                   </text>
                 ))}
 
-                {/* Single Progress Line */}
+                {/* Progress Line */}
                 <g>
                   <polyline
                     points={selectedProjectProgress.progress.map((val, i) => {
@@ -318,6 +329,7 @@ const ManagerDashboard = () => {
             )}
           </div>
 
+          {/* Legend */}
           {selectedProjectProgress && (
             <div className="mt-6 flex justify-center">
               <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border border-gray-100 shadow-sm">

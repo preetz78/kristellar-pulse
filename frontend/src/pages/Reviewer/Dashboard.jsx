@@ -12,13 +12,13 @@ const ReviewerDashboard = () => {
   });
 
   const [projects, setProjects] = useState([]);                    
-  const [selectedProjectId, setSelectedProjectId] = useState("all");
+  const [selectedProjectId, setSelectedProjectId] = useState(null);   // Will be set to newest project
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch same dashboard data as Admin (Reviewer sees everything)
+  // Fetch dashboard data
   useEffect(() => {
     const fetchReviewerDashboard = async () => {
       try {
@@ -41,7 +41,19 @@ const ReviewerDashboard = () => {
 
         if (result.success) {
           setStats(result.stats);
-          setProjects(result.projects || []);
+          const allProjects = result.projects || [];
+
+          // Sort projects by created_at DESC (newest first)
+          const sortedProjects = [...allProjects].sort((a, b) => 
+            new Date(b.created_at) - new Date(a.created_at)
+          );
+
+          setProjects(sortedProjects);
+
+          // Auto-select the newest project (first in sorted list)
+          if (sortedProjects.length > 0) {
+            setSelectedProjectId(sortedProjects[0].id);
+          }
         } else {
           setError(result.message || "Failed to load dashboard");
         }
@@ -56,10 +68,10 @@ const ReviewerDashboard = () => {
     fetchReviewerDashboard();
   }, []);
 
-  // Fetch REAL project progress when a project is selected
+  // Fetch project progress when selection changes
   useEffect(() => {
     const fetchProjectProgress = async () => {
-      if (selectedProjectId === "all") {
+      if (!selectedProjectId) {
         setSelectedProjectProgress(null);
         return;
       }
@@ -187,7 +199,7 @@ const ReviewerDashboard = () => {
         </div>
       </div>
 
-      {/* Graphs Section - Same as Admin */}
+      {/* Graphs Section */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Project Completion Circle */}
         <div className="lg:col-span-2 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
@@ -242,7 +254,7 @@ const ReviewerDashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS - Same UI as Admin Dashboard */}
+        {/* PROJECT PROGRESS - Dropdown with newest project selected by default */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -250,13 +262,12 @@ const ReviewerDashboard = () => {
               <p className="text-xs text-gray-500">Weekly task completion progress</p>
             </div>
 
-            {/* Dropdown - Same as Admin */}
+            {/* Dropdown - Newest project selected by default */}
             <select
-              value={selectedProjectId}
+              value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
               className="bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl focus:outline-none focus:border-blue-500 font-medium"
             >
-              <option value="all">All Projects</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
@@ -281,7 +292,7 @@ const ReviewerDashboard = () => {
                   />
                 ))}
 
-                {/* Dynamic X-axis */}
+                {/* X-axis labels */}
                 {selectedProjectProgress.weeks?.map((week, i) => (
                   <text 
                     key={i} 
@@ -294,7 +305,7 @@ const ReviewerDashboard = () => {
                   </text>
                 ))}
 
-                {/* Y-axis */}
+                {/* Y-axis labels */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <text 
                     key={i} 
@@ -307,7 +318,7 @@ const ReviewerDashboard = () => {
                   </text>
                 ))}
 
-                {/* Single Progress Line */}
+                {/* Progress Line */}
                 <g>
                   <polyline
                     points={selectedProjectProgress.progress.map((val, i) => {

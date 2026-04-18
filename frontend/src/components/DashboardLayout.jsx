@@ -1,7 +1,7 @@
 // src/components/DashboardLayout.jsx
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
-import { Bell, Search, User, LogOut, ChevronDown, X } from 'lucide-react';
+import { Bell, User, LogOut, ChevronDown, X } from 'lucide-react';
 import axios from 'axios';
 import apiConfig from '../config/apiConfig';
 
@@ -35,13 +35,12 @@ const DashboardLayout = ({ logout }) => {
 
   const userName = userData.name || "User";
   const userEmail = userData.email || "";
-  const profilePicture = userData.profile_picture || null;   // ← Real profile picture
+  const profilePicture = userData.profile_picture || null;
 
-  // Generate initials fallback
-  const displayInitials = userName.substring(0, 2).toUpperCase() || 
+  const displayInitials = userName.substring(0, 2).toUpperCase() ||
     (role === "employee" ? "EM" : role === "admin" ? "AD" : "US");
 
-  // Determine notification API endpoint based on role
+  // Notification endpoint based on role
   const getNotificationEndpoint = () => {
     switch (role) {
       case 'admin': return '/api/admin/notifications';
@@ -55,7 +54,6 @@ const DashboardLayout = ({ logout }) => {
   // Fetch notifications
   const fetchNotifications = async () => {
     if (!token) return;
-    
     setLoading(true);
     try {
       const endpoint = `${API_BASE_URL}${getNotificationEndpoint()}`;
@@ -81,7 +79,6 @@ const DashboardLayout = ({ logout }) => {
   // Mark notification as read
   const markAsRead = async (notificationId) => {
     if (!token || !notificationId) return;
-
     try {
       const baseEndpoint = getNotificationEndpoint().replace('/notifications', '');
       const endpoint = `${API_BASE_URL}${baseEndpoint}/notifications/${notificationId}/read`;
@@ -165,12 +162,16 @@ const DashboardLayout = ({ logout }) => {
   else if (role === "manager") menuItems = managerMenu;
   else if (role === "reviewer") menuItems = reviewerMenu;
 
+  // FIXED: Proper current page label including Profile
   const getCurrentPageLabel = () => {
     const pathname = location.pathname.toLowerCase();
+
+    if (pathname.includes('/profile')) return 'Profile';
     if (pathname.includes('/dashboard')) return 'Dashboard';
     if (pathname.includes('/projects')) return 'Projects';
     if (pathname.includes('/task-insights')) return 'Task Insights';
     if (pathname.includes('/team')) return 'Team Management';
+
     return 'Dashboard';
   };
 
@@ -240,16 +241,6 @@ const DashboardLayout = ({ logout }) => {
           {/* RIGHT SIDE */}
           <div className="flex items-center gap-6">
 
-            {/* Search */}
-            <div className="relative w-80">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Search anything..."
-                className="w-full pl-11 pr-4 py-2.5 bg-blue-50 border border-blue-100 rounded-2xl focus:outline-none focus:border-blue-400 focus:ring-1 text-sm placeholder-gray-400"
-              />
-            </div>
-
             {/* Notifications */}
             <div className="relative" ref={notificationRef}>
               <button 
@@ -267,10 +258,8 @@ const DashboardLayout = ({ logout }) => {
                 )}
               </button>
 
-              {/* Notification Dropdown - (kept as is) */}
               {showNotifications && (
                 <div className="absolute right-0 mt-3 w-96 bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden z-50 max-h-[420px] flex flex-col">
-                  
                   <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-blue-50">
                     <h3 className="font-semibold text-gray-800">Notifications</h3>
                     <button onClick={() => setShowNotifications(false)}>
@@ -282,9 +271,7 @@ const DashboardLayout = ({ logout }) => {
                     {loading ? (
                       <div className="py-8 text-center text-gray-500">Loading notifications...</div>
                     ) : notifications.length === 0 ? (
-                      <div className="py-12 text-center text-gray-500">
-                        No notifications yet
-                      </div>
+                      <div className="py-12 text-center text-gray-500">No notifications yet</div>
                     ) : (
                       notifications.map((notif) => (
                         <div
@@ -297,23 +284,13 @@ const DashboardLayout = ({ logout }) => {
                           <div className="flex gap-3">
                             <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${notif.status === 'unread' ? 'bg-blue-500' : 'bg-gray-300'}`} />
                             <div className="flex-1">
-                              <p className="text-sm text-gray-800 leading-relaxed">
-                                {notif.message}
-                              </p>
+                              <p className="text-sm text-gray-800 leading-relaxed">{notif.message}</p>
                               <div className="flex items-center gap-2 mt-2">
                                 <span className="text-xs text-gray-500">
                                   {new Date(notif.created_at).toLocaleDateString('en-IN', { 
-                                    day: 'numeric', 
-                                    month: 'short', 
-                                    hour: '2-digit', 
-                                    minute: '2-digit' 
+                                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
                                   })}
                                 </span>
-                                {notif.type && (
-                                  <span className="text-xs px-2 py-0.5 bg-gray-100 rounded-full text-gray-600">
-                                    {notif.type}
-                                  </span>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -321,29 +298,20 @@ const DashboardLayout = ({ logout }) => {
                       ))
                     )}
                   </div>
-
-                  {notifications.length > 0 && (
-                    <div className="p-3 border-t border-gray-100 text-center">
-                      <button className="text-blue-600 text-sm font-medium hover:underline">
-                        View all notifications
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
 
-            {/* PROFILE SECTION - NOW SHOWS REAL IMAGE */}
+            {/* PROFILE SECTION */}
             <div className="relative" ref={profileMenuRef}>
               <div
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                 className="flex items-center gap-3 cursor-pointer group"
               >
-                {/* Real Profile Picture */}
                 <div className="w-9 h-9 rounded-2xl overflow-hidden border border-blue-200 shadow-sm">
                   {profilePicture ? (
                     <img 
-                      src={`${apiConfig.API_BASE_URL}${profilePicture}`} 
+                      src={`${API_BASE_URL}${profilePicture}`} 
                       alt="Profile" 
                       className="w-full h-full object-cover"
                     />
@@ -356,9 +324,7 @@ const DashboardLayout = ({ logout }) => {
 
                 <div className="hidden md:block">
                   <div className="flex items-center gap-1">
-                    <p className="font-semibold text-gray-800 text-sm">
-                      {userName}
-                    </p>
+                    <p className="font-semibold text-gray-800 text-sm">{userName}</p>
                     <ChevronDown 
                       size={16} 
                       className={`text-gray-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} 
@@ -368,7 +334,7 @@ const DashboardLayout = ({ logout }) => {
                 </div>
               </div>
 
-              {/* Profile Dropdown Menu */}
+              {/* Profile Dropdown */}
               {showProfileMenu && (
                 <div className="absolute right-0 mt-3 w-80 bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden z-50">
                   <div className="p-6 bg-gradient-to-br from-blue-50 to-white border-b border-blue-100">
@@ -376,7 +342,7 @@ const DashboardLayout = ({ logout }) => {
                       <div className="w-14 h-14 rounded-2xl overflow-hidden border border-blue-200">
                         {profilePicture ? (
                           <img 
-                            src={`${apiConfig.API_BASE_URL}${profilePicture}`} 
+                            src={`${API_BASE_URL}${profilePicture}`} 
                             alt="Profile" 
                             className="w-full h-full object-cover"
                           />

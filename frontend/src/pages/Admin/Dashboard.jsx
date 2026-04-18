@@ -12,7 +12,7 @@ const Dashboard = () => {
   });
 
   const [projects, setProjects] = useState([]);                    
-  const [selectedProjectId, setSelectedProjectId] = useState("all");
+  const [selectedProjectId, setSelectedProjectId] = useState(null);   // Will be set to newest project
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
   const [loading, setLoading] = useState(true);
@@ -41,7 +41,19 @@ const Dashboard = () => {
 
         if (result.success) {
           setStats(result.stats);
-          setProjects(result.projects || []);
+          const allProjects = result.projects || [];
+
+          // Sort projects by created_at DESC (newest first)
+          const sortedProjects = [...allProjects].sort((a, b) => 
+            new Date(b.created_at) - new Date(a.created_at)
+          );
+
+          setProjects(sortedProjects);
+
+          // Auto-select the newest project
+          if (sortedProjects.length > 0) {
+            setSelectedProjectId(sortedProjects[0].id);
+          }
         } else {
           setError(result.message || "Failed to load dashboard statistics");
         }
@@ -59,7 +71,7 @@ const Dashboard = () => {
   // Fetch REAL project progress when a project is selected
   useEffect(() => {
     const fetchProjectProgress = async () => {
-      if (selectedProjectId === "all") {
+      if (!selectedProjectId) {
         setSelectedProjectProgress(null);
         return;
       }
@@ -127,7 +139,6 @@ const Dashboard = () => {
             Real-time Project Overview
           </p>
         </div>
-
       </div>
 
       {/* Top Stats Cards - 3 Cards */}
@@ -232,7 +243,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS - REAL GRAPH */}
+        {/* PROJECT PROGRESS - Dropdown with newest project selected by default */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -240,13 +251,12 @@ const Dashboard = () => {
               <p className="text-xs text-gray-500">Weekly task completion progress</p>
             </div>
 
-            {/* Real Projects Dropdown */}
+            {/* Dropdown - Newest project selected by default */}
             <select
-              value={selectedProjectId}
+              value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
               className="bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl focus:outline-none focus:border-blue-500 font-medium"
             >
-              <option value="all">All Projects</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
@@ -258,7 +268,7 @@ const Dashboard = () => {
           <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
             {selectedProjectProgress ? (
               <svg viewBox="0 0 750 280" className="w-full h-full">
-                {/* Light grid lines */}
+                {/* Grid lines */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <line 
                     key={i}
@@ -271,7 +281,7 @@ const Dashboard = () => {
                   />
                 ))}
 
-                {/* Dynamic X-axis based on actual weeks */}
+                {/* Dynamic X-axis */}
                 {selectedProjectProgress.weeks?.map((week, i) => (
                   <text 
                     key={i} 
@@ -300,26 +310,30 @@ const Dashboard = () => {
                 {/* Single Progress Line */}
                 <g>
                   <polyline
-                    points={selectedProjectProgress.progress.map((val, i) => 
-                      `${80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1))},${250 - (val * 2)}`
-                    ).join(" ")}
+                    points={selectedProjectProgress.progress.map((val, i) => {
+                      const xPos = 80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1));
+                      return `${xPos},${250 - (val * 2)}`;
+                    }).join(" ")}
                     fill="none"
                     stroke={selectedProjectProgress.color}
                     strokeWidth="4.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {selectedProjectProgress.progress.map((val, i) => (
-                    <circle
-                      key={i}
-                      cx={80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1))}
-                      cy={250 - (val * 2)}
-                      r="4.5"
-                      fill={selectedProjectProgress.color}
-                      stroke="#ffffff"
-                      strokeWidth="2"
-                    />
-                  ))}
+                  {selectedProjectProgress.progress.map((val, i) => {
+                    const xPos = 80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1));
+                    return (
+                      <circle
+                        key={i}
+                        cx={xPos}
+                        cy={250 - (val * 2)}
+                        r="4.5"
+                        fill={selectedProjectProgress.color}
+                        stroke="#ffffff"
+                        strokeWidth="2"
+                      />
+                    );
+                  })}
                 </g>
               </svg>
             ) : (
