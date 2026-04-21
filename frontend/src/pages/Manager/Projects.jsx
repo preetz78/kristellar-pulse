@@ -1,6 +1,7 @@
 // src/pages/Manager/Projects.jsx
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { 
   Calendar, 
   Users, 
@@ -8,29 +9,43 @@ import {
   Plus,
   X,
   Edit2,
-  Trash2
+  Trash2,
+  Search
 } from "lucide-react";
 
 import apiConfig from "../../config/apiConfig";
 
 const ManagerProjects = () => {
   const navigate = useNavigate();
-  
+  const location = useLocation();   // ← For reading navigation state from Dashboard
+
   // Get logged-in user from localStorage
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const managerName = user.name || "Manager";
 
   const [projects, setProjects] = useState([]);
-  const [employees, setEmployees] = useState([]);   // For assignee dropdown
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [hoveredCard, setHoveredCard] = useState(null);
   
-  // Filter states
-  const [selectedOrg, setSelectedOrg] = useState("All Organizations");
+  // Filter & Search states
   const [activeFilter, setActiveFilter] = useState("All Projects");
-  const [selectedProjectTitle, setSelectedProjectTitle] = useState("All Projects");
+  const [selectedProjectTitle, setSelectedProjectTitle] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Apply filter when coming from Dashboard
+  useEffect(() => {
+    const incomingFilter = location.state?.activeFilter;
+    if (incomingFilter) {
+      setActiveFilter(incomingFilter);
+      if (incomingFilter !== "All Projects") {
+        setSelectedProjectTitle("");
+        setSearchTerm("");
+      }
+    }
+  }, [location.state]);
 
   // Add Project Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -39,7 +54,7 @@ const ManagerProjects = () => {
     title: "",
     description: "",
     projectManagerName: managerName,
-    startDate: "",        // NEW: Start Date
+    startDate: "",
     deadline: "",
     priority: "Medium",
     assignedEmployeeIds: []
@@ -53,7 +68,7 @@ const ManagerProjects = () => {
     title: "",
     description: "",
     projectManagerName: "",
-    startDate: "",        // NEW: Start Date
+    startDate: "",
     deadline: "",
     priority: "Medium",
     assignedEmployeeIds: []
@@ -123,7 +138,6 @@ const ManagerProjects = () => {
     return "bg-emerald-100 text-emerald-700 border border-emerald-300";
   };
 
-  // Get progress bar color based on percentage
   const getProgressColor = (progress) => {
     if (progress === 100) return "bg-gradient-to-r from-emerald-500 to-teal-500";
     if (progress >= 80) return "bg-gradient-to-r from-purple-500 to-violet-500";
@@ -131,28 +145,59 @@ const ManagerProjects = () => {
     return "bg-gradient-to-r from-blue-600 to-cyan-500";
   };
 
-  // Filtered projects (real-time filtering)
+  // Enhanced Status Logic: Completed / Delayed / In Progress
+  const getProjectStatus = (project) => {
+    const progress = project.progress || 0;
+    const today = new Date();
+    const deadlineDate = project.deadline ? new Date(project.deadline) : null;
+
+    if (progress === 100) {
+      return { status: "Completed", color: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+    }
+
+    if (deadlineDate && today > deadlineDate && progress < 100) {
+      return { status: "Delayed", color: "bg-red-100 text-red-700 border-red-200" };
+    }
+
+    return { status: "In Progress", color: "bg-blue-100 text-blue-700 border-blue-200" };
+  };
+
+  // Filtered projects with search + filter
   const filteredProjects = useMemo(() => {
-    let result = [...projects];
+    return projects.filter((project) => {
+      const progress = project.progress || 0;
 
-    // Filter by selected project title
-    if (selectedProjectTitle !== "All Projects") {
-      result = result.filter(p => p.name === selectedProjectTitle);
-    }
+      const matchesSearch = 
+        searchTerm === "" || 
+        (project.name && project.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (project.project_id && project.project_id.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    // Additional filters
-    if (activeFilter === "In Progress") {
-      result = result.filter(p => (p.progress || 0) < 100);
-    } else if (activeFilter === "Completed") {
-      result = result.filter(p => (p.progress || 0) === 100);
-    } else if (activeFilter === "High Priority") {
-      result = result.filter(p => p.priority === "High");
-    }
+      let matchesFilter = true;
 
-    return result;
-  }, [projects, selectedProjectTitle, activeFilter]);
+      if (activeFilter === "In Progress") {
+        matchesFilter = progress < 100;
+      } else if (activeFilter === "Completed") {
+        matchesFilter = progress === 100;
+      } else if (activeFilter === "High Priority") {
+        matchesFilter = project.priority === "High";
+      }
 
-  // Handle Add New Project
+      const matchesSpecificProject = 
+        selectedProjectTitle === "" || 
+        project.name === selectedProjectTitle;
+
+      return matchesSearch && matchesFilter && matchesSpecificProject;
+    });
+  }, [projects, searchTerm, activeFilter, selectedProjectTitle]);
+
+  // Stats
+  const totalProjects = projects.length;
+  const inProgressCount = projects.filter(p => (p.progress || 0) < 100).length;
+  const highPriorityCount = projects.filter(p => p.priority === "High").length;
+
+  const projectTitles = [...new Set(projects.map(p => p.name).filter(Boolean))];
+
+  // ====================== HANDLERS ======================
   const handleAddProject = async (e) => {
     e.preventDefault();
     
@@ -175,7 +220,7 @@ const ManagerProjects = () => {
           name: newProject.title,
           description: newProject.description,
           project_manager_name: newProject.projectManagerName,
-          start_date: newProject.startDate || null,        // NEW
+          start_date: newProject.startDate || null,
           deadline: newProject.deadline,
           priority: newProject.priority,
           assigned_employee_ids: newProject.assignedEmployeeIds
@@ -193,7 +238,7 @@ const ManagerProjects = () => {
           title: "",
           description: "",
           projectManagerName: managerName,
-          startDate: "",           // NEW
+          startDate: "",
           deadline: "",
           priority: "Medium",
           assignedEmployeeIds: []
@@ -209,7 +254,6 @@ const ManagerProjects = () => {
     }
   };
 
-  // Handle Edit Project
   const handleEditProject = async (e) => {
     e.preventDefault();
     
@@ -232,7 +276,7 @@ const ManagerProjects = () => {
           name: editProjectData.title,
           description: editProjectData.description,
           project_manager_name: editProjectData.projectManagerName,
-          start_date: editProjectData.startDate || null,        // NEW
+          start_date: editProjectData.startDate || null,
           deadline: editProjectData.deadline,
           priority: editProjectData.priority,
           assigned_employee_ids: editProjectData.assignedEmployeeIds || []
@@ -255,7 +299,6 @@ const ManagerProjects = () => {
     }
   };
 
-  // Handle Delete Project
   const handleDeleteProject = async () => {
     if (!projectToDelete) return;
 
@@ -286,7 +329,6 @@ const ManagerProjects = () => {
     }
   };
 
-  // Open Edit Modal with pre-loaded assignees and start date
   const openEditModal = (project) => {
     setEditingProject(project);
     
@@ -299,7 +341,7 @@ const ManagerProjects = () => {
       title: project.name || "",
       description: project.description || "",
       projectManagerName: project.project_manager_name || managerName,
-      startDate: project.start_date ? project.start_date.split('T')[0] : "",   // NEW
+      startDate: project.start_date ? project.start_date.split('T')[0] : "",
       deadline: project.deadline ? project.deadline.split('T')[0] : "",
       priority: project.priority || "Medium",
       assignedEmployeeIds: existingAssignees
@@ -307,44 +349,42 @@ const ManagerProjects = () => {
     setShowEditModal(true);
   };
 
-  // Open Delete Modal
   const openDeleteModal = (project) => {
     setProjectToDelete(project);
     setShowDeleteModal(true);
   };
 
-  // Helper functions for multi-select assignee
   const addAssignee = (employeeId, isEdit = false) => {
     if (!employeeId) return;
     const id = Number(employeeId);
 
     if (isEdit) {
       if (editProjectData.assignedEmployeeIds.includes(id)) return;
-      setEditProjectData({
-        ...editProjectData,
-        assignedEmployeeIds: [...editProjectData.assignedEmployeeIds, id]
-      });
+      setEditProjectData(prev => ({
+        ...prev,
+        assignedEmployeeIds: [...prev.assignedEmployeeIds, id]
+      }));
     } else {
       if (newProject.assignedEmployeeIds.includes(id)) return;
-      setNewProject({
-        ...newProject,
-        assignedEmployeeIds: [...newProject.assignedEmployeeIds, id]
-      });
+      setNewProject(prev => ({
+        ...prev,
+        assignedEmployeeIds: [...prev.assignedEmployeeIds, id]
+      }));
     }
   };
 
   const removeAssignee = (employeeId, isEdit = false) => {
     const id = Number(employeeId);
     if (isEdit) {
-      setEditProjectData({
-        ...editProjectData,
-        assignedEmployeeIds: editProjectData.assignedEmployeeIds.filter(idItem => idItem !== id)
-      });
+      setEditProjectData(prev => ({
+        ...prev,
+        assignedEmployeeIds: prev.assignedEmployeeIds.filter(i => i !== id)
+      }));
     } else {
-      setNewProject({
-        ...newProject,
-        assignedEmployeeIds: newProject.assignedEmployeeIds.filter(idItem => idItem !== id)
-      });
+      setNewProject(prev => ({
+        ...prev,
+        assignedEmployeeIds: prev.assignedEmployeeIds.filter(i => i !== id)
+      }));
     }
   };
 
@@ -355,6 +395,28 @@ const ManagerProjects = () => {
     if (emp) return `${emp.employee_id || ''} - ${emp.name || 'No Name'}`.trim();
     return "Unknown Employee";
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading projects...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
+        <div className="text-center text-red-600">
+          <p className="text-xl font-medium mb-2">⚠️ Error</p>
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-white min-h-screen">
@@ -377,106 +439,114 @@ const ManagerProjects = () => {
         </button>
       </div>
 
-      {/* Compact Summary Stats */}
-      <div className="mb-8 bg-gradient-to-br from-blue-50 to-white border border-blue-200 rounded-2xl p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="flex items-center gap-4 group">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-500 rounded-xl flex items-center justify-center transition-transform group-hover:rotate-12">
-              <TrendingUp size={20} className="text-white" />
-            </div>
+      {/* Small Stat Cards */}
+      <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white border border-blue-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">My Projects</p>
-              <p className="text-2xl font-semibold text-gray-900">{projects.length}</p>
+              <p className="text-sm text-gray-600 font-medium">My Projects</p>
+              <p className="text-4xl font-bold text-gray-900 mt-2">{totalProjects}</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
+              <TrendingUp size={28} className="text-blue-600" />
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-4 group">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-500 rounded-xl flex items-center justify-center transition-transform group-hover:rotate-12">
-              <Users size={20} className="text-white" />
-            </div>
+        <div className="bg-white border border-blue-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">In Progress</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {projects.filter((p) => (p.progress || 0) < 100).length}
-              </p>
+              <p className="text-sm text-gray-600 font-medium">In Progress</p>
+              <p className="text-4xl font-bold text-blue-600 mt-2">{inProgressCount}</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
+              <Users size={28} className="text-blue-600" />
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-4 group">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-500 rounded-xl flex items-center justify-center transition-transform group-hover:rotate-12">
-              <TrendingUp size={20} className="text-white" />
-            </div>
+        <div className="bg-white border border-blue-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">High Priority</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {projects.filter((p) => p.priority === "High").length}
-              </p>
+              <p className="text-sm text-gray-600 font-medium">High Priority</p>
+              <p className="text-4xl font-bold text-red-600 mt-2">{highPriorityCount}</p>
+            </div>
+            <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center">
+              <TrendingUp size={28} className="text-red-600" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="mb-8">
-        <div className="flex flex-wrap items-center gap-2 bg-blue-50 rounded-2xl p-2 w-fit">
+      {/* Filter Bar with Search */}
+      <div className="mb-8 flex flex-wrap items-center gap-3">
+        {/* Search Bar */}
+        <div className="relative w-80">
           <div className="relative">
-            <select
-              value={selectedProjectTitle}
-              onChange={(e) => {
-                setSelectedProjectTitle(e.target.value);
-                if (e.target.value !== "All Projects") {
-                  setActiveFilter("All Projects");
-                }
-              }}
-              className="bg-white border-0 text-blue-700 font-medium px-6 py-3 rounded-[14px] focus:outline-none cursor-pointer appearance-none pr-10 min-w-[180px]"
-            >
-              <option value="All Projects">All Projects</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.name}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-blue-600 text-sm">▼</div>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search projects by name or ID..."
+              className="w-full bg-white border border-gray-300 text-gray-700 font-medium px-5 py-3 pl-11 rounded-2xl focus:outline-none focus:border-blue-500 transition-all"
+            />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           </div>
+        </div>
+
+        {/* Filter Buttons */}
+        <div className="flex flex-wrap gap-2 bg-gray-100 p-2 rounded-2xl">
+          <button
+            onClick={() => { 
+              setActiveFilter("All Projects"); 
+              setSelectedProjectTitle(""); 
+            }}
+            className={`px-6 py-3 text-sm font-medium rounded-xl transition-all ${
+              activeFilter === "All Projects" && selectedProjectTitle === ""
+                ? "bg-white shadow-sm text-blue-700 font-semibold"
+                : "text-gray-600 hover:bg-white/70"
+            }`}
+          >
+            All Projects
+          </button>
 
           <button
-            onClick={() => {
-              setActiveFilter("In Progress");
-              setSelectedProjectTitle("All Projects");
+            onClick={() => { 
+              setActiveFilter("In Progress"); 
+              setSelectedProjectTitle(""); 
             }}
-            className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
-              activeFilter === "In Progress" && selectedProjectTitle === "All Projects"
-                ? "bg-white shadow-sm text-blue-700" 
-                : "text-gray-600 hover:text-gray-900"
+            className={`px-6 py-3 text-sm font-medium rounded-xl transition-all ${
+              activeFilter === "In Progress"
+                ? "bg-white shadow-sm text-blue-700 font-semibold"
+                : "text-gray-600 hover:bg-white/70"
             }`}
           >
             In Progress
           </button>
 
           <button
-            onClick={() => {
-              setActiveFilter("Completed");
-              setSelectedProjectTitle("All Projects");
+            onClick={() => { 
+              setActiveFilter("Completed"); 
+              setSelectedProjectTitle(""); 
             }}
-            className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
-              activeFilter === "Completed" && selectedProjectTitle === "All Projects"
-                ? "bg-white shadow-sm text-blue-700" 
-                : "text-gray-600 hover:text-gray-900"
+            className={`px-6 py-3 text-sm font-medium rounded-xl transition-all ${
+              activeFilter === "Completed"
+                ? "bg-white shadow-sm text-blue-700 font-semibold"
+                : "text-gray-600 hover:bg-white/70"
             }`}
           >
             Completed
           </button>
 
           <button
-            onClick={() => {
-              setActiveFilter("High Priority");
-              setSelectedProjectTitle("All Projects");
+            onClick={() => { 
+              setActiveFilter("High Priority"); 
+              setSelectedProjectTitle(""); 
             }}
-            className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
-              activeFilter === "High Priority" && selectedProjectTitle === "All Projects"
-                ? "bg-white shadow-sm text-blue-700" 
-                : "text-gray-600 hover:text-gray-900"
+            className={`px-6 py-3 text-sm font-medium rounded-xl transition-all ${
+              activeFilter === "High Priority"
+                ? "bg-white shadow-sm text-blue-700 font-semibold"
+                : "text-gray-600 hover:bg-white/70"
             }`}
           >
             High Priority
@@ -484,125 +554,131 @@ const ManagerProjects = () => {
         </div>
       </div>
 
-      {/* PROJECT CARDS GRID - With Dynamic Progress */}
+      {/* PROJECT CARDS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProjects.map((project, idx) => {
-          const progress = project.progress || 0;
-          const totalTasks = project.total_tasks || 0;
-          const completedTasks = project.completed_tasks || 0;
-          const isCompleted = progress === 100 || completedTasks === totalTasks;
+        {filteredProjects.length === 0 ? (
+          <div className="col-span-3 text-center py-16 text-gray-500">
+            <p className="text-xl">No projects found</p>
+            <p className="text-sm mt-2">Try changing your search term or filters</p>
+          </div>
+        ) : (
+          filteredProjects.map((project, idx) => {
+            const progress = project.progress || 0;
+            const totalTasks = project.total_tasks || 0;
+            const completedTasks = project.completed_tasks || 0;
+            const { status, color } = getProjectStatus(project);
 
-          return (
-            <div
-              key={project.id}
-              onMouseEnter={() => setHoveredCard(idx)}
-              onMouseLeave={() => setHoveredCard(null)}
-              onClick={() => navigate(`/manager/projects/${project.id}`)}
-              className={`relative group bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl cursor-pointer ${
-                hoveredCard === idx ? "shadow-2xl -translate-y-1 border-blue-400" : ""
-              }`}
-            >
-              <div className="h-1.5 bg-gradient-to-r from-blue-600 to-blue-500"></div>
+            return (
+              <div
+                key={project.id}
+                onMouseEnter={() => setHoveredCard(idx)}
+                onMouseLeave={() => setHoveredCard(null)}
+                onClick={() => navigate(`/manager/projects/${project.id}`)}
+                className={`relative group bg-white border border-blue-200 rounded-3xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl cursor-pointer ${
+                  hoveredCard === idx ? "shadow-2xl -translate-y-1 border-blue-400" : ""
+                }`}
+              >
+                <div className="h-1.5 bg-gradient-to-r from-blue-600 to-indigo-500"></div>
 
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-gray-900 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
-                      {project.name}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-1">ID: {project.project_id}</p>
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="flex-1">
+                      <h3 className="text-xl font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                        {project.name}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">ID: {project.project_id}</p>
+                    </div>
+
+                    <span className={`text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ml-4 ${getPriorityStyle(project.priority || "Medium")}`}>
+                      {project.priority || "Medium"}
+                    </span>
                   </div>
 
-                  <span className={`text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ml-4 ${getPriorityStyle(project.priority || "Medium")}`}>
-                    {project.priority || "Medium"}
-                  </span>
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 hover:border-blue-300 transition-colors">
+                      <p className="text-xs text-gray-500 font-medium">Project Manager</p>
+                      <p className="font-semibold text-gray-900 mt-1">{project.project_manager_name}</p>
+                    </div>
+
+                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 hover:border-blue-300 transition-colors">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Users size={15} className="text-blue-600" />
+                        <p className="text-xs text-gray-500 font-medium">Team Size</p>
+                      </div>
+                      <p className="font-semibold text-gray-900">{project.team_size || 1} Members</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-6 pb-6 border-b border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-100 rounded-xl flex items-center justify-center">
+                        <Calendar size={16} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Deadline</p>
+                        <p className="font-semibold text-gray-900">
+                          {project.deadline 
+                            ? new Date(project.deadline).toLocaleDateString('en-US', { 
+                                year: 'numeric', month: 'short', day: 'numeric' 
+                              }) 
+                            : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className={`px-4 py-1.5 text-xs font-semibold rounded-2xl border ${color}`}>
+                      {status}
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-2.5">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp size={16} className="text-blue-600" />
+                        <span className="text-xs font-medium text-gray-600">Progress</span>
+                      </div>
+                      <span className="text-2xl font-bold text-blue-600">{progress}%</span>
+                    </div>
+
+                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${getProgressColor(progress)}`}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1 text-right">
+                      {completedTasks} of {totalTasks} tasks completed
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
-                    <p className="text-xs text-gray-500 font-medium">Project Manager</p>
-                    <p className="font-semibold text-gray-900 mt-1 text-sm">{project.project_manager_name}</p>
-                  </div>
-
-                  <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Users size={15} className="text-blue-600" />
-                      <p className="text-xs text-gray-500 font-medium">Team Size</p>
-                    </div>
-                    <p className="font-semibold text-gray-900 text-sm">{project.team_size} Members</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between mb-6 pb-6 border-b border-blue-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Calendar size={16} className="text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Deadline</p>
-                      <p className="font-semibold text-gray-900 text-sm">
-                        {project.deadline ? new Date(project.deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <span className={`px-4 py-1.5 text-xs font-semibold rounded-xl border ${
-                    isCompleted 
-                      ? "bg-emerald-100 text-emerald-700 border-emerald-200" 
-                      : "bg-blue-100 text-blue-700 border-blue-200"
-                  }`}>
-                    {isCompleted ? "Completed" : "In Progress"}
-                  </span>
-                </div>
-
-                {/* Dynamic Progress Bar with Different Colors */}
-                <div className="mb-6">
-                  <div className="flex justify-between items-center mb-2.5">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp size={16} className="text-blue-600" />
-                      <span className="text-xs font-medium text-gray-600">Progress</span>
-                    </div>
-                    <span className="text-2xl font-bold text-blue-600">{progress}%</span>
-                  </div>
-
-                  <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700 ${getProgressColor(progress)}`}
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1 text-right">
-                    {completedTasks} of {totalTasks} tasks completed
-                  </div>
+                {/* Edit & Delete Icons */}
+                <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      openEditModal(project); 
+                    }}
+                    className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-blue-50 text-blue-600 border border-blue-200 hover:border-blue-300"
+                    title="Edit Project"
+                  >
+                    <Edit2 size={18} />
+                  </button>
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      openDeleteModal(project); 
+                    }}
+                    className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300"
+                    title="Delete Project"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               </div>
-
-              {/* Edit & Delete Icons */}
-              <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                <button 
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    openEditModal(project); 
-                  }}
-                  className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-blue-50 text-blue-600 border border-blue-200 hover:border-blue-300"
-                  title="Edit Project"
-                >
-                  <Edit2 size={18} />
-                </button>
-                <button 
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    openDeleteModal(project); 
-                  }}
-                  className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300"
-                  title="Delete Project"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* ====================== ADD PROJECT MODAL ====================== */}
@@ -661,7 +737,6 @@ const ManagerProjects = () => {
                 />
               </div>
 
-              {/* NEW: Start Date Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Start Date</label>
                 <input
@@ -819,7 +894,6 @@ const ManagerProjects = () => {
                 />
               </div>
 
-              {/* NEW: Start Date Field in Edit Modal */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Start Date</label>
                 <input

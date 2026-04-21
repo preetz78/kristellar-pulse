@@ -1,9 +1,12 @@
 // src/pages/Reviewer/Dashboard.jsx
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Briefcase, Clock, CheckCircle, TrendingUp } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
 const ReviewerDashboard = () => {
+  const navigate = useNavigate();
+
   const [stats, setStats] = useState({
     totalProjects: 0,
     activeProjects: 0,
@@ -12,7 +15,7 @@ const ReviewerDashboard = () => {
   });
 
   const [projects, setProjects] = useState([]);                    
-  const [selectedProjectId, setSelectedProjectId] = useState(null);   // Will be set to newest project
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
   const [loading, setLoading] = useState(true);
@@ -50,7 +53,7 @@ const ReviewerDashboard = () => {
 
           setProjects(sortedProjects);
 
-          // Auto-select the newest project (first in sorted list)
+          // Auto-select the newest project
           if (sortedProjects.length > 0) {
             setSelectedProjectId(sortedProjects[0].id);
           }
@@ -106,6 +109,13 @@ const ReviewerDashboard = () => {
     fetchProjectProgress();
   }, [selectedProjectId]);
 
+  // Navigation Handlers for Stat Cards
+  const goToProjects = (filter) => {
+    navigate("/reviewer/projects", { 
+      state: { activeFilter: filter } 
+    });
+  };
+
   if (loading) {
     return (
       <div className="p-6 bg-white min-h-screen flex items-center justify-center">
@@ -141,9 +151,13 @@ const ReviewerDashboard = () => {
         </div>
       </div>
 
-      {/* Top Stats Cards */}
+      {/* Top Stats Cards - Clickable */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
-        <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all group cursor-pointer">
+        {/* Total Projects */}
+        <div
+          onClick={() => goToProjects("All Projects")}
+          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+        >
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
@@ -162,7 +176,11 @@ const ReviewerDashboard = () => {
           </p>
         </div>
 
-        <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all group cursor-pointer">
+        {/* Active Projects */}
+        <div
+          onClick={() => goToProjects("In Progress")}
+          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+        >
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
@@ -179,7 +197,11 @@ const ReviewerDashboard = () => {
           <p className="text-sm text-emerald-600 mt-6">Currently in progress</p>
         </div>
 
-        <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all group cursor-pointer">
+        {/* Projects Completed */}
+        <div
+          onClick={() => goToProjects("Completed")}
+          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+        >
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
@@ -254,7 +276,7 @@ const ReviewerDashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS - Dropdown with newest project selected by default */}
+        {/* PROJECT PROGRESS */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -262,7 +284,6 @@ const ReviewerDashboard = () => {
               <p className="text-xs text-gray-500">Weekly task completion progress</p>
             </div>
 
-            {/* Dropdown - Newest project selected by default */}
             <select
               value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -279,7 +300,6 @@ const ReviewerDashboard = () => {
           <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
             {selectedProjectProgress ? (
               <svg viewBox="0 0 750 280" className="w-full h-full">
-                {/* Grid lines */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <line 
                     key={i}
@@ -292,7 +312,6 @@ const ReviewerDashboard = () => {
                   />
                 ))}
 
-                {/* X-axis labels */}
                 {selectedProjectProgress.weeks?.map((week, i) => (
                   <text 
                     key={i} 
@@ -305,7 +324,6 @@ const ReviewerDashboard = () => {
                   </text>
                 ))}
 
-                {/* Y-axis labels */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <text 
                     key={i} 
@@ -318,7 +336,6 @@ const ReviewerDashboard = () => {
                   </text>
                 ))}
 
-                {/* Progress Line */}
                 <g>
                   <polyline
                     points={selectedProjectProgress.progress.map((val, i) => {
@@ -354,7 +371,6 @@ const ReviewerDashboard = () => {
             )}
           </div>
 
-          {/* Legend */}
           {selectedProjectProgress && (
             <div className="mt-6 flex justify-center">
               <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border border-gray-100 shadow-sm">

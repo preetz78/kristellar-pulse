@@ -1,9 +1,12 @@
 // src/pages/Admin/Dashboard.jsx
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Briefcase, Clock, CheckCircle, TrendingUp } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+
   const [stats, setStats] = useState({
     totalProjects: 0,
     activeProjects: 0,
@@ -12,7 +15,7 @@ const Dashboard = () => {
   });
 
   const [projects, setProjects] = useState([]);                    
-  const [selectedProjectId, setSelectedProjectId] = useState(null);   // Will be set to newest project
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
   const [loading, setLoading] = useState(true);
@@ -106,6 +109,13 @@ const Dashboard = () => {
     fetchProjectProgress();
   }, [selectedProjectId]);
 
+  // Navigation Handlers for Stat Cards
+  const goToProjects = (filter) => {
+    navigate("/admin/projects", { 
+      state: { activeFilter: filter } 
+    });
+  };
+
   if (loading) {
     return (
       <div className="p-6 bg-white min-h-screen flex items-center justify-center">
@@ -141,56 +151,84 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Top Stats Cards - 3 Cards */}
+      {/* Top Stats Cards - Clickable */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
-        {[
-          {
-            label: "TOTAL PROJECTS",
-            value: stats.totalProjects,
-            trend: "12% from last month",
-            icon: Briefcase,
-          },
-          {
-            label: "ACTIVE PROJECTS",
-            value: stats.activeProjects,
-            trend: "Currently in progress",
-            icon: Clock,
-          },
-          {
-            label: "PROJECTS COMPLETED",
-            value: stats.completedProjects,
-            trend: "68% completion rate",
-            icon: CheckCircle,
-          },
-        ].map((card, index) => (
-          <div
-            key={index}
-            className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
-                  {card.label}
-                </p>
-                <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
-                  {card.value}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
-                <card.icon size={28} className="text-white" />
-              </div>
+        {/* Total Projects Card */}
+        <div
+          onClick={() => goToProjects("All Projects")}
+          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+        >
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
+                TOTAL PROJECTS
+              </p>
+              <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+                {stats.totalProjects}
+              </p>
             </div>
-            <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
-              <TrendingUp size={16} />
-              {card.trend}
-            </p>
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+              <Briefcase size={28} className="text-white" />
+            </div>
           </div>
-        ))}
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
+            <TrendingUp size={16} />
+            12% from last month
+          </p>
+        </div>
+
+        {/* Active Projects Card */}
+        <div
+          onClick={() => goToProjects("In Progress")}
+          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+        >
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
+                ACTIVE PROJECTS
+              </p>
+              <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+                {stats.activeProjects}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+              <Clock size={28} className="text-white" />
+            </div>
+          </div>
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
+            <TrendingUp size={16} />
+            Currently in progress
+          </p>
+        </div>
+
+        {/* Projects Completed Card */}
+        <div
+          onClick={() => goToProjects("Completed")}
+          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+        >
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
+                PROJECTS COMPLETED
+              </p>
+              <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+                {stats.completedProjects}
+              </p>
+            </div>
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+              <CheckCircle size={28} className="text-white" />
+            </div>
+          </div>
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
+            <TrendingUp size={16} />
+            68% completion rate
+          </p>
+        </div>
       </div>
 
       {/* Main Graphs Section */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Project Completion (Circular) - UNCHANGED */}
+        {/* Project Completion (Circular) */}
         <div className="lg:col-span-2 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-semibold text-gray-800 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text">
@@ -243,7 +281,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS - Dropdown with newest project selected by default */}
+        {/* PROJECT PROGRESS Section */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -251,7 +289,6 @@ const Dashboard = () => {
               <p className="text-xs text-gray-500">Weekly task completion progress</p>
             </div>
 
-            {/* Dropdown - Newest project selected by default */}
             <select
               value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -268,7 +305,6 @@ const Dashboard = () => {
           <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
             {selectedProjectProgress ? (
               <svg viewBox="0 0 750 280" className="w-full h-full">
-                {/* Grid lines */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <line 
                     key={i}
@@ -281,7 +317,6 @@ const Dashboard = () => {
                   />
                 ))}
 
-                {/* Dynamic X-axis */}
                 {selectedProjectProgress.weeks?.map((week, i) => (
                   <text 
                     key={i} 
@@ -294,7 +329,6 @@ const Dashboard = () => {
                   </text>
                 ))}
 
-                {/* Y-axis labels */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <text 
                     key={i} 
@@ -307,7 +341,6 @@ const Dashboard = () => {
                   </text>
                 ))}
 
-                {/* Single Progress Line */}
                 <g>
                   <polyline
                     points={selectedProjectProgress.progress.map((val, i) => {
@@ -343,7 +376,6 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* Legend */}
           {selectedProjectProgress && (
             <div className="mt-6 flex justify-center">
               <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border border-gray-100 shadow-sm">

@@ -1,5 +1,6 @@
 // src/pages/Employee/TaskInsights.jsx
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { 
   Calendar, 
   Clock, 
@@ -11,11 +12,24 @@ import {
 import apiConfig from "../../config/apiConfig";
 
 const EmployeeTaskInsights = () => {
+  const location = useLocation();   // ← To read filter from Dashboard
+
   const [tasks, setTasks] = useState([]);
   const [selectedTask, setSelectedTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showSidebar, setShowSidebar] = useState(false);
+
+  // Filter from Dashboard (In Progress or Completed)
+  const [activeTaskFilter, setActiveTaskFilter] = useState("All");
+
+  // Apply filter coming from Dashboard
+  useEffect(() => {
+    const filterFromDashboard = location.state?.filter;
+    if (filterFromDashboard) {
+      setActiveTaskFilter(filterFromDashboard);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     const fetchMyTasks = async () => {
@@ -54,16 +68,26 @@ const EmployeeTaskInsights = () => {
         }
 
         if (result.success) {
-          const normalizedTasks = (result.data || []).map((task) => ({
+          let normalizedTasks = (result.data || []).map((task) => ({
             ...task,
             comments: Array.isArray(task.comments) ? task.comments : [],
           }));
+
+          // Apply filter from Dashboard if present
+          if (activeTaskFilter === "In Progress") {
+            normalizedTasks = normalizedTasks.filter(task => task.status !== "Completed");
+          } else if (activeTaskFilter === "Completed") {
+            normalizedTasks = normalizedTasks.filter(task => task.status === "Completed");
+          }
 
           setTasks(normalizedTasks);
 
           if (normalizedTasks.length > 0) {
             setSelectedTask(normalizedTasks[0]);
             setShowSidebar(true);
+          } else {
+            setSelectedTask(null);
+            setShowSidebar(false);
           }
         } else {
           setError(result.message || "Failed to load your tasks");
@@ -77,7 +101,7 @@ const EmployeeTaskInsights = () => {
     };
 
     fetchMyTasks();
-  }, []);
+  }, [activeTaskFilter]);   // Re-fetch when filter changes
 
   // Dynamic progress
   const getProgress = (status) => {
@@ -86,7 +110,7 @@ const EmployeeTaskInsights = () => {
     return 50;
   };
 
-  // Handle checkbox
+  // Handle checkbox (mark as completed)
   const handleStatusChange = async (taskId, isChecked) => {
     if (!isChecked) return;
 
@@ -162,7 +186,11 @@ const EmployeeTaskInsights = () => {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-semibold text-blue-700">Task Insights</h1>
-          <p className="text-gray-600 mt-1">Your assigned tasks</p>
+          <p className="text-gray-600 mt-1">
+            {activeTaskFilter === "In Progress" && "Active / In Progress Tasks"}
+            {activeTaskFilter === "Completed" && "Completed Tasks"}
+            {activeTaskFilter === "All" && "Your assigned tasks"}
+          </p>
         </div>
       </div>
 
@@ -171,7 +199,9 @@ const EmployeeTaskInsights = () => {
           <div className="space-y-4">
             {tasks.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
-                No tasks assigned to you yet.
+                {activeTaskFilter === "In Progress" && "No active tasks at the moment."}
+                {activeTaskFilter === "Completed" && "No completed tasks yet."}
+                {activeTaskFilter === "All" && "No tasks assigned to you yet."}
               </div>
             ) : (
               tasks.map((task) => {
@@ -293,8 +323,6 @@ const EmployeeTaskInsights = () => {
                 </div>
               )}
             </div>
-
-            
           </div>
         )}
       </div>

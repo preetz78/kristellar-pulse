@@ -1,14 +1,18 @@
 // src/pages/Admin/Projects.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import { 
   Calendar, 
   Users, 
-  TrendingUp 
+  TrendingUp,
+  Search
 } from "lucide-react";
 
 import apiConfig from "../../config/apiConfig";
 
 const Projects = () => {
+  const location = useLocation();   // ← Added to read navigation state
+
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,9 +20,22 @@ const Projects = () => {
   const [hoveredCard, setHoveredCard] = useState(null);
   
   // Filter states
-  const [selectedOrg, setSelectedOrg] = useState("All Organizations");
   const [activeFilter, setActiveFilter] = useState("All Projects");
-  const [selectedProjectTitle, setSelectedProjectTitle] = useState("All Projects");
+  const [selectedProjectTitle, setSelectedProjectTitle] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Apply filter when coming from Dashboard
+  useEffect(() => {
+    const incomingFilter = location.state?.activeFilter;
+    if (incomingFilter) {
+      setActiveFilter(incomingFilter);
+      // Clear specific project and search when dashboard filter is applied
+      if (incomingFilter !== "All Projects") {
+        setSelectedProjectTitle("");
+        setSearchTerm("");
+      }
+    }
+  }, [location.state]);
 
   // Fetch projects from backend
   useEffect(() => {
@@ -59,6 +76,25 @@ const Projects = () => {
     fetchProjects();
   }, []);
 
+  // Enhanced status logic
+  const getProjectStatus = (project) => {
+    const today = new Date();
+    const deadlineDate = new Date(project.deadline);
+    
+    if (project.progress === 100) {
+      return { status: "Completed", color: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+    }
+    
+    if (today > deadlineDate && project.progress < 100) {
+      return { status: "Delayed", color: "bg-red-100 text-red-700 border-red-200" };
+    }
+    
+    return { 
+      status: project.status || "In Progress", 
+      color: "bg-blue-100 text-blue-700 border-blue-200" 
+    };
+  };
+
   const getPriorityStyle = (priority) => {
     if (priority === "High") return "bg-red-100 text-red-700 border border-red-300";
     if (priority === "Medium") return "bg-amber-100 text-amber-700 border border-amber-300";
@@ -71,23 +107,40 @@ const Projects = () => {
     return "from-amber-500 to-orange-600";
   };
 
-  const filteredProjects = projects.filter((project) => {
-    const matchesOrg = selectedOrg === "All Organizations" || project.org === selectedOrg;
-    
-    let matchesFilter = true;
-    if (activeFilter === "In Progress") matchesFilter = project.status === "In Progress";
-    else if (activeFilter === "Completed") matchesFilter = project.status === "Completed";
-    else if (activeFilter === "High Priority") matchesFilter = project.priority === "High";
+  // Filtered projects with search and filter logic
+  const filteredProjects = useMemo(() => {
+    return projects.filter((project) => {
+      const matchesSearch = 
+        searchTerm === "" || 
+        project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        project.idCode.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesProject = selectedProjectTitle === "All Projects" || project.title === selectedProjectTitle;
+      let matchesFilter = true;
 
-    return matchesOrg && matchesFilter && matchesProject;
-  });
+      if (activeFilter === "In Progress") {
+        matchesFilter = project.progress < 100 && 
+                       new Date(project.deadline) >= new Date();
+      } else if (activeFilter === "Completed") {
+        matchesFilter = project.progress === 100;
+      } else if (activeFilter === "High Priority") {
+        matchesFilter = project.priority === "High";
+      }
 
-  // Calculate stats from real data
+      const matchesSpecificProject = 
+        selectedProjectTitle === "" || 
+        project.title === selectedProjectTitle;
+
+      return matchesSearch && matchesFilter && matchesSpecificProject;
+    });
+  }, [projects, activeFilter, selectedProjectTitle, searchTerm]);
+
+  // Stats calculation
   const totalProjects = projects.length;
-  const inProgressCount = projects.filter((p) => p.status === "In Progress").length;
+  const inProgressCount = projects.filter((p) => p.progress < 100).length;
   const highPriorityCount = projects.filter((p) => p.priority === "High").length;
+
+  // Project titles for dropdown
+  const projectTitles = [...new Set(projects.map(p => p.title))];
 
   if (loading) {
     return (
@@ -124,74 +177,96 @@ const Projects = () => {
         </div>
       </div>
 
-      {/* Compact Summary Stats */}
-      <div className="mb-8 bg-gradient-to-br from-blue-50 to-white border border-blue-200 rounded-2xl p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="flex items-center gap-4 group">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-500 rounded-xl flex items-center justify-center transition-transform group-hover:rotate-12">
-              <TrendingUp size={20} className="text-white" />
-            </div>
+      {/* Small Stat Cards */}
+      <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white border border-blue-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Projects</p>
-              <p className="text-2xl font-semibold text-gray-900">{totalProjects}</p>
+              <p className="text-sm text-gray-600 font-medium">Total Projects</p>
+              <p className="text-4xl font-bold text-gray-900 mt-2">{totalProjects}</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
+              <TrendingUp size={28} className="text-blue-600" />
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-4 group">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-500 rounded-xl flex items-center justify-center transition-transform group-hover:rotate-12">
-              <Users size={20} className="text-white" />
-            </div>
+        <div className="bg-white border border-blue-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">In Progress</p>
-              <p className="text-2xl font-semibold text-gray-900">{inProgressCount}</p>
+              <p className="text-sm text-gray-600 font-medium">In Progress</p>
+              <p className="text-4xl font-bold text-blue-600 mt-2">{inProgressCount}</p>
+            </div>
+            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
+              <Users size={28} className="text-blue-600" />
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-4 group">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-500 rounded-xl flex items-center justify-center transition-transform group-hover:rotate-12">
-              <TrendingUp size={20} className="text-white" />
-            </div>
+        <div className="bg-white border border-blue-200 rounded-2xl p-6 hover:shadow-lg transition-all duration-300">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">High Priority</p>
-              <p className="text-2xl font-semibold text-gray-900">{highPriorityCount}</p>
+              <p className="text-sm text-gray-600 font-medium">High Priority</p>
+              <p className="text-4xl font-bold text-red-600 mt-2">{highPriorityCount}</p>
+            </div>
+            <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center">
+              <TrendingUp size={28} className="text-red-600" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="mb-8">
-        <div className="flex flex-wrap items-center gap-2 bg-blue-50 rounded-2xl p-2 w-fit">
+      {/* Filter Bar with Searchable Project Dropdown */}
+      <div className="mb-8 flex flex-wrap items-center gap-3">
+        {/* Searchable Project Selector */}
+        <div className="relative w-80">
           <div className="relative">
-            <select
+            <input
+              type="text"
+              list="project-list"
               value={selectedProjectTitle}
+              placeholder="Search or select project..."
               onChange={(e) => {
                 setSelectedProjectTitle(e.target.value);
-                if (e.target.value !== "All Projects") {
-                  setActiveFilter("All Projects");
-                }
+                setSearchTerm(""); // Clear general search when selecting specific project
               }}
-              className="bg-white border-0 text-blue-700 font-medium px-6 py-3 rounded-[14px] focus:outline-none cursor-pointer appearance-none pr-10 min-w-[180px]"
-            >
-              <option value="All Projects">All Projects</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.title}>
-                  {project.title}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-blue-600 text-sm">▼</div>
+              className="w-full bg-white border border-gray-300 text-gray-700 font-medium px-5 py-3 pl-11 rounded-2xl focus:outline-none focus:border-blue-500 transition-all"
+            />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           </div>
+          <datalist id="project-list">
+            <option value="">All Projects</option>
+            {projectTitles.map((title, index) => (
+              <option key={index} value={title} />
+            ))}
+          </datalist>
+        </div>
+
+        {/* Filter Buttons */}
+        <div className="flex flex-wrap gap-2 bg-gray-100 p-2 rounded-2xl">
+          <button
+            onClick={() => {
+              setActiveFilter("All Projects");
+              setSelectedProjectTitle("");
+            }}
+            className={`px-6 py-3 text-sm font-medium rounded-xl transition-all ${
+              activeFilter === "All Projects" && selectedProjectTitle === ""
+                ? "bg-white shadow-sm text-blue-700 font-semibold"
+                : "text-gray-600 hover:bg-white/70"
+            }`}
+          >
+            All Projects
+          </button>
 
           <button
             onClick={() => {
               setActiveFilter("In Progress");
-              setSelectedProjectTitle("All Projects");
+              setSelectedProjectTitle("");
             }}
-            className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
-              activeFilter === "In Progress" && selectedProjectTitle === "All Projects"
-                ? "bg-white shadow-sm text-blue-700" 
-                : "text-gray-600 hover:text-gray-900"
+            className={`px-6 py-3 text-sm font-medium rounded-xl transition-all ${
+              activeFilter === "In Progress"
+                ? "bg-white shadow-sm text-blue-700 font-semibold"
+                : "text-gray-600 hover:bg-white/70"
             }`}
           >
             In Progress
@@ -200,12 +275,12 @@ const Projects = () => {
           <button
             onClick={() => {
               setActiveFilter("Completed");
-              setSelectedProjectTitle("All Projects");
+              setSelectedProjectTitle("");
             }}
-            className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
-              activeFilter === "Completed" && selectedProjectTitle === "All Projects"
-                ? "bg-white shadow-sm text-blue-700" 
-                : "text-gray-600 hover:text-gray-900"
+            className={`px-6 py-3 text-sm font-medium rounded-xl transition-all ${
+              activeFilter === "Completed"
+                ? "bg-white shadow-sm text-blue-700 font-semibold"
+                : "text-gray-600 hover:bg-white/70"
             }`}
           >
             Completed
@@ -214,12 +289,12 @@ const Projects = () => {
           <button
             onClick={() => {
               setActiveFilter("High Priority");
-              setSelectedProjectTitle("All Projects");
+              setSelectedProjectTitle("");
             }}
-            className={`px-6 py-3 text-sm font-medium transition-all rounded-[14px] ${
-              activeFilter === "High Priority" && selectedProjectTitle === "All Projects"
-                ? "bg-white shadow-sm text-blue-700" 
-                : "text-gray-600 hover:text-gray-900"
+            className={`px-6 py-3 text-sm font-medium rounded-xl transition-all ${
+              activeFilter === "High Priority"
+                ? "bg-white shadow-sm text-blue-700 font-semibold"
+                : "text-gray-600 hover:bg-white/70"
             }`}
           >
             High Priority
@@ -230,89 +305,90 @@ const Projects = () => {
       {/* PROJECT CARDS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredProjects.length === 0 ? (
-          <div className="col-span-3 text-center py-12 text-gray-500">
-            No projects found matching your filters.
+          <div className="col-span-3 text-center py-16 text-gray-500">
+            <p className="text-xl">No projects found</p>
+            <p className="text-sm mt-2">Try changing your filters or search term</p>
           </div>
         ) : (
-          filteredProjects.map((project, idx) => (
-            <div
-              key={project.id}
-              onMouseEnter={() => setHoveredCard(idx)}
-              onMouseLeave={() => setHoveredCard(null)}
-              className={`relative group bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl ${
-                hoveredCard === idx ? "shadow-2xl -translate-y-1 border-blue-400" : ""
-              }`}
-            >
-              <div className="h-1.5 bg-gradient-to-r from-blue-600 to-blue-500"></div>
+          filteredProjects.map((project, idx) => {
+            const { status, color } = getProjectStatus(project);
 
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-6">
-                  <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-gray-900 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
-                      {project.title}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-1">ID: {project.idCode}</p>
-                  </div>
+            return (
+              <div
+                key={project.id}
+                onMouseEnter={() => setHoveredCard(idx)}
+                onMouseLeave={() => setHoveredCard(null)}
+                className={`relative group bg-white border border-blue-200 rounded-3xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl ${
+                  hoveredCard === idx ? "shadow-2xl -translate-y-1 border-blue-400" : ""
+                }`}
+              >
+                <div className="h-1.5 bg-gradient-to-r from-blue-600 to-indigo-500"></div>
 
-                  <span className={`text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ml-4 ${getPriorityStyle(project.priority)}`}>
-                    {project.priority}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
-                    <p className="text-xs text-gray-500 font-medium">Project Manager</p>
-                    <p className="font-semibold text-gray-900 mt-1 text-sm">{project.manager}</p>
-                  </div>
-
-                  <div className="bg-white border border-blue-100 rounded-xl p-4 hover:border-blue-300 transition-colors">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Users size={15} className="text-blue-600" />
-                      <p className="text-xs text-gray-500 font-medium">Team Size</p>
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="flex-1">
+                      <h3 className="text-xl font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                        {project.title}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">ID: {project.idCode}</p>
                     </div>
-                    <p className="font-semibold text-gray-900 text-sm">{project.teamSize}</p>
-                  </div>
-                </div>
 
-                <div className="flex items-center justify-between mb-6 pb-6 border-b border-blue-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Calendar size={16} className="text-blue-600" />
+                    <span className={`text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ml-4 ${getPriorityStyle(project.priority)}`}>
+                      {project.priority}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 hover:border-blue-300 transition-colors">
+                      <p className="text-xs text-gray-500 font-medium">Project Manager</p>
+                      <p className="font-semibold text-gray-900 mt-1">{project.manager}</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Deadline</p>
-                      <p className="font-semibold text-gray-900 text-sm">{project.deadline}</p>
+
+                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 hover:border-blue-300 transition-colors">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Users size={15} className="text-blue-600" />
+                        <p className="text-xs text-gray-500 font-medium">Team Size</p>
+                      </div>
+                      <p className="font-semibold text-gray-900">{project.teamSize} Members</p>
                     </div>
                   </div>
 
-                  <span className={`px-4 py-1.5 text-xs font-semibold rounded-xl border ${
-                    project.status === "In Progress" 
-                      ? "bg-blue-100 text-blue-700 border-blue-200" 
-                      : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                  }`}>
-                    {project.status}
-                  </span>
-                </div>
-
-                <div className="mb-6">
-                  <div className="flex justify-between items-center mb-2.5">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp size={16} className="text-blue-600" />
-                      <span className="text-xs font-medium text-gray-600">Progress</span>
+                  <div className="flex items-center justify-between mb-6 pb-6 border-b border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-100 rounded-xl flex items-center justify-center">
+                        <Calendar size={16} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Deadline</p>
+                        <p className="font-semibold text-gray-900">{project.deadline}</p>
+                      </div>
                     </div>
-                    <span className="text-2xl font-bold text-blue-600">{project.progress}%</span>
+
+                    <span className={`px-4 py-1.5 text-xs font-semibold rounded-2xl border ${color}`}>
+                      {status}
+                    </span>
                   </div>
 
-                  <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full bg-gradient-to-r ${getProgressGradient(project.progress)} rounded-full transition-all duration-500`}
-                      style={{ width: `${project.progress}%` }}
-                    />
+                  <div>
+                    <div className="flex justify-between items-center mb-2.5">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp size={16} className="text-blue-600" />
+                        <span className="text-xs font-medium text-gray-600">Progress</span>
+                      </div>
+                      <span className="text-2xl font-bold text-blue-600">{project.progress}%</span>
+                    </div>
+
+                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full bg-gradient-to-r ${getProgressGradient(project.progress)} rounded-full transition-all duration-500`}
+                        style={{ width: `${project.progress}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

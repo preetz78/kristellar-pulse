@@ -1,9 +1,12 @@
 // src/pages/Manager/Dashboard.jsx
 import { useState, useEffect } from "react";
-import { TrendingUp, Briefcase, CheckCircle, Clock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Briefcase, Clock, CheckCircle, TrendingUp } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
 const ManagerDashboard = () => {
+  const navigate = useNavigate();
+
   const [stats, setStats] = useState({
     totalProjects: 0,
     activeProjects: 0,
@@ -12,7 +15,7 @@ const ManagerDashboard = () => {
   });
 
   const [projects, setProjects] = useState([]);                    
-  const [selectedProjectId, setSelectedProjectId] = useState(null);   // Will be set to newest project
+  const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
   const [loading, setLoading] = useState(true);
@@ -106,6 +109,13 @@ const ManagerDashboard = () => {
     fetchProjectProgress();
   }, [selectedProjectId]);
 
+  // Navigation Handlers for Stat Cards
+  const goToProjects = (filter) => {
+    navigate("/manager/projects", { 
+      state: { activeFilter: filter } 
+    });
+  };
+
   if (loading) {
     return (
       <div className="p-6 bg-white min-h-screen flex items-center justify-center">
@@ -129,115 +139,151 @@ const ManagerDashboard = () => {
   }
 
   return (
-    <div className="p-5 md:p-6 bg-white min-h-screen">
+    <div className="p-6 bg-white min-h-screen">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6 md:mb-8">
+      <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-blue-700">Dashboard</h1>
-          <p className="text-gray-600 mt-1 flex items-center gap-2 text-sm md:text-base">
+          <h1 className="text-3xl font-semibold text-blue-700">Dashboard</h1>
+          <p className="text-gray-600 mt-1 flex items-center gap-2">
             <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
             My Projects Overview
           </p>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
-        <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-6 hover:border-blue-400 transition-all group">
+      {/* Clickable Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+        {/* Total Projects */}
+        <div
+          onClick={() => goToProjects("All Projects")}
+          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+        >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-medium text-gray-500">TOTAL PROJECTS</p>
-              <p className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 md:mt-3">{stats.totalProjects}</p>
+              <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
+                TOTAL PROJECTS
+              </p>
+              <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+                {stats.totalProjects}
+              </p>
             </div>
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
-              <Briefcase size={24} className="text-white" />
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+              <Briefcase size={28} className="text-white" />
             </div>
           </div>
-          <p className="text-xs md:text-sm text-emerald-600 mt-4 md:mt-6 flex items-center gap-1">
-            <TrendingUp size={15} /> My Projects
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
+            <TrendingUp size={16} /> My Projects
           </p>
         </div>
 
-        <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-6 hover:border-blue-400 transition-all group">
+        {/* Active Projects */}
+        <div
+          onClick={() => goToProjects("In Progress")}
+          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+        >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-medium text-gray-500">ACTIVE PROJECTS</p>
-              <p className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 md:mt-3">{stats.activeProjects}</p>
+              <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
+                ACTIVE PROJECTS
+              </p>
+              <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+                {stats.activeProjects}
+              </p>
             </div>
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
-              <Clock size={24} className="text-white" />
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+              <Clock size={28} className="text-white" />
             </div>
           </div>
-          <p className="text-xs md:text-sm text-emerald-600 mt-4 md:mt-6">Currently in progress</p>
+          <p className="text-sm text-emerald-600 mt-6">Currently in progress</p>
         </div>
 
-        <div className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-6 hover:border-blue-400 transition-all group">
+        {/* Projects Completed */}
+        <div
+          onClick={() => goToProjects("Completed")}
+          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+        >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-medium text-gray-500">PROJECTS COMPLETED</p>
-              <p className="text-3xl md:text-4xl font-bold text-gray-900 mt-2 md:mt-3">{stats.completedProjects}</p>
+              <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
+                PROJECTS COMPLETED
+              </p>
+              <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+                {stats.completedProjects}
+              </p>
             </div>
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
-              <CheckCircle size={24} className="text-white" />
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+              <CheckCircle size={28} className="text-white" />
             </div>
           </div>
-          <p className="text-xs md:text-sm text-emerald-600 mt-4 md:mt-6 flex items-center gap-1">
-            <TrendingUp size={15} /> {stats.overallCompletion}% completion rate
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
+            <TrendingUp size={16} /> {stats.overallCompletion}% completion rate
           </p>
         </div>
       </div>
 
       {/* Graphs Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Project Completion Circle */}
-        <div className="lg:col-span-2 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-8 hover:border-blue-400 hover:shadow-xl transition-all">
-          <div className="flex justify-between items-center mb-5">
-            <h3 className="text-base md:text-lg font-semibold text-gray-800">Project Completion</h3>
-            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-2xl">Overall</span>
+        <div className="lg:col-span-2 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-semibold text-gray-800 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text">
+              PROJECT COMPLETION
+            </h3>
+            <span className="px-4 py-1 bg-gradient-to-r from-blue-400 to-blue-300 text-blue-700 text-xs font-semibold rounded-full">
+              Overall
+            </span>
           </div>
 
-          <div className="flex justify-center my-6 md:my-8">
-            <div className="relative w-40 h-40 md:w-48 md:h-48">
+          <div className="flex justify-center my-8 group-hover:scale-105 transition-transform">
+            <div className="relative w-52 h-52">
               <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
                 <circle cx="60" cy="60" r="52" fill="none" stroke="#e5e7eb" strokeWidth="11" />
                 <circle
-                  cx="60" cy="60" r="52"
+                  cx="60"
+                  cy="60"
+                  r="52"
                   fill="none"
-                  stroke="#3b82f6"
+                  stroke="url(#completionGradient)"
                   strokeWidth="11"
                   strokeDasharray="326.73"
                   strokeDashoffset={326.73 - (326.73 * stats.overallCompletion) / 100}
                   strokeLinecap="round"
                 />
+                <defs>
+                  <linearGradient id="completionGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#2563eb" />
+                    <stop offset="100%" stopColor="#3b82f6" />
+                  </linearGradient>
+                </defs>
               </svg>
+
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl md:text-5xl font-bold text-gray-900">{stats.overallCompletion}%</span>
-                <span className="text-xs md:text-sm text-gray-500 mt-1">COMPLETED</span>
+                <span className="text-5xl font-bold text-gray-900">{stats.overallCompletion}%</span>
+                <span className="text-sm text-gray-500 font-medium mt-1">COMPLETED</span>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:gap-4">
-            <div className="bg-white border border-blue-200 rounded-xl p-3 md:p-4 text-center">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
               <p className="text-xs text-blue-600 font-semibold">COMPLETED</p>
-              <p className="text-xl md:text-2xl font-bold text-blue-700 mt-1">{stats.completedProjects}</p>
+              <p className="text-3xl font-bold text-blue-700 mt-1">{stats.completedProjects}</p>
             </div>
-            <div className="bg-white border border-blue-200 rounded-xl p-3 md:p-4 text-center">
+            <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
               <p className="text-xs text-blue-600 font-semibold">IN PROGRESS</p>
-              <p className="text-xl md:text-2xl font-bold text-blue-700 mt-1">{stats.activeProjects}</p>
+              <p className="text-3xl font-bold text-blue-700 mt-1">{stats.activeProjects}</p>
             </div>
           </div>
         </div>
 
-        {/* PROJECT PROGRESS - Dropdown with newest project selected by default */}
-        <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-5 md:p-8 hover:border-blue-400 hover:shadow-xl transition-all">
+        {/* PROJECT PROGRESS */}
+        <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="text-base md:text-lg font-semibold text-gray-800">PROJECT PROGRESS</h3>
+              <h3 className="text-lg font-semibold text-gray-800">PROJECT PROGRESS</h3>
               <p className="text-xs text-gray-500">Weekly task completion progress</p>
             </div>
 
-            {/* Dropdown - Newest project selected by default */}
             <select
               value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -254,7 +300,6 @@ const ManagerDashboard = () => {
           <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
             {selectedProjectProgress ? (
               <svg viewBox="0 0 750 280" className="w-full h-full">
-                {/* Grid lines */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <line 
                     key={i}
@@ -267,7 +312,6 @@ const ManagerDashboard = () => {
                   />
                 ))}
 
-                {/* X-axis */}
                 {selectedProjectProgress.weeks?.map((week, i) => (
                   <text 
                     key={i} 
@@ -280,7 +324,6 @@ const ManagerDashboard = () => {
                   </text>
                 ))}
 
-                {/* Y-axis */}
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <text 
                     key={i} 
@@ -293,7 +336,6 @@ const ManagerDashboard = () => {
                   </text>
                 ))}
 
-                {/* Progress Line */}
                 <g>
                   <polyline
                     points={selectedProjectProgress.progress.map((val, i) => {
@@ -329,7 +371,6 @@ const ManagerDashboard = () => {
             )}
           </div>
 
-          {/* Legend */}
           {selectedProjectProgress && (
             <div className="mt-6 flex justify-center">
               <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border border-gray-100 shadow-sm">
