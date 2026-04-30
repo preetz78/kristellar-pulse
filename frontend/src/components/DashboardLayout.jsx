@@ -1,7 +1,20 @@
 // src/components/DashboardLayout.jsx
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { useState, useRef, useEffect } from 'react';
-import { Bell, User, LogOut, ChevronDown, X } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Bell,
+  BriefcaseBusiness,
+  Building2,
+  ChevronDown,
+  CircleUserRound,
+  FolderKanban,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  SearchCheck,
+  UsersRound,
+  X
+} from 'lucide-react';
 import axios from 'axios';
 import apiConfig from '../config/apiConfig';
 
@@ -29,7 +42,7 @@ const DashboardLayout = ({ logout }) => {
     if (userStr) {
       userData = JSON.parse(userStr);
     }
-  } catch (e) {
+  } catch {
     console.error("Failed to parse user data in DashboardLayout");
   }
 
@@ -41,7 +54,7 @@ const DashboardLayout = ({ logout }) => {
     (role === "employee" ? "EM" : role === "admin" ? "AD" : "US");
 
   // Notification endpoint based on role
-  const getNotificationEndpoint = () => {
+  const getNotificationEndpoint = useCallback(() => {
     switch (role) {
       case 'admin': return '/api/admin/notifications';
       case 'manager': return '/api/manager/notifications';
@@ -49,10 +62,10 @@ const DashboardLayout = ({ logout }) => {
       case 'employee':
       default: return '/api/employee/notifications';
     }
-  };
+  }, [role]);
 
   // Fetch notifications
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
@@ -74,7 +87,7 @@ const DashboardLayout = ({ logout }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE_URL, getNotificationEndpoint, token]);
 
   // Mark notification as read
   const markAsRead = async (notificationId) => {
@@ -101,7 +114,7 @@ const DashboardLayout = ({ logout }) => {
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
-  }, [role]);
+  }, [fetchNotifications]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -132,29 +145,30 @@ const DashboardLayout = ({ logout }) => {
 
   // Role-based menu
   const adminMenu = [
-    { path: '/admin/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/admin/projects', label: 'Projects', icon: '📁' },
-    { path: '/admin/task-insights', label: 'Task Insights', icon: '🔍' },
-    { path: '/admin/team', label: 'Team Management', icon: '👥' },
+    { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/admin/projects', label: 'Projects', icon: FolderKanban },
+    { path: '/admin/task-insights', label: 'Task Insights', icon: SearchCheck },
+    { path: '/admin/team', label: 'Team Management', icon: UsersRound },
+    { path: '/admin/department', label: 'Department', icon: Building2 },
   ];
 
   const managerMenu = [
-    { path: '/manager/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/manager/projects', label: 'Projects', icon: '📁' },
-    { path: '/manager/task-insights', label: 'Task Insights', icon: '🔍' },
-    { path: '/manager/team', label: 'Team Management', icon: '👥' },
+    { path: '/manager/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/manager/projects', label: 'Projects', icon: FolderKanban },
+    { path: '/manager/task-insights', label: 'Task Insights', icon: SearchCheck },
+    { path: '/manager/team', label: 'Team Management', icon: UsersRound },
   ];
 
   const reviewerMenu = [
-    { path: '/reviewer/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/reviewer/projects', label: 'Projects', icon: '📁' },
-    { path: '/reviewer/task-insights', label: 'Task Insights', icon: '🔍' },
+    { path: '/reviewer/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/reviewer/projects', label: 'Projects', icon: FolderKanban },
+    { path: '/reviewer/task-insights', label: 'Task Insights', icon: SearchCheck },
   ];
 
   const employeeMenu = [
-    { path: '/employee/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/employee/projects', label: 'Projects', icon: '📁' },
-    { path: '/employee/task-insights', label: 'Task Insights', icon: '🔍' },
+    { path: '/employee/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/employee/projects', label: 'Projects', icon: FolderKanban },
+    { path: '/employee/task-insights', label: 'Task Insights', icon: SearchCheck },
   ];
 
   let menuItems = employeeMenu;
@@ -171,7 +185,7 @@ const DashboardLayout = ({ logout }) => {
     if (pathname.includes('/projects')) return 'Projects';
     if (pathname.includes('/task-insights')) return 'Task Insights';
     if (pathname.includes('/team')) return 'Team Management';
-
+    if (pathname.includes('/department')) return 'Department';
     return 'Dashboard';
   };
 
@@ -186,56 +200,93 @@ const DashboardLayout = ({ logout }) => {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
+    <div className="flex h-screen overflow-hidden bg-slate-100 text-slate-900">
 
       {/* SIDEBAR */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(30,64,175,0.9)),linear-gradient(135deg,rgba(14,165,233,0.22),transparent)] text-white h-full transition-all duration-300 shadow-2xl flex-shrink-0`}>
-        <div className="p-6 flex items-center gap-3 border-white/10">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center font-bold text-2xl shadow-lg">
+      <aside className={`${sidebarOpen ? 'w-72' : 'w-24'} relative flex h-full flex-shrink-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_20%_0%,rgba(56,189,248,0.22),transparent_30%),linear-gradient(160deg,#06111f_0%,#132044_48%,#0b1220_100%)] text-white shadow-2xl transition-all duration-300`}>
+        <div className="absolute inset-x-4 top-24 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent" />
+        <div className="absolute -left-20 bottom-10 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="absolute -right-24 top-10 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
+
+        <div className={`relative z-10 flex items-center gap-3 px-5 py-6 ${sidebarOpen ? '' : 'justify-center'}`}>
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-2xl font-black text-blue-700 shadow-xl shadow-blue-950/40">
             K
           </div>
           {sidebarOpen && (
             <div>
-              <h1 className="text-xl font-bold tracking-tight">KRISTELLAR</h1>
-              <p className="text-xs text-blue-400 -mt-1">PULSE</p>
+              <h1 className="text-xl font-bold tracking-wide">KRISTELLAR</h1>
+              <p className="text-xs font-medium tracking-[0.28em] text-cyan-200">PULSE</p>
             </div>
           )}
         </div>
 
-        <nav className="p-4 space-y-1">
-          {menuItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-3 rounded-2xl text-sm transition-all duration-300 ${
-                  isActive ? 'bg-blue-500/20 text-blue-400 shadow-inner' : 'text-gray-300 hover:bg-white/10 hover:text-white'
-                }`
-              }
-            >
-              <span className="text-xl opacity-90">{item.icon}</span>
-              {sidebarOpen && <span className="font-medium">{item.label}</span>}
-            </NavLink>
-          ))}
+        <nav className="relative z-10 mt-4 space-y-2 px-4">
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                title={!sidebarOpen ? item.label : undefined}
+                className={({ isActive }) =>
+                  `group relative flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-all duration-300 ${
+                    sidebarOpen ? '' : 'justify-center'
+                  } ${
+                    isActive
+                      ? 'bg-white text-blue-700 shadow-xl shadow-blue-950/25'
+                      : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && sidebarOpen && (
+                      <span className="absolute -left-1 top-1/2 h-8 w-1 -translate-y-1/2 rounded-full bg-cyan-400" />
+                    )}
+                    <span className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+                      isActive ? 'bg-blue-50 text-blue-700' : 'bg-white/5 text-cyan-100 group-hover:bg-white/10'
+                    }`}>
+                      <Icon size={19} />
+                    </span>
+                    {sidebarOpen && <span className="font-semibold">{item.label}</span>}
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
-      </div>
+
+        {/* <div className={`relative z-10 mx-4 mt-auto hidden rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur ${sidebarOpen ? 'lg:block' : ''}`}>
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-cyan-100">
+            <BriefcaseBusiness size={16} />
+            Workspace Pulse
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full w-3/4 rounded-full bg-gradient-to-r from-blue-400 to-cyan-300" />
+          </div>
+          <p className="mt-3 text-xs leading-5 text-slate-300">Stay aligned with tasks, projects, and team updates.</p>
+        </div> */}
+      </aside>
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
 
         {/* NAVBAR */}
-        <nav className="h-16 px-6 flex items-center justify-between bg-white border-b border-blue-100 shadow-sm">
+        <nav className="relative z-20 flex h-20 items-center justify-between border-b border-slate-200/80 bg-white/90 px-6 shadow-sm backdrop-blur-xl">
 
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2.5 rounded-xl hover:bg-blue-50 text-gray-600 transition"
+              className="p-1 text-slate-600 transition hover:text-blue-600"
             >
-              ☰
+              <Menu size={20} />
             </button>
-            <h2 className="text-lg font-semibold text-gray-800">
-              {getCurrentPageLabel()}
-            </h2>
+            <div>
+              {/* <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-500">Kristellar Pulse</p> */}
+              <h2 className="text-lg font-bold text-slate-800">
+                {getCurrentPageLabel()}
+              </h2>
+            </div>
           </div>
 
           {/* RIGHT SIDE */}
@@ -248,45 +299,48 @@ const DashboardLayout = ({ logout }) => {
                   setShowNotifications(!showNotifications);
                   if (!showNotifications) fetchNotifications();
                 }}
-                className="relative p-2.5 rounded-2xl hover:bg-blue-50 transition text-gray-600"
+                className="relative rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
               >
                 <Bell size={22} />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-medium rounded-full flex items-center justify-center ring-2 ring-white">
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
                     {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 mt-3 w-96 bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden z-50 max-h-[420px] flex flex-col">
-                  <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-blue-50">
-                    <h3 className="font-semibold text-gray-800">Notifications</h3>
-                    <button onClick={() => setShowNotifications(false)}>
-                      <X size={18} className="text-gray-500 hover:text-gray-700" />
+                <div className="absolute right-0 z-50 mt-4 flex max-h-[460px] w-96 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
+                  <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-blue-50 to-cyan-50 p-4">
+                    <div>
+                      <h3 className="font-bold text-slate-900">Notifications</h3>
+                      <p className="text-xs text-slate-500">{unreadCount} unread updates</p>
+                    </div>
+                    <button onClick={() => setShowNotifications(false)} className="rounded-xl p-2 text-slate-500 transition hover:bg-white hover:text-slate-800">
+                      <X size={18} />
                     </button>
                   </div>
 
-                  <div className="flex-1 overflow-auto p-2">
+                  <div className="flex-1 overflow-auto p-3">
                     {loading ? (
-                      <div className="py-8 text-center text-gray-500">Loading notifications...</div>
+                      <div className="py-10 text-center text-slate-500">Loading notifications...</div>
                     ) : notifications.length === 0 ? (
-                      <div className="py-12 text-center text-gray-500">No notifications yet</div>
+                      <div className="py-12 text-center text-slate-500">No notifications yet</div>
                     ) : (
                       notifications.map((notif) => (
                         <div
                           key={notif.id}
                           onClick={() => markAsRead(notif.id)}
-                          className={`p-4 hover:bg-blue-50 rounded-2xl mb-1 cursor-pointer transition-all ${
-                            notif.status === 'unread' ? 'bg-blue-50/70' : ''
+                          className={`mb-2 cursor-pointer rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50 ${
+                            notif.status === 'unread' ? 'border-blue-100 bg-blue-50/80' : 'border-slate-100 bg-white'
                           }`}
                         >
                           <div className="flex gap-3">
-                            <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${notif.status === 'unread' ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                            <div className={`mt-2 h-2.5 w-2.5 flex-shrink-0 rounded-full ${notif.status === 'unread' ? 'bg-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.12)]' : 'bg-slate-300'}`} />
                             <div className="flex-1">
-                              <p className="text-sm text-gray-800 leading-relaxed">{notif.message}</p>
+                              <p className="text-sm leading-relaxed text-slate-800">{notif.message}</p>
                               <div className="flex items-center gap-2 mt-2">
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs font-medium text-slate-500">
                                   {new Date(notif.created_at).toLocaleDateString('en-IN', { 
                                     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
                                   })}
@@ -306,9 +360,9 @@ const DashboardLayout = ({ logout }) => {
             <div className="relative" ref={profileMenuRef}>
               <div
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className="flex items-center gap-3 cursor-pointer group"
+                className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-transparent p-1.5 transition hover:border-blue-100 hover:bg-blue-50"
               >
-                <div className="w-9 h-9 rounded-2xl overflow-hidden border border-blue-200 shadow-sm">
+                <div className="h-11 w-11 overflow-hidden rounded-2xl border border-blue-100 bg-blue-50 shadow-sm">
                   {profilePicture ? (
                     <img 
                       src={`${API_BASE_URL}${profilePicture}`} 
@@ -316,7 +370,7 @@ const DashboardLayout = ({ logout }) => {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-600 to-cyan-500 text-sm font-bold text-white">
                       {displayInitials}
                     </div>
                   )}
@@ -324,22 +378,22 @@ const DashboardLayout = ({ logout }) => {
 
                 <div className="hidden md:block">
                   <div className="flex items-center gap-1">
-                    <p className="font-semibold text-gray-800 text-sm">{userName}</p>
+                    <p className="text-sm font-bold text-slate-900">{userName}</p>
                     <ChevronDown 
                       size={16} 
-                      className={`text-gray-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} 
+                      className={`text-slate-400 transition-transform ${showProfileMenu ? 'rotate-180' : ''}`} 
                     />
                   </div>
-                  <p className="text-xs text-gray-500 -mt-0.5 capitalize">{role}</p>
+                  <p className="-mt-0.5 text-xs font-medium capitalize text-slate-500">{role}</p>
                 </div>
               </div>
 
               {/* Profile Dropdown */}
               {showProfileMenu && (
-                <div className="absolute right-0 mt-3 w-80 bg-white rounded-3xl shadow-2xl border border-blue-100 overflow-hidden z-50">
-                  <div className="p-6 bg-gradient-to-br from-blue-50 to-white border-b border-blue-100">
+                <div className="absolute right-0 z-50 mt-4 w-80 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
+                  <div className="border-b border-blue-100 bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.22),transparent_36%),linear-gradient(135deg,#eff6ff,#ffffff)] p-6">
                     <div className="flex gap-4">
-                      <div className="w-14 h-14 rounded-2xl overflow-hidden border border-blue-200">
+                      <div className="h-14 w-14 overflow-hidden rounded-2xl border border-blue-200 shadow-sm">
                         {profilePicture ? (
                           <img 
                             src={`${API_BASE_URL}${profilePicture}`} 
@@ -347,15 +401,15 @@ const DashboardLayout = ({ logout }) => {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-3xl font-semibold">
+                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-600 to-cyan-500 text-2xl font-bold text-white">
                             {displayInitials}
                           </div>
                         )}
                       </div>
                       <div className="pt-1">
-                        <p className="font-semibold text-xl text-gray-900">{userName}</p>
-                        <p className="text-gray-600 text-sm">{userEmail}</p>
-                        <p className="text-blue-600 text-xs font-medium mt-1 capitalize">{role}</p>
+                        <p className="text-xl font-bold text-slate-900">{userName}</p>
+                        <p className="text-sm text-slate-600">{userEmail}</p>
+                        <p className="mt-1 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold capitalize text-blue-700">{role}</p>
                       </div>
                     </div>
                   </div>
@@ -364,17 +418,17 @@ const DashboardLayout = ({ logout }) => {
                     <NavLink
                       to={`/${role}/profile`}
                       onClick={() => setShowProfileMenu(false)}
-                      className="w-full px-6 py-3 flex items-center gap-3 hover:bg-blue-50 text-gray-700 transition"
+                      className="flex w-full items-center gap-3 px-6 py-3 font-semibold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
                     >
-                      <User size={18} />
+                      <CircleUserRound size={18} />
                       <span className="font-medium">My Profile</span>
                     </NavLink>
                   </div>
 
-                  <div className="border-t border-gray-100">
+                  <div className="border-t border-slate-100">
                     <button
                       onClick={handleLogout}
-                      className="w-full px-6 py-4 flex items-center gap-3 text-red-600 hover:bg-red-50 transition font-medium"
+                      className="flex w-full items-center gap-3 px-6 py-4 font-semibold text-red-600 transition hover:bg-red-50"
                     >
                       <LogOut size={18} />
                       Logout
@@ -387,7 +441,7 @@ const DashboardLayout = ({ logout }) => {
         </nav>
 
         {/* PAGE CONTENT */}
-        <main className="flex-1 overflow-auto bg-[#F8FAFC]">
+        <main className="flex-1 overflow-auto bg-[linear-gradient(180deg,#f8fafc_0%,#eef6ff_100%)]">
           <Outlet />
         </main>
       </div>

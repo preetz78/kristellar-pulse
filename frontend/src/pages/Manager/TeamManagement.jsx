@@ -56,7 +56,8 @@ const ManagerTeamManagement = () => {
 
       const result = await response.json();
       if (result.success) {
-        const formatted = result.data.map(emp => ({
+        const employees = result.data || result.employees || [];
+        const formatted = employees.map(emp => ({
           id: emp.id,
           employeeId: emp.employee_id,
           name: emp.name || "",
@@ -119,7 +120,7 @@ const ManagerTeamManagement = () => {
       } else {
         alert(result.message || "Failed to add employee");
       }
-    } catch (err) {
+    } catch {
       alert("Error connecting to server");
     } finally {
       setSubmitting(false);
@@ -186,7 +187,7 @@ const ManagerTeamManagement = () => {
       } else {
         alert(result.message || "Failed to delete");
       }
-    } catch (err) {
+    } catch {
       alert("Error deleting employee");
     }
   };
@@ -282,7 +283,13 @@ const ManagerTeamManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-blue-100">
-              {teamMembers.map((member, idx) => (
+              {teamMembers.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-5 py-10 text-center text-gray-500">
+                    No employees found in your department.
+                  </td>
+                </tr>
+              ) : teamMembers.map((member, idx) => (
                 <tr 
                   key={member.id}
                   onMouseEnter={() => setHoveredRow(idx)}

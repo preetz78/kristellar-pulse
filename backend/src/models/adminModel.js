@@ -5,10 +5,16 @@ const createUsersTable = async () => {
   const createTableQuery = `
     CREATE TABLE IF NOT EXISTS users (
       id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      user_id VARCHAR(50) UNIQUE NULL,
       name VARCHAR(100) NOT NULL,
       email VARCHAR(150) UNIQUE NOT NULL,
       password VARCHAR(255) NOT NULL,
       role ENUM('admin', 'manager', 'reviewer') NOT NULL,
+      phone VARCHAR(20) NULL DEFAULT NULL,
+      designation VARCHAR(100) NULL DEFAULT NULL,
+      location VARCHAR(100) NULL DEFAULT NULL,
+      bio TEXT NULL DEFAULT NULL,
+      department_id INT NULL,
       profile_picture VARCHAR(500) NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -17,44 +23,31 @@ const createUsersTable = async () => {
 
   try {
     await pool.execute(createTableQuery);
-    console.log("✅ Users table created or already exists");
+    console.log("Users table created or already exists");
   } catch (error) {
     console.error("❌ Error creating users table:", error.message);
   }
 };
 
-// ====================== SAFE ALTER TABLE (Compatible with MySQL 5.7+) ======================
-const alterUsersTable = async () => {
+const createDepartmentsTable = async () => {
+  const createTableQuery = `
+    CREATE TABLE IF NOT EXISTS departments (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL UNIQUE,
+      description TEXT NULL,
+      created_by INT NULL,                    -- Admin who created this department
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `;
+
   try {
-    const columnsToAdd = [
-      { name: 'phone',       definition: 'VARCHAR(20) NULL DEFAULT NULL' },
-      { name: 'designation', definition: 'VARCHAR(100) NULL DEFAULT NULL' },
-      { name: 'location',    definition: 'VARCHAR(100) NULL DEFAULT NULL' },
-      { name: 'bio',         definition: 'TEXT NULL DEFAULT NULL' }
-    ];
-
-    for (const col of columnsToAdd) {
-      // Check if column already exists
-      const [existing] = await pool.execute(`
-        SELECT COLUMN_NAME 
-        FROM INFORMATION_SCHEMA.COLUMNS 
-        WHERE TABLE_SCHEMA = DATABASE() 
-          AND TABLE_NAME = 'users' 
-          AND COLUMN_NAME = ?
-      `, [col.name]);
-
-      if (existing.length === 0) {
-        await pool.execute(`ALTER TABLE users ADD COLUMN ${col.name} ${col.definition}`);
-        console.log(`✅ Added new column: ${col.name}`);
-      } else {
-        console.log(`ℹ️ Column already exists: ${col.name}`);
-      }
-    }
-
-    console.log("✅ Users table altered successfully (phone, designation, location, bio)");
-
+    await pool.execute(createTableQuery);
+    console.log("Departments table created or already exists");
   } catch (error) {
-    console.error("❌ Error altering users table:", error.message);
+    console.error("❌ Error creating departments table:", error.message);
   }
 };
 
@@ -72,25 +65,22 @@ const seedAdminUser = async () => {
       return;
     }
 
-    // Check if admin already exists
     const [existing] = await pool.execute(
       'SELECT id FROM users WHERE email = ?', 
       [adminEmail]
     );
 
     if (existing.length > 0) {
-      return; // Silent - already exists
+      return; // already exists
     }
 
-    // Hash password
     const bcrypt = (await import('bcryptjs')).default;
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(adminPassword, salt);
 
-    // Insert admin user
     await pool.execute(
-      `INSERT INTO users (id, name, email, password, role, profile_picture) 
-       VALUES (?, ?, ?, ?, ?, NULL)`,
+      `INSERT INTO users (id, user_id, name, email, password, role, department_id, profile_picture) 
+       VALUES (?, NULL, ?, ?, ?, ?, NULL, NULL)`,
       [adminId, adminName, adminEmail, hashedPassword, adminRole]
     );
 
@@ -100,16 +90,16 @@ const seedAdminUser = async () => {
   }
 };
 
-// Initialize Database - Run in correct order
+// Initialize Database
 const initializeDatabase = async () => {
-  await createUsersTable();     // First ensure table exists
-  await alterUsersTable();      // Then safely add new columns
-  setTimeout(seedAdminUser, 800); // Seed admin after table is ready
+  await createUsersTable();
+  await createDepartmentsTable();     
+  setTimeout(seedAdminUser, 800);
 };
 
 export default {
   createUsersTable,
-  alterUsersTable,
+  createDepartmentsTable,
   seedAdminUser,
   initializeDatabase
 };

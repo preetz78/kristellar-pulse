@@ -227,7 +227,7 @@ const EmployeeDashboard = () => {
               <Clock size={28} className="text-white" />
             </div>
           </div>
-          <p className="text-sm text-emerald-600 mt-6">Currently in progress</p>
+          <p className="flex items-center gap-2 text-sm text-emerald-600 mt-6 font-medium"><TrendingUp size={16}/>Currently in progress</p>
         </div>
 
         {/* Completed Tasks */}
@@ -238,7 +238,7 @@ const EmployeeDashboard = () => {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
-                COMPLETED
+                COMPLETED TASKS
               </p>
               <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
                 {stats.completedTasks}

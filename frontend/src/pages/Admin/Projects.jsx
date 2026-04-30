@@ -1,35 +1,58 @@
 // src/pages/Admin/Projects.jsx
 import { useState, useEffect, useMemo } from "react";
-import { useLocation } from "react-router-dom";
-import { 
-  Calendar, 
-  Users, 
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  Calendar,
+  Users,
   TrendingUp,
-  Search
+  Search,
+  Plus,
+  X
 } from "lucide-react";
 
 import apiConfig from "../../config/apiConfig";
 
 const Projects = () => {
-  const location = useLocation();   // ← Added to read navigation state
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   const [hoveredCard, setHoveredCard] = useState(null);
-  
+
   // Filter states
   const [activeFilter, setActiveFilter] = useState("All Projects");
   const [selectedProjectTitle, setSelectedProjectTitle] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Modal states
+  const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [departments, setDepartments] = useState([]);
+  const [departmentManagers, setDepartmentManagers] = useState([]);
+  const [departmentEmployees, setDepartmentEmployees] = useState([]);
+  const [departmentLoading, setDepartmentLoading] = useState(false);
+
+  const [formData, setFormData] = useState({
+    project_id: "",
+    name: "",
+    description: "",
+    department_id: "",
+    manager_id: "",
+    project_manager_name: "",
+    start_date: "",
+    deadline: "",
+    priority: "Medium"
+  });
+
+  const [selectedEmployees, setSelectedEmployees] = useState([]);
 
   // Apply filter when coming from Dashboard
   useEffect(() => {
     const incomingFilter = location.state?.activeFilter;
     if (incomingFilter) {
       setActiveFilter(incomingFilter);
-      // Clear specific project and search when dashboard filter is applied
       if (incomingFilter !== "All Projects") {
         setSelectedProjectTitle("");
         setSearchTerm("");
@@ -49,7 +72,7 @@ const Projects = () => {
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/projects`, {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json"
           }
         });
@@ -76,22 +99,96 @@ const Projects = () => {
     fetchProjects();
   }, []);
 
+  // Fetch departments for modal
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const token = sessionStorage.getItem("token");
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/departments`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          setDepartments(result.departments || []);
+        }
+      } catch (err) {
+        console.error("Error fetching departments:", err);
+      }
+    };
+
+    fetchDepartments();
+  }, []);
+
+  const fetchDepartmentPeople = async (departmentId) => {
+    if (!departmentId) {
+      setDepartmentManagers([]);
+      setDepartmentEmployees([]);
+      return;
+    }
+
+    try {
+      setDepartmentLoading(true);
+      const token = sessionStorage.getItem("token");
+
+      const response = await fetch(
+        `${apiConfig.API_BASE_URL}/api/admin/departments/${departmentId}/people`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        }
+      );
+
+      const result = await response.json();
+      if (result.success) {
+        setDepartmentManagers(result.data?.managers || []);
+        setDepartmentEmployees(result.data?.employees || []);
+      } else {
+        setDepartmentManagers([]);
+        setDepartmentEmployees([]);
+      }
+    } catch (err) {
+      console.error("Error fetching department people:", err);
+      setDepartmentManagers([]);
+      setDepartmentEmployees([]);
+    } finally {
+      setDepartmentLoading(false);
+    }
+  };
+
   // Enhanced status logic
   const getProjectStatus = (project) => {
+    const progress = project?.progress || 0;
+
     const today = new Date();
-    const deadlineDate = new Date(project.deadline);
-    
-    if (project.progress === 100) {
-      return { status: "Completed", color: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+    const deadlineDate = new Date(project?.deadline);
+
+    if (progress === 100) {
+      return {
+        status: "Completed",
+        color: "bg-emerald-100 text-emerald-700 border-emerald-200"
+      };
     }
-    
-    if (today > deadlineDate && project.progress < 100) {
-      return { status: "Delayed", color: "bg-red-100 text-red-700 border-red-200" };
+
+    if (
+      project?.deadline &&
+      today > deadlineDate &&
+      progress < 100
+    ) {
+      return {
+        status: "Delayed",
+        color: "bg-red-100 text-red-700 border-red-200"
+      };
     }
-    
-    return { 
-      status: project.status || "In Progress", 
-      color: "bg-blue-100 text-blue-700 border-blue-200" 
+
+    return {
+      status: "In Progress",
+      color: "bg-blue-100 text-blue-700 border-blue-200"
     };
   };
 
@@ -110,24 +207,25 @@ const Projects = () => {
   // Filtered projects with search and filter logic
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
-      const matchesSearch = 
-        searchTerm === "" || 
-        project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.idCode.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch =
+        searchTerm === "" ||
+        (project.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (project.idCode || "").toLowerCase().includes(searchTerm.toLowerCase());
 
       let matchesFilter = true;
 
       if (activeFilter === "In Progress") {
-        matchesFilter = project.progress < 100 && 
-                       new Date(project.deadline) >= new Date();
+        matchesFilter =
+          (project?.progress || 0) < 100 &&
+          new Date(project.deadline) >= new Date();
       } else if (activeFilter === "Completed") {
-        matchesFilter = project.progress === 100;
+        matchesFilter = (project?.progress || 0) === 100;
       } else if (activeFilter === "High Priority") {
         matchesFilter = project.priority === "High";
       }
 
-      const matchesSpecificProject = 
-        selectedProjectTitle === "" || 
+      const matchesSpecificProject =
+        selectedProjectTitle === "" ||
         project.title === selectedProjectTitle;
 
       return matchesSearch && matchesFilter && matchesSpecificProject;
@@ -136,11 +234,102 @@ const Projects = () => {
 
   // Stats calculation
   const totalProjects = projects.length;
-  const inProgressCount = projects.filter((p) => p.progress < 100).length;
+  const inProgressCount = projects.filter(
+    (p) => (p?.progress || 0) < 100
+  ).length;
   const highPriorityCount = projects.filter((p) => p.priority === "High").length;
 
   // Project titles for dropdown
-  const projectTitles = [...new Set(projects.map(p => p.title))];
+  const projectTitles = [...new Set(projects.map((p) => p.title))];
+
+  const handleOpenAddModal = () => {
+    setShowAddProjectModal(true);
+  };
+
+  const handleOpenProject = (projectId) => {
+    navigate(`/admin/projects/${projectId}`);
+  };
+
+  const handleCloseAddModal = () => {
+    setShowAddProjectModal(false);
+    setFormData({
+      project_id: "",
+      name: "",
+      description: "",
+      department_id: "",
+      manager_id: "",
+      project_manager_name: "",
+      start_date: "",
+      deadline: "",
+      priority: "Medium"
+    });
+    setSelectedEmployees([]);
+    setDepartmentManagers([]);
+    setDepartmentEmployees([]);
+  };
+
+  const handleDepartmentChange = async (departmentId) => {
+    setFormData((prev) => ({
+      ...prev,
+      department_id: departmentId,
+      manager_id: "",
+      project_manager_name: ""
+    }));
+    setSelectedEmployees([]);
+    await fetchDepartmentPeople(departmentId);
+  };
+
+  const handleManagerChange = (managerId) => {
+    const selectedManager = departmentManagers.find((m) => String(m.id) === String(managerId));
+    setFormData((prev) => ({
+      ...prev,
+      manager_id: managerId,
+      project_manager_name: selectedManager?.name || ""
+    }));
+  };
+
+  const handleEmployeeToggle = (employeeId) => {
+    setSelectedEmployees((prev) =>
+      prev.includes(employeeId)
+        ? prev.filter((id) => String(id) !== String(employeeId))
+        : [...prev, employeeId]
+    );
+  };
+
+  const handleSubmitProject = async (e) => {
+    e.preventDefault();
+
+    try {
+      const token = sessionStorage.getItem("token");
+
+      const payload = {
+        ...formData,
+        assigned_employee_ids: selectedEmployees
+      };
+
+      console.log("Sending Payload:", payload);
+
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/projects/create`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Failed to create project");
+      }
+
+      setProjects((prev) => [result.data, ...prev]);
+      handleCloseAddModal();
+    } catch (err) {
+      alert(err.message || "Error creating project");
+    }
+  };
 
   if (loading) {
     return (
@@ -175,6 +364,14 @@ const Projects = () => {
             Track and manage all active projects
           </p>
         </div>
+
+        <button
+          onClick={handleOpenAddModal}
+          className="px-5 py-3 rounded-2xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+        >
+          <Plus size={18} />
+          Add Project
+        </button>
       </div>
 
       {/* Small Stat Cards */}
@@ -218,7 +415,6 @@ const Projects = () => {
 
       {/* Filter Bar with Searchable Project Dropdown */}
       <div className="mb-8 flex flex-wrap items-center gap-3">
-        {/* Searchable Project Selector */}
         <div className="relative w-80">
           <div className="relative">
             <input
@@ -228,7 +424,7 @@ const Projects = () => {
               placeholder="Search or select project..."
               onChange={(e) => {
                 setSelectedProjectTitle(e.target.value);
-                setSearchTerm(""); // Clear general search when selecting specific project
+                setSearchTerm("");
               }}
               className="w-full bg-white border border-gray-300 text-gray-700 font-medium px-5 py-3 pl-11 rounded-2xl focus:outline-none focus:border-blue-500 transition-all"
             />
@@ -242,7 +438,6 @@ const Projects = () => {
           </datalist>
         </div>
 
-        {/* Filter Buttons */}
         <div className="flex flex-wrap gap-2 bg-gray-100 p-2 rounded-2xl">
           <button
             onClick={() => {
@@ -316,9 +511,18 @@ const Projects = () => {
             return (
               <div
                 key={project.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleOpenProject(project.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleOpenProject(project.id);
+                  }
+                }}
                 onMouseEnter={() => setHoveredCard(idx)}
                 onMouseLeave={() => setHoveredCard(null)}
-                className={`relative group bg-white border border-blue-200 rounded-3xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl ${
+                className={`relative group bg-white border border-blue-200 rounded-3xl overflow-hidden transition-all duration-300 hover:border-blue-400 hover:shadow-2xl cursor-pointer focus:outline-none focus:outline-none ${
                   hoveredCard === idx ? "shadow-2xl -translate-y-1 border-blue-400" : ""
                 }`}
               >
@@ -349,7 +553,7 @@ const Projects = () => {
                         <Users size={15} className="text-blue-600" />
                         <p className="text-xs text-gray-500 font-medium">Team Size</p>
                       </div>
-                      <p className="font-semibold text-gray-900">{project.teamSize} Members</p>
+                      <p className="font-semibold text-gray-900">{project.teamSize}</p>
                     </div>
                   </div>
 
@@ -375,13 +579,15 @@ const Projects = () => {
                         <TrendingUp size={16} className="text-blue-600" />
                         <span className="text-xs font-medium text-gray-600">Progress</span>
                       </div>
-                      <span className="text-2xl font-bold text-blue-600">{project.progress}%</span>
+                      <span className="text-2xl font-bold text-blue-600">
+                        {project?.progress || 0}%
+                      </span>
                     </div>
 
                     <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
                       <div
-                        className={`h-full bg-gradient-to-r ${getProgressGradient(project.progress)} rounded-full transition-all duration-500`}
-                        style={{ width: `${project.progress}%` }}
+                        className={`h-full bg-gradient-to-r ${getProgressGradient(project?.progress || 0)} rounded-full transition-all duration-500`}
+                        style={{ width: `${project?.progress || 0}%` }}
                       />
                     </div>
                   </div>
@@ -391,6 +597,179 @@ const Projects = () => {
           })
         )}
       </div>
+
+      {/* Add Project Modal */}
+      {showAddProjectModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Add Project</h2>
+              <button
+                onClick={handleCloseAddModal}
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitProject} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Project ID</label>
+                  <input
+                    type="text"
+                    value={formData.project_id}
+                    onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    placeholder="PRJ-001"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Project Name</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    placeholder="Banking Risk Analysis System"
+                    required
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500 min-h-[110px]"
+                    placeholder="Credit risk forecasting platform for banking clients"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <select
+                    value={formData.department_id}
+                    onChange={(e) => handleDepartmentChange(e.target.value)}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Manager</label>
+                  <select
+                    value={formData.manager_id}
+                    onChange={(e) => handleManagerChange(e.target.value)}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                    disabled={!formData.department_id || departmentLoading}
+                  >
+                    <option value="">Select Manager</option>
+                    {departmentManagers.map((manager) => (
+                      <option key={manager.id} value={manager.id}>
+                        {manager.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                  <input
+                    type="date"
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
+                  <input
+                    type="date"
+                    value={formData.deadline}
+                    onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                  <select
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  >
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">Assign Employees</label>
+                <div className="border border-gray-300 rounded-2xl p-4 max-h-56 overflow-y-auto">
+                  {!formData.department_id ? (
+                    <p className="text-sm text-gray-500">Select a department first to load employees.</p>
+                  ) : departmentLoading ? (
+                    <p className="text-sm text-gray-500">Loading employees...</p>
+                  ) : departmentEmployees.length === 0 ? (
+                    <p className="text-sm text-gray-500">No employees found for this department.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {departmentEmployees.map((employee) => (
+                        <label
+                          key={employee.id}
+                          className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-blue-300 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedEmployees.includes(employee.id)}
+                            onChange={() => handleEmployeeToggle(employee.id)}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <span className="text-sm text-gray-700">{employee.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCloseAddModal}
+                  className="px-5 py-3 rounded-2xl border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                >
+                  Create Project
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

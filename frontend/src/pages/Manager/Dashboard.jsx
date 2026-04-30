@@ -194,7 +194,7 @@ const ManagerDashboard = () => {
               <Clock size={28} className="text-white" />
             </div>
           </div>
-          <p className="text-sm text-emerald-600 mt-6">Currently in progress</p>
+          <p className="flex items-center gap-2 text-sm text-emerald-600 mt-6 font-medium"><TrendingUp size={16}/>Currently in progress</p>
         </div>
 
         {/* Projects Completed */}

@@ -1,5 +1,5 @@
 // src/pages/Manager/Projects.jsx
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLocation } from "react-router-dom";
 import { 
@@ -10,7 +10,10 @@ import {
   X,
   Edit2,
   Trash2,
-  Search
+  Search,
+  Briefcase,
+  Clock3,
+  AlertTriangle
 } from "lucide-react";
 
 import apiConfig from "../../config/apiConfig";
@@ -19,12 +22,20 @@ const ManagerProjects = () => {
   const navigate = useNavigate();
   const location = useLocation();   // ← For reading navigation state from Dashboard
 
-  // Get logged-in user from localStorage
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  // Get logged-in user from sessionStorage, with localStorage fallback for older sessions
+  const user = JSON.parse(sessionStorage.getItem("user") || localStorage.getItem("user") || "{}");
   const managerName = user.name || "Manager";
+  const canManageProjects = true;
+  const canEditProjects = false;
 
   const [projects, setProjects] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [managerProfile, setManagerProfile] = useState({
+    id: user.id || "",
+    name: managerName,
+    department_id: user.department_id || "",
+    department_name: user.department_name || ""
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -53,6 +64,9 @@ const ManagerProjects = () => {
     projectId: "",
     title: "",
     description: "",
+    departmentId: "",
+    departmentName: "",
+    managerId: user.id || "",
     projectManagerName: managerName,
     startDate: "",
     deadline: "",
@@ -77,12 +91,6 @@ const ManagerProjects = () => {
   // Delete Confirmation Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
-
-  // Fetch projects + employees
-  useEffect(() => {
-    fetchProjects();
-    fetchEmployees();
-  }, []);
 
   const fetchProjects = async () => {
     try {
@@ -131,6 +139,47 @@ const ManagerProjects = () => {
       console.error(err);
     }
   };
+
+  const fetchManagerProfile = useCallback(async () => {
+    try {
+      const token = sessionStorage.getItem("token");
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/profile`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        const profile = result.data || {};
+        const nextProfile = {
+          id: profile.id || user.id || "",
+          name: profile.name || managerName,
+          department_id: profile.department_id || "",
+          department_name: profile.department_name || ""
+        };
+
+        setManagerProfile(nextProfile);
+        setNewProject((prev) => ({
+          ...prev,
+          departmentId: nextProfile.department_id,
+          departmentName: nextProfile.department_name,
+          managerId: nextProfile.id,
+          projectManagerName: nextProfile.name
+        }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [managerName, user.id]);
+
+  // Fetch projects + employees
+  useEffect(() => {
+    fetchProjects();
+    fetchEmployees();
+    fetchManagerProfile();
+  }, [fetchManagerProfile]);
 
   const getPriorityStyle = (priority) => {
     if (priority === "High") return "bg-red-100 text-red-700 border border-red-300";
@@ -195,8 +244,6 @@ const ManagerProjects = () => {
   const inProgressCount = projects.filter(p => (p.progress || 0) < 100).length;
   const highPriorityCount = projects.filter(p => p.priority === "High").length;
 
-  const projectTitles = [...new Set(projects.map(p => p.name).filter(Boolean))];
-
   // ====================== HANDLERS ======================
   const handleAddProject = async (e) => {
     e.preventDefault();
@@ -231,18 +278,7 @@ const ManagerProjects = () => {
 
       if (result.success) {
         alert("Project created successfully!");
-        setShowAddModal(false);
-        
-        setNewProject({
-          projectId: "",
-          title: "",
-          description: "",
-          projectManagerName: managerName,
-          startDate: "",
-          deadline: "",
-          priority: "Medium",
-          assignedEmployeeIds: []
-        });
+        handleCloseAddModal();
 
         fetchProjects();
       } else {
@@ -396,6 +432,44 @@ const ManagerProjects = () => {
     return "Unknown Employee";
   };
 
+  const handleOpenAddModal = () => {
+    setNewProject((prev) => ({
+      ...prev,
+      departmentId: managerProfile.department_id,
+      departmentName: managerProfile.department_name,
+      managerId: managerProfile.id,
+      projectManagerName: managerProfile.name
+    }));
+    setShowAddModal(true);
+  };
+
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    setNewProject({
+      projectId: "",
+      title: "",
+      description: "",
+      departmentId: managerProfile.department_id,
+      departmentName: managerProfile.department_name,
+      managerId: managerProfile.id,
+      projectManagerName: managerProfile.name,
+      startDate: "",
+      deadline: "",
+      priority: "Medium",
+      assignedEmployeeIds: []
+    });
+  };
+
+  const handleEmployeeToggle = (employeeId) => {
+    const id = Number(employeeId);
+    setNewProject((prev) => ({
+      ...prev,
+      assignedEmployeeIds: prev.assignedEmployeeIds.includes(id)
+        ? prev.assignedEmployeeIds.filter((selectedId) => selectedId !== id)
+        : [...prev.assignedEmployeeIds, id]
+    }));
+  };
+
   if (loading) {
     return (
       <div className="p-6 bg-white min-h-screen flex items-center justify-center">
@@ -430,13 +504,15 @@ const ManagerProjects = () => {
           </p>
         </div>
 
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl text-sm font-medium transition-all shadow-lg"
-        >
-          <Plus size={18} />
-          Add Project
-        </button>
+        {canManageProjects && (
+          <button 
+            onClick={handleOpenAddModal}
+            className="px-5 py-3 rounded-2xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+          >
+            <Plus size={18} />
+            Add Project
+          </button>
+        )}
       </div>
 
       {/* Small Stat Cards */}
@@ -448,7 +524,7 @@ const ManagerProjects = () => {
               <p className="text-4xl font-bold text-gray-900 mt-2">{totalProjects}</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
-              <TrendingUp size={28} className="text-blue-600" />
+              <Briefcase size={28} className="text-blue-600" />
             </div>
           </div>
         </div>
@@ -459,8 +535,8 @@ const ManagerProjects = () => {
               <p className="text-sm text-gray-600 font-medium">In Progress</p>
               <p className="text-4xl font-bold text-blue-600 mt-2">{inProgressCount}</p>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
-              <Users size={28} className="text-blue-600" />
+            <div className="w-12 h-12 bg-yellow-100 rounded-2xl flex items-center justify-center">
+              <Clock3 size={28} className="text-yellow-600" />
             </div>
           </div>
         </div>
@@ -472,7 +548,7 @@ const ManagerProjects = () => {
               <p className="text-4xl font-bold text-red-600 mt-2">{highPriorityCount}</p>
             </div>
             <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center">
-              <TrendingUp size={28} className="text-red-600" />
+              <AlertTriangle size={28} className="text-red-600" />
             </div>
           </div>
         </div>
@@ -652,29 +728,30 @@ const ManagerProjects = () => {
                   </div>
                 </div>
 
-                {/* Edit & Delete Icons */}
-                <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                  <button 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      openEditModal(project); 
-                    }}
-                    className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-blue-50 text-blue-600 border border-blue-200 hover:border-blue-300"
-                    title="Edit Project"
-                  >
-                    <Edit2 size={18} />
-                  </button>
-                  <button 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      openDeleteModal(project); 
-                    }}
-                    className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300"
-                    title="Delete Project"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
+                {canEditProjects && (
+                  <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        openEditModal(project); 
+                      }}
+                      className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-blue-50 text-blue-600 border border-blue-200 hover:border-blue-300"
+                      title="Edit Project"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        openDeleteModal(project); 
+                      }}
+                      className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300"
+                      title="Delete Project"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })
@@ -682,133 +759,106 @@ const ManagerProjects = () => {
       </div>
 
       {/* ====================== ADD PROJECT MODAL ====================== */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="p-6 border-b flex items-center justify-between bg-gradient-to-r from-blue-600 to-blue-500 text-white flex-shrink-0">
-              <h2 className="text-xl font-semibold">Add New Project</h2>
-              <button onClick={() => setShowAddModal(false)} className="hover:bg-white/20 p-2 rounded-full transition">
-                <X size={24} />
+      {canManageProjects && showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Add Project</h2>
+              <button
+                onClick={handleCloseAddModal}
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                <X size={20} />
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 p-8 space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Project ID</label>
-                <input
-                  type="text"
-                  value={newProject.projectId}
-                  onChange={(e) => setNewProject({...newProject, projectId: e.target.value})}
-                  className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500"
-                  placeholder="e.g. Aero-123 or PRJ-005"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Project Name</label>
-                <input
-                  type="text"
-                  value={newProject.title}
-                  onChange={(e) => setNewProject({...newProject, title: e.target.value})}
-                  className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500"
-                  placeholder="e.g. AI Chatbot Development"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
-                <textarea
-                  value={newProject.description}
-                  onChange={(e) => setNewProject({...newProject, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500 h-28 resize-y"
-                  placeholder="Brief description of the project..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Project Manager Name</label>
-                <input
-                  type="text"
-                  value={newProject.projectManagerName}
-                  onChange={(e) => setNewProject({...newProject, projectManagerName: e.target.value})}
-                  className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Start Date</label>
-                <input
-                  type="date"
-                  value={newProject.startDate}
-                  onChange={(e) => setNewProject({...newProject, startDate: e.target.value})}
-                  className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Assignees</label>
-                
-                {newProject.assignedEmployeeIds.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-4 p-2 bg-gray-50 rounded-2xl">
-                    {newProject.assignedEmployeeIds.map((id) => (
-                      <div
-                        key={id}
-                        className="flex items-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm px-4 py-1.5 rounded-2xl transition-colors group"
-                      >
-                        <span className="font-medium">{getEmployeeName(id)}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeAssignee(id)}
-                          className="text-blue-500 hover:text-blue-700 ml-1"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      addAssignee(e.target.value);
-                      e.target.value = "";
-                    }
-                  }}
-                  className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500 bg-white"
-                >
-                  <option value="">-- Select Employee to Assign --</option>
-                  {employees
-                    .filter(emp => !newProject.assignedEmployeeIds.includes(Number(emp.id)))
-                    .map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.employee_id} - {emp.name}
-                      </option>
-                    ))
-                  }
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleAddProject} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Deadline</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Project ID</label>
                   <input
-                    type="date"
-                    value={newProject.deadline}
-                    onChange={(e) => setNewProject({...newProject, deadline: e.target.value})}
-                    className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500"
+                    type="text"
+                    value={newProject.projectId}
+                    onChange={(e) => setNewProject({ ...newProject, projectId: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    placeholder="PRJ-001"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Project Name</label>
+                  <input
+                    type="text"
+                    value={newProject.title}
+                    onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    placeholder="Banking Risk Analysis System"
+                    required
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <textarea
+                    value={newProject.description}
+                    onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500 min-h-[110px]"
+                    placeholder="Credit risk forecasting platform for banking clients"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <input
+                    type="text"
+                    value={newProject.departmentName || "Department not assigned"}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 bg-gray-50 text-gray-700 focus:outline-none"
+                    readOnly
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Manager</label>
+                  <input
+                    type="text"
+                    value={newProject.projectManagerName}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 bg-gray-50 text-gray-700 focus:outline-none"
+                    readOnly
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                  <input
+                    type="date"
+                    value={newProject.startDate}
+                    onChange={(e) => setNewProject({ ...newProject, startDate: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
+                  <input
+                    type="date"
+                    value={newProject.deadline}
+                    onChange={(e) => setNewProject({ ...newProject, deadline: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
                   <select
                     value={newProject.priority}
-                    onChange={(e) => setNewProject({...newProject, priority: e.target.value})}
-                    className="w-full px-4 py-3 border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500 bg-white"
+                    onChange={(e) => setNewProject({ ...newProject, priority: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
                   >
                     <option value="High">High</option>
                     <option value="Medium">Medium</option>
@@ -816,30 +866,57 @@ const ManagerProjects = () => {
                   </select>
                 </div>
               </div>
-            </div>
 
-            <div className="p-6 flex gap-4 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 py-3 border border-gray-300 rounded-2xl font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleAddProject}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-medium"
-              >
-                Create Project
-              </button>
-            </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">Assign Employees</label>
+                <div className="border border-gray-300 rounded-2xl p-4 max-h-56 overflow-y-auto">
+                  {employees.length === 0 ? (
+                    <p className="text-sm text-gray-500">No employees found for your department.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {employees.map((employee) => (
+                        <label
+                          key={employee.id}
+                          className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-blue-300 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={newProject.assignedEmployeeIds.includes(Number(employee.id))}
+                            onChange={() => handleEmployeeToggle(employee.id)}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <span className="text-sm text-gray-700">
+                            {employee.employee_id ? `${employee.employee_id} - ` : ""}{employee.name}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCloseAddModal}
+                  className="px-5 py-3 rounded-2xl border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                >
+                  Create Project
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
       {/* ====================== EDIT PROJECT MODAL ====================== */}
-      {showEditModal && editingProject && (
+      {canEditProjects && showEditModal && editingProject && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
             <div className="p-6 border-b flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex-shrink-0">
@@ -996,7 +1073,7 @@ const ManagerProjects = () => {
       )}
 
       {/* ====================== DELETE CONFIRMATION MODAL ====================== */}
-      {showDeleteModal && projectToDelete && (
+      {canEditProjects && showDeleteModal && projectToDelete && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="p-8 text-center">

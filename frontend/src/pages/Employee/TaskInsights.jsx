@@ -1,333 +1,556 @@
-// src/pages/Employee/TaskInsights.jsx
-import { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+// src/pages/Employee/TaskInsights.jsx (or Manager/TaskInsights.jsx)
+import { useState, useEffect } from 'react';
 import { 
-  Calendar, 
+  Search, 
   Clock, 
-  CheckCircle, 
-  AlertTriangle, 
+  User, 
   MessageSquare, 
-  X 
-} from "lucide-react";
+  X,
+  ChevronDown,
+  CheckCircle,
+  AlertCircle,
+  ListTodo,
+  Check
+} from 'lucide-react';
+
 import apiConfig from "../../config/apiConfig";
 
-const EmployeeTaskInsights = () => {
-  const location = useLocation();   // ← To read filter from Dashboard
-
-  const [tasks, setTasks] = useState([]);
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [showSidebar, setShowSidebar] = useState(false);
-
-  // Filter from Dashboard (In Progress or Completed)
-  const [activeTaskFilter, setActiveTaskFilter] = useState("All");
-
-  // Apply filter coming from Dashboard
-  useEffect(() => {
-    const filterFromDashboard = location.state?.filter;
-    if (filterFromDashboard) {
-      setActiveTaskFilter(filterFromDashboard);
-    }
-  }, [location.state]);
-
-  useEffect(() => {
-    const fetchMyTasks = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const token = sessionStorage.getItem("token");
-        if (!token) {
-          setError("Please login again to view your tasks.");
-          setTasks([]);
-          return;
-        }
-
-        const apiUrl = `${apiConfig.API_BASE_URL}/api/employee/tasks`;
-        console.log("🔄 Fetching tasks from:", apiUrl);
-
-        const response = await fetch(apiUrl, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        const text = await response.text();
-        let result;
-        try {
-          result = JSON.parse(text);
-        } catch (e) {
-          throw new Error("Server returned HTML instead of JSON.");
-        }
-
-        if (!response.ok) {
-          throw new Error(result?.message || `HTTP Error ${response.status}`);
-        }
-
-        if (result.success) {
-          let normalizedTasks = (result.data || []).map((task) => ({
-            ...task,
-            comments: Array.isArray(task.comments) ? task.comments : [],
-          }));
-
-          // Apply filter from Dashboard if present
-          if (activeTaskFilter === "In Progress") {
-            normalizedTasks = normalizedTasks.filter(task => task.status !== "Completed");
-          } else if (activeTaskFilter === "Completed") {
-            normalizedTasks = normalizedTasks.filter(task => task.status === "Completed");
-          }
-
-          setTasks(normalizedTasks);
-
-          if (normalizedTasks.length > 0) {
-            setSelectedTask(normalizedTasks[0]);
-            setShowSidebar(true);
-          } else {
-            setSelectedTask(null);
-            setShowSidebar(false);
-          }
-        } else {
-          setError(result.message || "Failed to load your tasks");
-        }
-      } catch (err) {
-        console.error("❌ Fetch error:", err);
-        setError(err.message || "Failed to connect to server.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchMyTasks();
-  }, [activeTaskFilter]);   // Re-fetch when filter changes
-
-  // Dynamic progress
-  const getProgress = (status) => {
-    if (status === "Completed") return 100;
-    if (status === "Delayed") return 0;
-    return 50;
+const StatusBadge = ({ status }) => {
+  const styles = {
+    'In Progress': 'bg-blue-100 text-blue-700 border border-blue-200',
+    'Delayed': 'bg-red-100 text-red-700 border border-red-200',
+    'Completed': 'bg-emerald-100 text-emerald-700 border border-emerald-200',
   };
-
-  // Handle checkbox (mark as completed)
-  const handleStatusChange = async (taskId, isChecked) => {
-    if (!isChecked) return;
-
-    try {
-      const token = sessionStorage.getItem("token");
-      const response = await fetch(
-        `${apiConfig.API_BASE_URL}/api/employee/tasks/${taskId}/complete`,
-        {
-          method: "PATCH",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
-        }
-      );
-
-      if (response.ok) {
-        setTasks(prev =>
-          prev.map(task =>
-            task.id === taskId ? { ...task, status: "Completed" } : task
-          )
-        );
-
-        if (selectedTask?.id === taskId) {
-          setSelectedTask(prev => ({ ...prev, status: "Completed" }));
-        }
-      } else {
-        alert("Failed to update task status");
-      }
-    } catch (err) {
-      console.error("Error updating task:", err);
-      alert("Failed to mark task as completed.");
-    }
-  };
-
-  // Click any task → open sidebar with comments
-  const handleTaskClick = (task) => {
-    setSelectedTask(task);
-    setShowSidebar(true);
-  };
-
-  const closeSidebar = () => {
-    setShowSidebar(false);
-  };
-
-  const getStatusColor = (status) => {
-    if (status === "Completed") return "bg-emerald-100 text-emerald-700 border-emerald-200";
-    if (status === "Delayed") return "bg-red-100 text-red-700 border-red-200";
-    return "bg-blue-100 text-blue-700 border-blue-200";
-  };
-
-  const getStatusIcon = (status) => {
-    if (status === "Completed") return <CheckCircle size={18} className="text-emerald-600" />;
-    if (status === "Delayed") return <AlertTriangle size={18} className="text-red-600" />;
-    return <Clock size={18} className="text-blue-600" />;
-  };
-
-  const isOverdue = (deadline) => {
-    if (!deadline) return false;
-    return new Date(deadline) < new Date();
-  };
-
-  if (loading) {
-    return <div className="p-6 text-center text-gray-500">Loading your tasks...</div>;
-  }
-
-  if (error) {
-    return <div className="p-6 text-center text-red-600">{error}</div>;
-  }
 
   return (
-    <div className="p-6 bg-white min-h-screen">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-semibold text-blue-700">Task Insights</h1>
-          <p className="text-gray-600 mt-1">
-            {activeTaskFilter === "In Progress" && "Active / In Progress Tasks"}
-            {activeTaskFilter === "Completed" && "Completed Tasks"}
-            {activeTaskFilter === "All" && "Your assigned tasks"}
-          </p>
-        </div>
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${styles[status] || 'bg-gray-100 text-gray-700'}`}>
+      {status}
+    </span>
+  );
+};
+
+const StatCard = ({ label, value, icon: Icon, color }) => {
+  return (
+    <div className="bg-white border border-blue-200 rounded-2xl p-6 flex items-center justify-between hover:shadow-lg transition-all duration-300">
+      <div>
+        <p className="text-gray-600 text-sm font-medium">{label}</p>
+        <p className="text-4xl font-bold text-gray-900 mt-2">{value}</p>
       </div>
-
-      <div className="flex gap-6">
-        <div className="flex-1">
-          <div className="space-y-4">
-            {tasks.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                {activeTaskFilter === "In Progress" && "No active tasks at the moment."}
-                {activeTaskFilter === "Completed" && "No completed tasks yet."}
-                {activeTaskFilter === "All" && "No tasks assigned to you yet."}
-              </div>
-            ) : (
-              tasks.map((task) => {
-                const isCompleted = task.status === "Completed";
-                const overdue = isOverdue(task.due_date) && !isCompleted;
-                const progress = getProgress(task.status);
-
-                return (
-                  <div
-                    key={task.id}
-                    onClick={() => handleTaskClick(task)}
-                    className={`bg-white border rounded-2xl p-5 cursor-pointer transition-all hover:shadow-md ${
-                      selectedTask?.id === task.id && showSidebar 
-                        ? "border-blue-500 shadow-md" 
-                        : "border-gray-200 hover:border-blue-200"
-                    } ${isCompleted ? "opacity-75" : ""}`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-4">
-                        <input
-                          type="checkbox"
-                          checked={isCompleted}
-                          onChange={(e) => handleStatusChange(task.id, e.target.checked)}
-                          disabled={isCompleted}
-                          className="mt-1 w-5 h-5 accent-emerald-600"
-                        />
-
-                        <div>
-                          <h3 className={`font-semibold ${isCompleted ? "line-through text-gray-500" : "text-gray-900"}`}>
-                            {task.title}
-                          </h3>
-                          <p className="text-sm text-gray-500 mt-1">
-                            {task.project_name || "No Project"}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className={`px-4 py-1.5 text-xs font-medium rounded-xl border ${getStatusColor(task.status)}`}>
-                        {task.status}
-                      </div>
-                    </div>
-
-                    <div className="mt-5 flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Calendar size={16} />
-                        <span>
-                          {task.due_date 
-                            ? new Date(task.due_date).toLocaleDateString('en-GB') 
-                            : "No due date"}
-                        </span>
-                        {overdue && (
-                          <span className="text-red-600 text-xs font-medium ml-2">• Overdue</span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(task.status)}
-                        <span className="font-medium">{progress}%</span>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${
-                          isCompleted ? "bg-emerald-600" : "bg-blue-600"
-                        }`}
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Sidebar - Shows Reviewer Comments */}
-        {showSidebar && selectedTask && (
-          <div className="w-96 bg-white border border-gray-200 rounded-3xl p-6 shadow-lg relative">
-            <button 
-              onClick={closeSidebar} 
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-            >
-              <X size={22} />
-            </button>
-
-            <div className="flex items-center gap-3 mb-6">
-              <MessageSquare size={22} className="text-blue-600" />
-              <h2 className="text-xl font-semibold">Reviewer Comments</h2>
-            </div>
-
-            <div className="mb-6">
-              <h3 className="font-medium text-lg">{selectedTask.title}</h3>
-              <p className="text-sm text-gray-500 mt-1">{selectedTask.project_name}</p>
-            </div>
-
-            <div className="space-y-5 max-h-[calc(100vh-280px)] overflow-y-auto pr-2">
-              {selectedTask.comments && selectedTask.comments.length > 0 ? (
-                selectedTask.comments.map((comment) => (
-                  <div key={comment.id} className="bg-gray-50 rounded-2xl p-4">
-                    <div className="flex justify-between text-xs text-gray-500 mb-2">
-                      <span className="font-medium">
-                        {comment.reviewer_name || "Reviewer"}
-                      </span>
-                      <span>
-                        {comment.created_at 
-                          ? new Date(comment.created_at).toLocaleString() 
-                          : "Just now"}
-                      </span>
-                    </div>
-                    <p className="text-gray-700 text-sm leading-relaxed">
-                      {comment.comment_text}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-12 text-gray-400">
-                  No comments from reviewer yet.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color}`}>
+        <Icon size={28} />
       </div>
     </div>
   );
 };
 
-export default EmployeeTaskInsights;
+export default function TaskInsights() {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedProjects, setExpandedProjects] = useState(new Set());
+  const [completingTaskId, setCompletingTaskId] = useState(null);
+
+  // Fetch tasks on component mount
+  useEffect(() => {
+    fetchTaskInsights();
+  }, []);
+
+  // Fetch task insights from API
+  const fetchTaskInsights = async () => {
+    try {
+      setLoading(true);
+      const token = sessionStorage.getItem("token");
+
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/tasks`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Process tasks and ensure comments are arrays
+        const processedTasks = (result.data || []).map(task => {
+          let comments = [];
+          
+          if (Array.isArray(task.comments)) {
+            comments = task.comments.filter(c => c !== null && c !== undefined);
+          } else if (typeof task.comments === 'string') {
+            try {
+              const parsed = JSON.parse(task.comments);
+              comments = Array.isArray(parsed) 
+                ? parsed.filter(c => c && c.comment_text && c.comment_text.trim() !== "")
+                : [];
+            } catch (e) {
+              console.error("JSON parse error:", e);
+              comments = [];
+            }
+          }
+          
+          return {
+            ...task,
+            comments: comments
+          };
+        });
+
+        setTasks(processedTasks);
+        setError(null);
+      } else {
+        setError(result.message || "Failed to load task insights");
+      }
+    } catch (err) {
+      console.error("Fetch error:", err);
+      setError("Failed to connect to server. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle task completion
+  const handleCompleteTask = async (e, taskId) => {
+    e.stopPropagation();
+
+    // Confirmation before marking complete
+    if (!window.confirm("Mark this task as completed? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      setCompletingTaskId(taskId);
+      const token = sessionStorage.getItem("token");
+
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/tasks/${taskId}/complete`, {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Update the task status in the local state
+        setTasks(prevTasks =>
+          prevTasks.map(task =>
+            task.id === taskId
+              ? { ...task, status: 'Completed', completed_at: new Date().toISOString() }
+              : task
+          )
+        );
+      } else {
+        console.error(result.message || "Failed to mark task as completed");
+      }
+    } catch (err) {
+      console.error("Complete task error:", err);
+    } finally {
+      setCompletingTaskId(null);
+    }
+  };
+
+  // Calculate statistics
+  const calculateStats = () => {
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(t => t.status === 'Completed').length;
+    const inProgressTasks = tasks.filter(t => t.status === 'In Progress').length;
+    const delayedTasks = tasks.filter(t => t.status === 'Delayed').length;
+
+    return {
+      total: totalTasks,
+      completed: completedTasks,
+      inProgress: inProgressTasks,
+      delayed: delayedTasks
+    };
+  };
+
+  // Filter and group tasks
+  const filteredTasks = tasks.filter(task =>
+    task.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    task.project_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const groupedTasks = filteredTasks.reduce((acc, task) => {
+    const projectName = task.project_name || "Uncategorized";
+    if (!acc[projectName]) acc[projectName] = [];
+    acc[projectName].push(task);
+    return acc;
+  }, {});
+
+  const selectedTask = tasks.find(t => t.id === selectedTaskId);
+  const stats = calculateStats();
+
+  // Calculate if task is overdue
+  const isTaskOverdue = (task) => {
+    if (task.status === 'Completed' || !task.due_date) return false;
+    const today = new Date();
+    const dueDate = new Date(task.due_date);
+    return dueDate < today;
+  };
+
+  const handleOpenTask = (id) => setSelectedTaskId(id);
+  const handleCloseSidebar = () => setSelectedTaskId(null);
+
+  const toggleProjectExpanded = (projectName) => {
+    const newExpanded = new Set(expandedProjects);
+    if (newExpanded.has(projectName)) {
+      newExpanded.delete(projectName);
+    } else {
+      newExpanded.add(projectName);
+    }
+    setExpandedProjects(newExpanded);
+  };
+
+  const getProjectColor = (index) => {
+    const colors = ['blue', 'purple', 'green', 'orange', 'pink', 'indigo'];
+    return colors[index % colors.length];
+  };
+
+  const getProgressBarColor = (color) => {
+    const colorMap = {
+      blue: 'bg-blue-500',
+      purple: 'bg-purple-500',
+      green: 'bg-green-500',
+      orange: 'bg-orange-500',
+      pink: 'bg-pink-500',
+      indigo: 'bg-indigo-500',
+    };
+    return colorMap[color];
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 bg-slate-50 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading task insights...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 bg-slate-50 min-h-screen">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <p className="font-semibold">Error</p>
+          <p>{error}</p>
+          <button 
+            onClick={fetchTaskInsights}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 bg-slate-50 min-h-screen">
+      {/* Header */}
+      <div className="mb-8">   
+        <h1 className="text-3xl font-semibold text-blue-700">Task Insights</h1>
+        <p className="text-gray-600 mt-1 flex items-center gap-2">
+          <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
+          Project performance and task reviews
+        </p>
+      </div>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <StatCard 
+          label="Total Tasks" 
+          value={stats.total} 
+          icon={ListTodo}
+          color="bg-blue-100 text-blue-600"
+        />
+        <StatCard 
+          label="Completed" 
+          value={stats.completed} 
+          icon={CheckCircle}
+          color="bg-emerald-100 text-emerald-600"
+        />
+        <StatCard 
+          label="In Progress" 
+          value={stats.inProgress} 
+          icon={Clock}
+          color="bg-yellow-100 text-yellow-600"
+        />
+        <StatCard 
+          label="Delayed" 
+          value={stats.delayed} 
+          icon={AlertCircle}
+          color="bg-red-100 text-red-600"
+        />
+      </div>
+
+      {/* Search Bar */}
+      <div className="mb-8">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input 
+            type="text"
+            placeholder="Search tasks, projects, or team members..."
+            className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Projects List */}
+      <div className="space-y-4">
+        {Object.keys(groupedTasks).length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
+            <ListTodo className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p className="text-lg font-medium text-gray-500">No tasks found</p>
+            <p className="text-sm text-gray-400 mt-1">Your assigned projects will appear here</p>
+          </div>
+        ) : (
+          Object.entries(groupedTasks).map(([projectName, projectTasks], projectIndex) => {
+            const projectColor = getProjectColor(projectIndex);
+            const isExpanded = expandedProjects.has(projectName);
+            const inProgressCount = projectTasks.filter(t => t.status === 'In Progress').length;
+            const completedCount = projectTasks.filter(t => t.status === 'Completed').length;
+            const delayedCount = projectTasks.filter(t => t.status === 'Delayed').length;
+
+            return (
+              <div key={projectName} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                {/* Project Header */}
+                <button
+                  onClick={() => toggleProjectExpanded(projectName)}
+                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className={`w-1 h-12 rounded-full ${getProgressBarColor(projectColor)}`}></div>
+                    <div className="text-left">
+                      <h3 className="font-bold text-slate-900">{projectName}</h3>
+                      <p className="text-sm text-slate-500 mt-1">
+                        {projectTasks.length} TASKS
+                        {inProgressCount > 0 && ` • ${inProgressCount} IN PROGRESS`}
+                        {delayedCount > 0 && ` • ${delayedCount} DELAYED`}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Progress Bar */}
+                  <div className="flex items-center gap-4">
+                    <div className="w-24 h-1 bg-slate-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full ${getProgressBarColor(projectColor)} transition-all`}
+                        style={{ width: `${projectTasks.length > 0 ? (completedCount / projectTasks.length) * 100 : 0}%` }}
+                      ></div>
+                    </div>
+                    <ChevronDown 
+                      size={20} 
+                      className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    />
+                  </div>
+                </button>
+
+                {/* Tasks List */}
+                {isExpanded && (
+                  <div className="border-t border-slate-200">
+                    <div className="px-6 py-4 space-y-3 bg-slate-50 max-h-96 overflow-y-auto">
+                      {projectTasks.length === 0 ? (
+                        <div className="text-center py-8 text-slate-400">
+                          <p>No tasks in this project</p>
+                        </div>
+                      ) : (
+                        projectTasks.map((task) => {
+                          const commentCount = Array.isArray(task.comments) 
+                            ? task.comments.filter(c => c !== null && c !== undefined).length 
+                            : 0;
+                          const isCompleted = task.status === 'Completed';
+                          const isDelayed = isTaskOverdue(task);
+
+                          return (
+                            <div
+                              key={task.id}
+                              className={`bg-white border rounded-lg p-4 transition-all ${
+                                isCompleted 
+                                  ? 'border-emerald-200 bg-emerald-50' 
+                                  : isDelayed
+                                  ? 'border-red-200 bg-red-50 hover:border-red-400'
+                                  : 'border-slate-200 hover:border-blue-400 hover:shadow-md'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                {/* Checkbox */}
+                                <button
+                                  onClick={(e) => handleCompleteTask(e, task.id)}
+                                  disabled={isCompleted || completingTaskId === task.id}
+                                  className={`mt-1 flex-shrink-0 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                                    isCompleted
+                                      ? 'bg-emerald-500 border-emerald-500 cursor-not-allowed'
+                                      : 'border-slate-300 hover:border-blue-500 cursor-pointer hover:bg-blue-50'
+                                  } ${completingTaskId === task.id ? 'opacity-50' : ''}`}
+                                  title={isCompleted ? "Task is completed" : "Click to mark as completed"}
+                                >
+                                  {isCompleted && (
+                                    <Check size={16} className="text-white" />
+                                  )}
+                                  {completingTaskId === task.id && !isCompleted && (
+                                    <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                                  )}
+                                </button>
+
+                                {/* Task Content */}
+                                <div 
+                                  className="flex-1 cursor-pointer"
+                                  onClick={() => handleOpenTask(task.id)}
+                                >
+                                  <h4 className={`font-medium transition-colors ${
+                                    isCompleted
+                                      ? 'text-emerald-700 line-through'
+                                      : 'text-slate-900 hover:text-blue-600'
+                                  }`}>
+                                    {task.title}
+                                  </h4>
+                                  <div className="flex items-center gap-6 mt-3 text-xs text-slate-500 flex-wrap">
+                                    <div className="flex items-center gap-1.5">
+                                      <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                                      <span className={isDelayed && !isCompleted ? 'text-red-600 font-medium' : ''}>
+                                        {task.due_date 
+                                          ? new Date(task.due_date).toLocaleDateString('en-GB', { 
+                                              month: 'short', 
+                                              day: 'numeric',
+                                              year: 'numeric'
+                                            }) 
+                                          : 'No due date'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
+                                      {commentCount}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Status Badge and View Details */}
+                                <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+                                  <StatusBadge status={task.status} />
+                                  {/* {!isCompleted && (
+                                    <button
+                                      onClick={() => handleOpenTask(task.id)}
+                                      className="px-3 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition"
+                                    >
+                                      View
+                                    </button>
+                                  )} */}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Sidebar - Task Details */}
+      {selectedTaskId && selectedTask && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-end"
+          onClick={handleCloseSidebar}
+        >
+          <div
+            className="bg-gradient-to-b from-white to-slate-50 w-full max-w-xl h-full shadow-2xl flex flex-col overflow-hidden animate-slideInRight"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 sticky top-0 z-10 shadow-lg text-white">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold tracking-widest uppercase text-blue-100">Task Details</p>
+                  <h2 className="text-2xl font-bold mt-2 leading-tight">{selectedTask.title}</h2>
+                  <p className="text-sm text-blue-100 mt-1">Review task details and comments</p>
+                </div>
+                <button
+                  onClick={handleCloseSidebar}
+                  className="p-2 rounded-xl bg-white/20 hover:bg-white/30 transition-all duration-200 backdrop-blur-sm"
+                >
+                  <X size={24} className="text-white" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">Project Name</p>
+                    <p className="font-bold text-lg text-slate-800 mt-1">{selectedTask.project_name || "Uncategorized"}</p>
+                  </div>
+                  <StatusBadge status={selectedTask.status} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <p className="text-xs text-slate-500 font-medium">Assignee</p>
+                    <p className="font-semibold text-slate-800 mt-1">{selectedTask.assignee_name || "Unassigned"}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <p className="text-xs text-slate-500 font-medium">Due Date</p>
+                    <p className="font-semibold text-slate-800 mt-1">
+                      {selectedTask.due_date
+                        ? new Date(selectedTask.due_date).toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" })
+                        : "No due date"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <p className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wide">Description</p>
+                <p className="text-slate-600 leading-relaxed">{selectedTask.description || "No description provided."}</p>
+              </div>
+
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <p className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-blue-500" />
+                  Reviewer Comments ({selectedTask.comments?.length || 0})
+                </p>
+                <div className="space-y-4">
+                  {selectedTask.comments && selectedTask.comments.length > 0 ? (
+                    selectedTask.comments.map((comment, index) => (
+                      <div key={comment.id || index} className="bg-slate-50 rounded-xl p-4 border border-slate-200 hover:shadow-md transition-all duration-200">
+                        <div className="flex justify-between mb-2">
+                          <p className="font-semibold text-slate-800 text-sm">{comment.reviewer_name}</p>
+                          <p className="text-xs text-slate-400">
+                            {comment.created_at ? new Date(comment.created_at).toLocaleDateString("en-GB") : ""}
+                          </p>
+                        </div>
+                        <p className="text-sm text-slate-600 leading-relaxed">{comment.comment_text}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-xl border border-dashed">
+                      No reviewer comments yet
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

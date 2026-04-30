@@ -1,5 +1,5 @@
 // src/pages/Reviewer/TaskInsights.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import apiConfig from '../../config/apiConfig';
 import { 
   Search, 
@@ -7,7 +7,11 @@ import {
   User, 
   MessageSquare, 
   X, 
-  Send 
+  Send,
+  CheckCircle,
+  AlertCircle,
+  ListTodo,
+  ChevronDown
 } from 'lucide-react';
 
 const StatusBadge = ({ status }) => {
@@ -19,8 +23,22 @@ const StatusBadge = ({ status }) => {
 
   return (
     <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${styles[status] || 'bg-gray-100 text-gray-700'}`}>
-      {status}
+      {status || "Not Started"}
     </span>
+  );
+};
+
+const StatCard = ({ label, value, icon: Icon, color }) => {
+  return (
+    <div className="bg-white border border-blue-200 rounded-2xl p-6 flex items-center justify-between hover:shadow-lg transition-all duration-300">
+      <div>
+        <p className="text-gray-600 text-sm font-medium">{label}</p>
+        <p className="text-4xl font-bold text-gray-900 mt-2">{value}</p>
+      </div>
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color}`}>
+        <Icon size={28} />
+      </div>
+    </div>
   );
 };
 
@@ -46,6 +64,7 @@ export default function ReviewerTaskInsights() {
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState([]);
   const [loadingComments, setLoadingComments] = useState(false);
+  const [expandedProjects, setExpandedProjects] = useState(new Set());
 
   const selectedTask = tasks.find(t => t.id === selectedTaskId);
 
@@ -120,7 +139,6 @@ export default function ReviewerTaskInsights() {
     fetchComments();
   }, [selectedTaskId]);
 
-  // Update comment count in the main tasks list after adding a comment
   const updateTaskCommentCount = (taskId, newCount) => {
     setTasks(prevTasks =>
       prevTasks.map(task =>
@@ -129,16 +147,37 @@ export default function ReviewerTaskInsights() {
     );
   };
 
-  const filteredTasks = tasks.filter(task =>
-    task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    task.project.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Stats Calculation
+  const stats = useMemo(() => {
+    return {
+      total: tasks.length,
+      completed: tasks.filter(t => t.status === 'Completed').length,
+      inProgress: tasks.filter(t => t.status === 'In Progress').length,
+      delayed: tasks.filter(t => t.status === 'Delayed').length
+    };
+  }, [tasks]);
 
-  const groupedTasks = filteredTasks.reduce((acc, task) => {
-    if (!acc[task.project]) acc[task.project] = [];
-    acc[task.project].push(task);
-    return acc;
-  }, {});
+  // Filtered Tasks
+  const filteredTasks = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return tasks;
+
+    return tasks.filter(task =>
+      task.title?.toLowerCase().includes(query) ||
+      task.project?.toLowerCase().includes(query) ||
+      task.assignee?.toLowerCase().includes(query)
+    );
+  }, [searchQuery, tasks]);
+
+  // Grouped Tasks by Project
+  const groupedTasks = useMemo(() => {
+    return filteredTasks.reduce((acc, task) => {
+      const projectName = task.project || "Uncategorized";
+      if (!acc[projectName]) acc[projectName] = [];
+      acc[projectName].push(task);
+      return acc;
+    }, {});
+  }, [filteredTasks]);
 
   const handleOpenTask = (id) => {
     setSelectedTaskId(id);
@@ -151,7 +190,34 @@ export default function ReviewerTaskInsights() {
     setComments([]);
   };
 
-  // Add comment and update count
+  const toggleProjectExpanded = (projectName) => {
+    const newExpanded = new Set(expandedProjects);
+    if (newExpanded.has(projectName)) {
+      newExpanded.delete(projectName);
+    } else {
+      newExpanded.add(projectName);
+    }
+    setExpandedProjects(newExpanded);
+  };
+
+  const getProjectColor = (index) => {
+    const colors = ['blue', 'purple', 'green', 'orange', 'pink', 'indigo'];
+    return colors[index % colors.length];
+  };
+
+  const getProgressBarColor = (color) => {
+    const colorMap = {
+      blue: 'bg-blue-500',
+      purple: 'bg-purple-500',
+      green: 'bg-green-500',
+      orange: 'bg-orange-500',
+      pink: 'bg-pink-500',
+      indigo: 'bg-indigo-500',
+    };
+    return colorMap[color];
+  };
+
+  // Add comment
   const handleAddComment = async (e) => {
     e.preventDefault();
     if (!newComment.trim() || !selectedTaskId) return;
@@ -175,7 +241,7 @@ export default function ReviewerTaskInsights() {
       if (result.success) {
         setNewComment('');
 
-        // Refresh comments in sidebar
+        // Refresh comments
         const refreshRes = await fetch(
           `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTaskId}/comments`,
           { headers: { 'Authorization': `Bearer ${token}` } }
@@ -185,7 +251,7 @@ export default function ReviewerTaskInsights() {
           setComments(refreshData.data);
         }
 
-        // Update comment count on the main task card
+        // Update comment count
         updateTaskCommentCount(selectedTaskId, comments.length + 1);
       } else {
         alert(result.message || "Failed to add comment");
@@ -197,206 +263,272 @@ export default function ReviewerTaskInsights() {
   };
 
   if (loading) {
-    return (
-      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading tasks...</p>
-        </div>
-      </div>
-    );
+    return <div className="p-6 text-center">Loading task insights...</div>;
   }
 
   if (error) {
     return (
-      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
-        <div className="text-center text-red-600">
-          <p className="text-xl font-medium">{error}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-          >
-            Retry
-          </button>
-        </div>
+      <div className="p-6 text-center text-red-600">
+        {error}
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="p-6 bg-white min-h-screen">
-      {/* Header */}
+    <div className="p-6 bg-slate-50 min-h-screen">
       <div className="mb-8">
-        <h1 className="text-3xl font-semibold text-blue-700">Task Insights</h1>
+        <h1 className="text-3xl font-semibold text-slate-900">Task Insights</h1>
         <p className="text-gray-600 mt-1 flex items-center gap-2">
           <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
           Review all projects and tasks
         </p>
       </div>
 
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <StatCard
+          label="Total Tasks"
+          value={stats.total}
+          icon={ListTodo}
+          color="bg-blue-100 text-blue-600"
+        />
+        <StatCard
+          label="Completed"
+          value={stats.completed}
+          icon={CheckCircle}
+          color="bg-emerald-100 text-emerald-600"
+        />
+        <StatCard
+          label="In Progress"
+          value={stats.inProgress}
+          icon={Clock}
+          color="bg-yellow-100 text-yellow-600"
+        />
+        <StatCard
+          label="Delayed"
+          value={stats.delayed}
+          icon={AlertCircle}
+          color="bg-red-100 text-red-600"
+        />
+      </div>
+
       {/* Search Bar */}
-      <div className="flex justify-end mb-8">
-        <div className="relative w-80">
+      <div className="mb-8">
+        <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input 
+          <input
             type="text"
-            placeholder="Search tasks or projects..."
-            className="w-full pl-11 pr-4 py-3 bg-white border border-blue-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-1 text-sm"
+            placeholder="Search tasks, projects, or team members..."
+            className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
 
-      {/* Task List - Now shows real comment count */}
+      {/* Project Grouped Tasks */}
       <div className="space-y-4">
         {Object.keys(groupedTasks).length === 0 ? (
-          <div className="text-center py-12 text-gray-400">No tasks found</div>
+          <div className="text-center py-12 text-gray-400 bg-white rounded-lg border border-slate-200">
+            No tasks found
+          </div>
         ) : (
-          Object.entries(groupedTasks).map(([projectName, projectTasks]) => (
-            <section key={projectName} className="mb-10">
-              <div className="flex items-center gap-3 mb-6 px-2">
-                <div className="w-1 h-6 bg-blue-600 rounded"></div>
-                <h2 className="uppercase text-sm font-bold tracking-widest text-slate-500">
-                  PROJECT: {projectName}
-                </h2>
-              </div>
+          Object.entries(groupedTasks).map(([projectName, projectTasks], projectIndex) => {
+            const projectColor = getProjectColor(projectIndex);
+            const isExpanded = expandedProjects.has(projectName);
+            const inProgressCount = projectTasks.filter(t => t.status === 'In Progress').length;
+            const completedCount = projectTasks.filter(t => t.status === 'Completed').length;
+            const progressWidth = projectTasks.length > 0
+              ? (completedCount / projectTasks.length) * 100
+              : 0;
 
-              <div className="space-y-3">
-                {projectTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    onClick={() => handleOpenTask(task.id)}
-                    className="group bg-white border border-slate-200 hover:border-blue-400 rounded-3xl p-6 transition-all cursor-pointer hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
-                          {task.title}
-                        </h3>
-                        <div className="flex items-center gap-5 mt-4 text-sm text-slate-500">
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="w-4 h-4" />
-                            {task.dueDate}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <User className="w-4 h-4" />
-                            {task.assignee}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <MessageSquare className="w-4 h-4" />
-                            {task.comments || 0}   {/* Real comment count */}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-3">
-                        <StatusBadge status={task.status} />
-                        <div className="w-28 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all ${task.status === 'Delayed' ? 'bg-red-500' : 'bg-blue-500'}`}
-                            style={{ width: `${task.progress}%` }}
-                          />
-                        </div>
-                      </div>
+            return (
+              <div key={projectName} className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                <button
+                  onClick={() => toggleProjectExpanded(projectName)}
+                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className={`w-1 h-12 rounded-full ${getProgressBarColor(projectColor)}`}></div>
+                    <div className="text-left">
+                      <h3 className="font-bold text-slate-900">{projectName}</h3>
+                      <p className="text-sm text-slate-500 mt-1">
+                        {projectTasks.length} tasks
+                        {inProgressCount > 0 ? ` - ${inProgressCount} in progress` : ""}
+                      </p>
                     </div>
                   </div>
-                ))}
+
+                  <div className="flex items-center gap-4">
+                    <div className="w-24 h-1 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${getProgressBarColor(projectColor)} transition-all`}
+                        style={{ width: `${progressWidth}%` }}
+                      ></div>
+                    </div>
+                    <ChevronDown
+                      size={20}
+                      className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    />
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="border-t border-slate-200">
+                    <div className="px-6 py-4 space-y-3 bg-slate-50 max-h-96 overflow-y-auto">
+                      {projectTasks.map((task) => {
+                        const commentCount = task.comments || 0;
+
+                        return (
+                          <div
+                            key={task.id}
+                            onClick={() => handleOpenTask(task.id)}
+                            className="bg-white border border-slate-200 hover:border-blue-400 rounded-lg p-4 transition-all cursor-pointer hover:shadow-md"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h4 className="font-medium text-slate-900 hover:text-blue-600 transition-colors">
+                                  {task.title}
+                                </h4>
+                                <div className="flex flex-wrap items-center gap-6 mt-3 text-xs text-slate-500">
+                                  <div className="flex items-center gap-1.5">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {task.dueDate || 'No due date'}
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5" />
+                                    {task.assignee || 'Unassigned'}
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <MessageSquare className="w-3.5 h-3.5" />
+                                    {commentCount}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3 ml-4">
+                                <StatusBadge status={task.status} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-            </section>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* Right Sidebar with Real Comments */}
+      {/* Sidebar - Task Detail */}
       {selectedTaskId && selectedTask && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex justify-end">
-          <div 
-            className="bg-white w-full max-w-lg h-full shadow-2xl flex flex-col overflow-hidden"
-            onClick={e => e.stopPropagation()}
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-end"
+          onClick={handleCloseSidebar}
+        >
+          <div
+            className="bg-gradient-to-b from-white to-slate-50 w-full max-w-xl h-full shadow-2xl flex flex-col overflow-hidden animate-slideInRight"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-6 flex items-center justify-between bg-slate-50">
-              <div>
-                <p className="text-xs font-medium text-blue-600">TASK REVIEW</p>
-                <h2 className="font-bold text-xl text-slate-900 mt-1">{selectedTask.title}</h2>
+            <div className="p-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 sticky top-0 z-10 shadow-lg text-white">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold tracking-widest uppercase text-blue-100">Task Review</p>
+                  <h2 className="text-2xl font-bold mt-2 leading-tight">{selectedTask.title}</h2>
+                  <p className="text-sm text-blue-100 mt-1">Review and provide feedback</p>
+                </div>
+                <button
+                  onClick={handleCloseSidebar}
+                  className="p-2 rounded-xl bg-white/20 hover:bg-white/30 transition-all duration-200 backdrop-blur-sm"
+                >
+                  <X size={24} className="text-white" />
+                </button>
               </div>
-              <button onClick={handleCloseSidebar} className="p-2 hover:bg-slate-200 rounded-xl">
-                <X size={24} />
-              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              {/* Project Info */}
-              <div>
-                <p className="text-xs text-slate-500">Project</p>
-                <p className="font-semibold text-slate-800">{selectedTask.project}</p>
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">Project Name</p>
+                    <p className="font-bold text-lg text-slate-800 mt-1">{selectedTask.project || "Uncategorized"}</p>
+                  </div>
+                  <StatusBadge status={selectedTask.status} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <p className="text-xs text-slate-500 font-medium">Assignee</p>
+                    <p className="font-semibold text-slate-800 mt-1">{selectedTask.assignee || "Unassigned"}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <p className="text-xs text-slate-500 font-medium">Due Date</p>
+                    <p className="font-semibold text-slate-800 mt-1">
+                      {selectedTask.dueDate || "No due date"}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <p className="text-xs text-slate-500">Project Manager</p>
-                <p className="font-semibold text-slate-800 flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  {selectedTask.projectManager || 'No Manager Assigned'}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs text-slate-500">Assigned To</p>
-                <p className="font-semibold text-slate-800 flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  {selectedTask.assignee || 'Unassigned'}
-                </p>
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <p className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wide">Description</p>
+                <p className="text-slate-600 leading-relaxed">{selectedTask.description || "No description provided."}</p>
               </div>
 
               {/* Progress */}
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-medium">Progress</span>
-                  <span className="font-bold text-blue-600">{selectedTask.progress}%</span>
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <div className="flex justify-between text-sm mb-3">
+                  <span className="font-medium text-slate-700">Progress</span>
+                  <span className="font-bold text-blue-600">{selectedTask.progress || 0}%</span>
                 </div>
                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-blue-600 rounded-full transition-all"
-                    style={{ width: `${selectedTask.progress}%` }}
+                    style={{ width: `${selectedTask.progress || 0}%` }}
                   />
                 </div>
               </div>
 
-              {/* Description */}
-              <div>
-                <p className="text-xs font-medium text-slate-500 mb-2">DESCRIPTION</p>
-                <p className="text-slate-600 leading-relaxed">{selectedTask.description}</p>
-              </div>
-
               {/* Comments Section */}
-              <div>
-                <p className="text-xs font-medium text-slate-500 mb-4 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4" /> REVIEWS & COMMENTS
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <p className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-blue-500" />
+                  Reviewer Comments ({comments.length})
                 </p>
-
-                <div className="space-y-4 mb-6">
+                <div className="space-y-4">
                   {loadingComments ? (
-                    <p className="text-center text-gray-500 py-4">Loading comments...</p>
+                    <p className="text-center py-8 text-slate-400">Loading comments...</p>
                   ) : comments.length > 0 ? (
                     comments.map((comment) => (
-                      <div key={comment.id} className="bg-slate-50 p-4 rounded-2xl">
-                        <div className="flex justify-between text-xs">
-                          <span className="font-medium text-slate-700">{comment.reviewer_name}</span>
-                          <span className="text-slate-400">{formatTimeAgo(comment.created_at)}</span>
+                      <div key={comment.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200 hover:shadow-md transition-all duration-200">
+                        <div className="flex justify-between mb-2">
+                          <p className="font-semibold text-slate-800 text-sm">{comment.reviewer_name}</p>
+                          <p className="text-xs text-slate-400">
+                            {comment.created_at ? formatTimeAgo(comment.created_at) : ''}
+                          </p>
                         </div>
-                        <p className="mt-2 text-slate-600 text-sm">{comment.comment_text}</p>
+                        <p className="text-sm text-slate-600 leading-relaxed">{comment.comment_text}</p>
                       </div>
                     ))
                   ) : (
-                    <p className="text-gray-500 text-center py-4">No comments yet. Be the first to review!</p>
+                    <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-xl border border-dashed">
+                      No reviewer comments yet
+                    </div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Comment Input */}
-            <div className="p-4 bg-white">
-              <form onSubmit={handleAddComment} className="flex gap-2">
+            {/* Add Comment Input */}
+            <div className="p-6 bg-white border-t border-slate-100">
+              <form onSubmit={handleAddComment} className="flex gap-3">
                 <input 
                   type="text"
                   value={newComment}
@@ -407,7 +539,7 @@ export default function ReviewerTaskInsights() {
                 <button 
                   type="submit"
                   disabled={!newComment.trim()}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-5 rounded-2xl transition-all"
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-6 rounded-2xl transition-all flex items-center justify-center"
                 >
                   <Send size={18} />
                 </button>

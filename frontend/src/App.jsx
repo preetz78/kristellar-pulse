@@ -8,9 +8,11 @@ import Login from "./pages/Login";
 // Import all pages
 import AdminDashboard from "./pages/Admin/Dashboard";
 import AdminProjects from "./pages/Admin/Projects";
+import AdminProjectDetail from "./pages/Admin/ProjectDetail";
 import TaskInsights from "./pages/Admin/TaskInsights";
 import AdminTeam from "./pages/Admin/Team";
 import AdminProfile from "./pages/Admin/Profile";
+import Department from './pages/Admin/Department';
 
 import ManagerDashboard from "./pages/Manager/Dashboard";
 import ManagerProjects from "./pages/Manager/Projects";
@@ -136,9 +138,10 @@ const App = () => {
         >
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="projects" element={<AdminProjects />} />
-          <Route path="projects/:projectId" element={<ProjectDetail />} />
+          <Route path="projects/:projectId" element={<AdminProjectDetail />} />
           <Route path="task-insights" element={<TaskInsights />} />
           <Route path="team" element={<AdminTeam />} />
+          <Route path="department" element={<Department />} />
           <Route path="profile" element={<AdminProfile />} />
         </Route>
 

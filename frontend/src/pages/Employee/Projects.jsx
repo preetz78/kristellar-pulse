@@ -4,7 +4,10 @@ import {
   Calendar, 
   Users, 
   TrendingUp,
-  Search
+  Search,
+  Briefcase,
+  Clock3,
+  CheckCircle
 } from "lucide-react";
 
 import apiConfig from "../../config/apiConfig";
@@ -160,7 +163,7 @@ const EmployeeProjects = () => {
               <p className="text-4xl font-bold text-gray-900 mt-2">{totalProjects}</p>
             </div>
             <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
-              <TrendingUp size={28} className="text-blue-600" />
+              <Briefcase size={28} className="text-blue-600" />
             </div>
           </div>
         </div>
@@ -171,8 +174,8 @@ const EmployeeProjects = () => {
               <p className="text-sm text-gray-600 font-medium">In Progress</p>
               <p className="text-4xl font-bold text-blue-600 mt-2">{inProgressCount}</p>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
-              <Users size={28} className="text-blue-600" />
+            <div className="w-12 h-12 bg-yellow-100 rounded-2xl flex items-center justify-center">
+              <Clock3 size={28} className="text-yellow-600" />
             </div>
           </div>
         </div>
@@ -184,7 +187,7 @@ const EmployeeProjects = () => {
               <p className="text-4xl font-bold text-emerald-600 mt-2">{completedCount}</p>
             </div>
             <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center">
-              <TrendingUp size={28} className="text-emerald-600" />
+              <CheckCircle size={28} className="text-emerald-600" />
             </div>
           </div>
         </div>

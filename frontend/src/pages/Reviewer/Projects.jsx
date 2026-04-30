@@ -5,7 +5,8 @@ import {
   Calendar, 
   Users, 
   TrendingUp,
-  Search
+  Search,
+  Clock
 } from "lucide-react";
 
 import apiConfig from "../../config/apiConfig";
@@ -167,8 +168,8 @@ const ReviewerProjects = () => {
               <p className="text-sm text-gray-600 font-medium">In Progress</p>
               <p className="text-4xl font-bold text-blue-600 mt-2">{inProgressCount}</p>
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center">
-              <Users size={28} className="text-blue-600" />
+            <div className="w-12 h-12 bg-yellow-100  rounded-2xl flex items-center justify-center">
+              <Clock size={28} className="text-yellow-600" />
             </div>
           </div>
         </div>

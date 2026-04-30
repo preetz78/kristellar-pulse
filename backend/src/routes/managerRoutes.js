@@ -8,7 +8,7 @@ import {
   addTask, 
   getProjectTasks, 
   getProjectEmployees, 
-  updateTask,          // Keep for editing task details
+  updateTask,          
   deleteTask, 
   updateProject, 
   deleteProject, 
@@ -32,7 +32,7 @@ import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// ====================== PROJECT ROUTES ======================
+// PROJECT ROUTES
 router.post('/projects', protect, createProject);
 router.get('/projects', protect, getMyProjects);
 router.put('/projects/:id', protect, updateProject);      
@@ -41,7 +41,6 @@ router.delete('/projects/:id', protect, deleteProject);
 // Single project detail
 router.get('/projects/:id', protect, getProjectById);
 
-// ====================== TASK ROUTES ======================
 // Create new task
 router.post('/projects/:id/tasks', protect, addTask);           
 
@@ -57,10 +56,10 @@ router.put('/tasks/:taskId', protect, updateTask);
 // Delete task
 router.delete('/tasks/:taskId', protect, deleteTask);    
 
-// ====================== TASK INSIGHTS ======================
+// TASK INSIGHTS 
 router.get('/task-insights', protect, getTaskInsights);
 
-// EMPLOYEE MANAGEMENT ======================
+// EMPLOYEE MANAGEMENT 
 router.post('/employees', protect, upload.single('profile_picture'), createEmployee);
 router.get('/employees', protect, getTeamEmployees);   
 router.put('/employees/:id', protect, upload.single('profile_picture'), updateEmployee);
