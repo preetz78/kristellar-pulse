@@ -24,7 +24,9 @@ import {
   createAdminTask,
   getAdminProjectEmployees,
   updateAdminTask,
-  deleteAdminTask
+  deleteAdminTask,
+  updateAdminProject,
+  deleteAdminProject
 } from '../controllers/adminController.js';
 
 import { changePassword } from '../controllers/authController.js';
@@ -48,6 +50,8 @@ router.delete('/users/:id', protect, deleteUser);
 
 router.post('/projects/create', protect, createAdminProject);
 router.get('/projects', getAllProjects);
+router.put('/projects/:id', protect, updateAdminProject);
+router.delete('/projects/:id', protect, deleteAdminProject);
 router.get('/projects/:id', protect, getAdminProjectById);
 router.get('/projects/:id/tasks', protect, getAdminProjectTasks);
 router.get('/projects/:id/managers', protect, getAdminProjectManagers);

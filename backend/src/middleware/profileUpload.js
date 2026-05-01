@@ -17,8 +17,8 @@ const employeeUploadDir = 'uploads/employee';
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // If employee_id is sent → it's an employee upload
-    if (req.body.employee_id) {
+    // If role is employee → it's an employee upload
+    if (req.body.role && req.body.role.toLowerCase() === 'employee') {
       cb(null, employeeUploadDir);
     } else {
       // Regular user upload (admin, manager, reviewer)
@@ -28,10 +28,10 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     let filename;
 
-    if (req.body.employee_id) {
-      // Employee: filename = employee_id + extension (e.g., KA001.jpg)
+    if (req.body.role && req.body.role.toLowerCase() === 'employee') {
+      // Employee: filename = userId + extension (e.g., KA001.jpg)
       const ext = path.extname(file.originalname).toLowerCase();
-      filename = `${req.body.employee_id}${ext}`;
+      filename = `${req.body.userId || 'employee'}${ext}`;
     } else {
       // Regular user: use name (your existing logic)
       const { name } = req.body;

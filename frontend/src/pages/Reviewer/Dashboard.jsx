@@ -21,6 +21,59 @@ const ReviewerDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // 🔥 NEW FUNCTION ADDED HERE
+  const buildProgressChart = (projectProgress) => {
+    if (!projectProgress) return null;
+
+    const progress = Array.isArray(projectProgress.progress) ? projectProgress.progress : [];
+    const normalProgress = Array.isArray(projectProgress.normalProgress)
+      ? projectProgress.normalProgress
+      : [];
+    const delayedProgress = Array.isArray(projectProgress.delayedProgress)
+      ? projectProgress.delayedProgress
+      : [];
+
+    const length = Math.max(
+      projectProgress.weeks?.length || 0,
+      progress.length,
+      normalProgress.length,
+      delayedProgress.length,
+      1
+    );
+
+    const weeks = Array.from({ length }, (_, index) => (
+      projectProgress.weeks?.[index] || `Week ${index + 1}`
+    ));
+
+    const values = Array.from({ length }, (_, index) => {
+      const value = progress[index] ?? normalProgress[index] ?? delayedProgress[index] ?? 0;
+      return Math.max(0, Math.min(100, Number(value) || 0));
+    });
+
+    const delayedStartIndex = delayedProgress.findIndex(
+      (value) => value !== null && value !== undefined
+    );
+
+    const deadlineWeekIndex = Number.isInteger(projectProgress.deadlineWeekIndex)
+      ? Math.max(0, Math.min(projectProgress.deadlineWeekIndex, length - 1))
+      : delayedStartIndex > 0
+        ? delayedStartIndex
+        : null;
+
+    const hasDelayedPoints = delayedProgress.some((value) => value !== null && value !== undefined);
+    const isDelayed = Boolean(projectProgress.isDelayed || hasDelayedPoints);
+
+    return {
+      weeks,
+      values,
+      isDelayed,
+      deadlineWeekIndex
+    };
+  };
+
+  // 🔥 PROGRESS CHART COMPUTATION
+  const progressChart = buildProgressChart(selectedProjectProgress);
+
   // Fetch dashboard data
   useEffect(() => {
     const fetchReviewerDashboard = async () => {
@@ -299,71 +352,97 @@ const ReviewerDashboard = () => {
 
           <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
             {selectedProjectProgress ? (
-              <svg viewBox="0 0 750 280" className="w-full h-full">
-                {[0, 25, 50, 75, 100].map((val, i) => (
-                  <line 
-                    key={i}
-                    x1="50" 
-                    y1={250 - val * 2} 
-                    x2="710" 
-                    y2={250 - val * 2} 
-                    stroke="#f1f5f9" 
-                    strokeWidth="1.5" 
-                  />
-                ))}
+              // Updated Progress Chart Logic
+              progressChart ? (
+                <svg viewBox="0 0 750 280" className="w-full h-full">
+                  {/* GRID */}
+                  {[0, 25, 50, 75, 100].map((val, i) => (
+                    <line 
+                      key={i}
+                      x1="50" 
+                      y1={250 - val * 2} 
+                      x2="710" 
+                      y2={250 - val * 2} 
+                      stroke="#f1f5f9" 
+                      strokeWidth="1.5" 
+                    />
+                  ))}
 
-                {selectedProjectProgress.weeks?.map((week, i) => (
-                  <text 
-                    key={i} 
-                    x={80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1))} 
-                    y="272" 
-                    className="text-xs fill-gray-500" 
-                    textAnchor="middle"
-                  >
-                    {week}
-                  </text>
-                ))}
+                  {/* WEEKS */}
+                  {progressChart.weeks.map((week, i) => (
+                    <text 
+                      key={i} 
+                      x={80 + i * (630 / Math.max(1, progressChart.weeks.length - 1))} 
+                      y="272" 
+                      className="text-xs fill-gray-500" 
+                      textAnchor="middle"
+                    >
+                      {week}
+                    </text>
+                  ))}
 
-                {[0, 25, 50, 75, 100].map((val, i) => (
-                  <text 
-                    key={i} 
-                    x="38" 
-                    y={255 - val * 2} 
-                    className="text-xs fill-gray-500" 
-                    textAnchor="end"
-                  >
-                    {val}%
-                  </text>
-                ))}
+                  {/* Y-AXIS LABELS */}
+                  {[0, 25, 50, 75, 100].map((val, i) => (
+                    <text 
+                      key={i} 
+                      x="38" 
+                      y={255 - val * 2} 
+                      className="text-xs fill-gray-500" 
+                      textAnchor="end"
+                    >
+                      {val}%
+                    </text>
+                  ))}
 
-                <g>
-                  <polyline
-                    points={selectedProjectProgress.progress.map((val, i) => {
-                      const xPos = 80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1));
-                      return `${xPos},${250 - (val * 2)}`;
-                    }).join(" ")}
-                    fill="none"
-                    stroke={selectedProjectProgress.color}
-                    strokeWidth="4.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  {selectedProjectProgress.progress.map((val, i) => {
-                    const xPos = 80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1));
+                  {/* LINE SEGMENTS */}
+                  {progressChart.values.slice(0, -1).map((value, i) => {
+                    const x1 = 80 + i * (630 / Math.max(1, progressChart.weeks.length - 1));
+                    const x2 = 80 + (i + 1) * (630 / Math.max(1, progressChart.weeks.length - 1));
+
+                    const isDelayedSegment = progressChart.isDelayed
+                      && progressChart.deadlineWeekIndex !== null
+                      && i >= progressChart.deadlineWeekIndex;
+
+                    return (
+                      <line
+                        key={i}
+                        x1={x1}
+                        y1={250 - value * 2}
+                        x2={x2}
+                        y2={250 - progressChart.values[i + 1] * 2}
+                        stroke={isDelayedSegment ? "#ef4444" : "#10b981"}
+                        strokeWidth="4.5"
+                        strokeLinecap="round"
+                      />
+                    );
+                  })}
+
+                  {/* POINTS */}
+                  {progressChart.values.map((value, i) => {
+                    const xPos = 80 + i * (630 / Math.max(1, progressChart.weeks.length - 1));
+
+                    const isDelayedPoint = progressChart.isDelayed
+                      && progressChart.deadlineWeekIndex !== null
+                      && i > progressChart.deadlineWeekIndex;
+
                     return (
                       <circle
                         key={i}
                         cx={xPos}
-                        cy={250 - (val * 2)}
+                        cy={250 - value * 2}
                         r="4.5"
-                        fill={selectedProjectProgress.color}
-                        stroke="#ffffff"
+                        fill={isDelayedPoint ? "#ef4444" : "#10b981"}
+                        stroke="#fff"
                         strokeWidth="2"
                       />
                     );
                   })}
-                </g>
-              </svg>
+                </svg>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-400">
+                  Select a project to view its weekly progress
+                </div>
+              )
             ) : (
               <div className="h-full flex items-center justify-center text-gray-400">
                 Select a project to view its weekly progress

@@ -552,18 +552,28 @@ export const getAllProjects = async (req, res) => {
       SELECT 
         p.id,
         p.project_id AS idCode,
+        p.project_id,
         p.name AS title,
+        p.name,
+        p.description,
+        p.department_id,
+        p.manager_id,
         p.project_manager_name AS manager,
+        p.project_manager_name,
         p.team_size,
+        p.start_date,
         p.deadline,
         p.priority,
         p.created_at,
-        COUNT(t.id) AS total_tasks,
-        SUM(CASE WHEN t.status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks
+        COUNT(DISTINCT t.id) AS total_tasks,
+        COUNT(DISTINCT CASE WHEN t.status = 'Completed' THEN t.id END) AS completed_tasks,
+        GROUP_CONCAT(DISTINCT pa.employee_id ORDER BY pa.employee_id) AS assigned_employee_ids
       FROM projects p
       LEFT JOIN tasks t ON t.project_id = p.id
+      LEFT JOIN project_assignments pa ON pa.project_id = p.id
       GROUP BY p.id, p.project_id, p.name, p.project_manager_name, 
-               p.team_size, p.deadline, p.priority, p.created_at
+               p.description, p.department_id, p.manager_id, p.team_size, 
+               p.start_date, p.deadline, p.priority, p.created_at
       ORDER BY p.created_at DESC
     `);
 
@@ -592,15 +602,30 @@ export const getAllProjects = async (req, res) => {
       return {
         id: project.id,
         idCode: project.idCode || `PRJ-${String(project.id).padStart(3, '0')}`,
+        project_id: project.project_id || project.idCode,
         title: project.title || "Untitled Project",
+        name: project.name || project.title || "Untitled Project",
+        description: project.description || "",
+        department_id: project.department_id,
+        manager_id: project.manager_id,
         manager: project.manager || "Not Assigned",
+        project_manager_name: project.project_manager_name || project.manager || "",
+        start_date: project.start_date
+          ? (typeof project.start_date === 'string' ? project.start_date : project.start_date.toISOString().split('T')[0])
+          : "",
         teamSize: project.team_size 
           ? `${project.team_size} Members` 
           : "0 Members",
+        team_size: Number(project.team_size) || 0,
         deadline: formattedDeadline,
         progress: progress,
         priority: project.priority || "Medium",
-        status: status
+        status: status,
+        total_tasks: Number(project.total_tasks) || 0,
+        completed_tasks: Number(project.completed_tasks) || 0,
+        assigned_employee_ids: project.assigned_employee_ids
+          ? project.assigned_employee_ids.split(',').map(id => Number(id.trim())).filter(Boolean)
+          : []
       };
     });
 
@@ -619,6 +644,203 @@ export const getAllProjects = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: "Failed to fetch projects from database" 
+    });
+  }
+};
+
+export const updateAdminProject = async (req, res) => {
+  const { id } = req.params;
+  const {
+    project_id,
+    name,
+    description,
+    department_id,
+    manager_id,
+    assigned_employee_ids,
+    start_date,
+    deadline,
+    priority
+  } = req.body;
+
+  const adminId = req.user.id;
+
+  if (!project_id || !name || !department_id || !deadline) {
+    return res.status(400).json({
+      success: false,
+      message: "Project ID, Name, Department and Deadline are required"
+    });
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [projectRows] = await connection.execute(
+      `SELECT id FROM projects WHERE id = ?`,
+      [id]
+    );
+
+    if (projectRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Project not found"
+      });
+    }
+
+    const [departmentRows] = await connection.execute(
+      `SELECT id FROM departments WHERE id = ?`,
+      [department_id]
+    );
+
+    if (departmentRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Department not found"
+      });
+    }
+
+    let managerName = null;
+
+    if (manager_id) {
+      const [managerRows] = await connection.execute(
+        `
+        SELECT id, name
+        FROM users
+        WHERE id = ?
+          AND role = 'manager'
+          AND department_id = ?
+        `,
+        [manager_id, department_id]
+      );
+
+      if (managerRows.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Selected manager does not belong to this department"
+        });
+      }
+
+      managerName = managerRows[0].name;
+    }
+
+    const requestedEmployeeIds = Array.isArray(assigned_employee_ids)
+      ? assigned_employee_ids.map(Number).filter(Boolean)
+      : [];
+
+    let validEmployeeIds = [];
+
+    if (requestedEmployeeIds.length > 0) {
+      const placeholders = requestedEmployeeIds.map(() => "?").join(",");
+      const [employeeRows] = await connection.execute(
+        `
+        SELECT id
+        FROM employees
+        WHERE department_id = ?
+          AND id IN (${placeholders})
+        `,
+        [department_id, ...requestedEmployeeIds]
+      );
+
+      validEmployeeIds = employeeRows.map(employee => employee.id);
+    }
+
+    await connection.execute(
+      `
+      UPDATE projects
+      SET project_id = ?,
+          name = ?,
+          description = ?,
+          department_id = ?,
+          manager_id = ?,
+          project_manager_name = ?,
+          start_date = ?,
+          deadline = ?,
+          team_size = ?,
+          priority = ?
+      WHERE id = ?
+      `,
+      [
+        project_id,
+        name,
+        description || null,
+        department_id,
+        manager_id || null,
+        managerName,
+        start_date || null,
+        deadline,
+        validEmployeeIds.length,
+        priority || "Medium",
+        id
+      ]
+    );
+
+    await connection.execute(
+      `DELETE FROM project_assignments WHERE project_id = ?`,
+      [id]
+    );
+
+    for (const employeeId of validEmployeeIds) {
+      await connection.execute(
+        `
+        INSERT INTO project_assignments (project_id, employee_id, assigned_by)
+        VALUES (?, ?, ?)
+        `,
+        [id, employeeId, adminId]
+      );
+    }
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: "Project updated successfully"
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Update admin project error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update project"
+    });
+  } finally {
+    connection.release();
+  }
+};
+
+export const deleteAdminProject = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [projectRows] = await pool.execute(
+      `SELECT id FROM projects WHERE id = ?`,
+      [id]
+    );
+
+    if (projectRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found"
+      });
+    }
+
+    await pool.execute(
+      `DELETE FROM projects WHERE id = ?`,
+      [id]
+    );
+
+    res.json({
+      success: true,
+      message: "Project deleted successfully"
+    });
+  } catch (error) {
+    console.error("Delete admin project error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to delete project"
     });
   }
 };
@@ -862,6 +1084,23 @@ export const getAllAdminTasks = async (req, res) => {
 // Get Dashboard Statistics (without weekly progress chart)
 export const getDashboardStats = async (req, res) => {
   try {
+    const userRole = req.user?.role?.toLowerCase();
+    let departmentFilter = '';
+    let params = [];
+
+    // If user is a reviewer, get their department and filter by it
+    if (userRole === 'reviewer') {
+      const [deptRows] = await pool.execute(
+        `SELECT department_id FROM users WHERE id = ?`,
+        [req.user.id]
+      );
+      const departmentId = deptRows[0]?.department_id;
+      if (departmentId) {
+        departmentFilter = ' WHERE p.department_id = ?';
+        params = [departmentId];
+      }
+    }
+
     // Total, Active, and Completed Projects
     const [projectStats] = await pool.execute(`
       SELECT 
@@ -911,10 +1150,11 @@ export const getDashboardStats = async (req, res) => {
         ) AS active_projects
 
       FROM projects p
-    `);
+      ${departmentFilter}
+    `, params);
 
-    // Overall Completion % based on tasks (Global)
-    const [completionStats] = await pool.execute(`
+    // Overall Completion % based on tasks (filtered by department for reviewers)
+    let completionQuery = `
       SELECT 
         COUNT(*) AS total_tasks,
         SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks,
@@ -923,17 +1163,40 @@ export const getDashboardStats = async (req, res) => {
             SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0),
             0
           ), 0) AS overall_completion
-      FROM tasks
-    `);
+      FROM tasks t`;
+    
+    let completionParams = [];
+    if (userRole === 'reviewer') {
+      const [deptRows] = await pool.execute(
+        `SELECT department_id FROM users WHERE id = ?`,
+        [req.user.id]
+      );
+      const departmentId = deptRows[0]?.department_id;
+      if (departmentId) {
+        completionQuery += ` JOIN projects p ON t.project_id = p.id WHERE p.department_id = ?`;
+        completionParams = [departmentId];
+      }
+    }
 
-    // Fetch all projects for the dropdown in frontend
-    const [allProjects] = await pool.execute(`
-      SELECT 
-        id, 
-        name 
-      FROM projects 
-      ORDER BY name ASC
-    `);
+    const [completionStats] = await pool.execute(completionQuery, completionParams);
+
+    // Fetch projects for the dropdown in frontend
+    let projectsQuery = `SELECT id, name FROM projects`;
+    let projectsParams = [];
+    if (userRole === 'reviewer') {
+      const [deptRows] = await pool.execute(
+        `SELECT department_id FROM users WHERE id = ?`,
+        [req.user.id]
+      );
+      const departmentId = deptRows[0]?.department_id;
+      if (departmentId) {
+        projectsQuery += ` WHERE department_id = ?`;
+        projectsParams = [departmentId];
+      }
+    }
+    projectsQuery += ` ORDER BY name ASC`;
+
+    const [allProjects] = await pool.execute(projectsQuery, projectsParams);
 
     const stats = projectStats[0] || {};
     const completion = completionStats[0] || {};
@@ -988,7 +1251,7 @@ export const getProjectProgress = async (req, res) => {
     const projectsProgress = [];
     const projectGroups = {};
 
-    // 🔹 Group tasks by project
+    // 🔹 GROUP PROJECTS
     rows.forEach(row => {
       if (!projectGroups[row.id]) {
         projectGroups[row.id] = {
@@ -1008,36 +1271,66 @@ export const getProjectProgress = async (req, res) => {
       }
     });
 
-    // 🔹 Process each project
+    // 🔹 PROCESS EACH PROJECT
     for (const proj of Object.values(projectGroups)) {
+
       const totalTasks = proj.tasks.length;
 
+      // Fallback
       if (!proj.start_date || !proj.deadline || totalTasks === 0) {
         projectsProgress.push({
           id: proj.id,
           name: proj.name,
-          color: "#3b82f6",
           weeks: ["Week 1", "Week 2", "Week 3", "Week 4"],
-          progress: [0, 0, 0, 0]
+          normalProgress: [0, 0, 0, 0],
+          delayedProgress: [null, null, null, null],
+          isDelayed: false
         });
         continue;
       }
 
       const start = new Date(proj.start_date);
-      const end = new Date(proj.deadline);
+      const deadline = new Date(proj.deadline);
 
-      const totalDays = Math.ceil((end - start) / (1000 * 3600 * 24));
-      const numWeeks = Math.ceil(totalDays / 7); // ✅ real weeks
+      // 🔹 Completed tasks
+      const completedTasks = proj.tasks.filter(
+        t => t.status === "Completed" && t.completed_at
+      );
+
+      let actualEndDate = null;
+
+      if (completedTasks.length === totalTasks) {
+        actualEndDate = new Date(
+          Math.max(...completedTasks.map(t => new Date(t.completed_at)))
+        );
+      }
+
+      // 🔹 Dynamic END DATE
+      let end;
+
+      if (actualEndDate) {
+        end = actualEndDate; // stop at completion
+      } else {
+        const today = new Date();
+        end = today > deadline ? today : deadline;
+      }
+
+      const totalDays = Math.max(
+        1,
+        Math.ceil((end - start) / (1000 * 3600 * 24))
+      );
+
+      const numWeeks = Math.max(1, Math.ceil(totalDays / 7));
 
       const weeklyProgress = [];
       let prevWeekStart = new Date(start);
       let cumulativeCompleted = 0;
 
+      // 🔹 WEEKLY PROGRESS
       for (let i = 1; i <= numWeeks; i++) {
         const weekEnd = new Date(start);
-        weekEnd.setDate(start.getDate() + (i * 7)); // ✅ proper 7-day buckets
+        weekEnd.setDate(start.getDate() + (i * 7));
 
-        // 🔹 Tasks completed in this week
         const completedThisWeek = proj.tasks.filter(task => {
           if (task.status !== 'Completed' || !task.completed_at) return false;
 
@@ -1049,7 +1342,6 @@ export const getProjectProgress = async (req, res) => {
           );
         }).length;
 
-        // 🔹 Cumulative logic
         cumulativeCompleted += completedThisWeek;
 
         const percentage = totalTasks > 0
@@ -1058,19 +1350,45 @@ export const getProjectProgress = async (req, res) => {
 
         weeklyProgress.push(Math.min(100, percentage));
 
-        // Move to next week
         prevWeekStart = weekEnd;
       }
 
-      const colors = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444"];
-      const color = colors[(proj.id % colors.length)];
+      // 🔹 DELAY LOGIC (same as manager)
+      const isCompletedOnTime = actualEndDate && actualEndDate <= deadline;
+      const isDelayed = !isCompletedOnTime && end > deadline;
+
+      let deadlineWeekIndex = Math.ceil(
+        (deadline - start) / (1000 * 3600 * 24 * 7)
+      ) - 1;
+
+      if (deadlineWeekIndex < 0) deadlineWeekIndex = 0;
+      if (deadlineWeekIndex >= weeklyProgress.length) {
+        deadlineWeekIndex = weeklyProgress.length - 1;
+      }
+
+      let normalProgress = [...weeklyProgress];
+      let delayedProgress = Array(weeklyProgress.length).fill(null);
+
+      if (isDelayed) {
+        normalProgress = weeklyProgress.map((val, idx) =>
+          idx <= deadlineWeekIndex ? val : null
+        );
+
+        delayedProgress = weeklyProgress.map((val, idx) =>
+          idx > deadlineWeekIndex ? val : null
+        );
+      }
 
       projectsProgress.push({
         id: proj.id,
         name: proj.name,
-        color: color,
+        startDate: proj.start_date,
+        deadline: proj.deadline,
+        deadlineWeekIndex,
         weeks: Array.from({ length: numWeeks }, (_, i) => `Week ${i + 1}`),
-        progress: weeklyProgress
+        normalProgress,
+        delayedProgress,
+        isDelayed
       });
     }
 

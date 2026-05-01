@@ -6,20 +6,50 @@ import apiConfig from "../../config/apiConfig";
 
 const EmployeeDashboard = () => {
   const navigate = useNavigate();
-
   const [stats, setStats] = useState({
     totalProjects: 0,
     activeTasks: 0,
     completedTasks: 0,
     overallCompletion: 0,
   });
-
-  const [myProjects, setMyProjects] = useState([]);                    
+  const [myProjects, setMyProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // 🔥 STEP 1: buildProgressChart FUNCTION
+  const buildProgressChart = (projectProgress) => {
+    if (!projectProgress) return null;
+
+    const normal = projectProgress.normalProgress || [];
+    const delayed = projectProgress.delayedProgress || [];
+
+    const length = Math.max(
+      projectProgress.weeks?.length || 0,
+      normal.length,
+      delayed.length,
+      1
+    );
+
+    const weeks = Array.from({ length }, (_, i) =>
+      projectProgress.weeks?.[i] || `Week ${i + 1}`
+    );
+
+    const values = Array.from({ length }, (_, i) =>
+      normal[i] ?? delayed[i] ?? 0
+    );
+
+    const deadlineWeekIndex =
+      projectProgress.deadlineWeekIndex ?? null;
+
+    const isDelayed = projectProgress.isDelayed;
+
+    return { weeks, values, deadlineWeekIndex, isDelayed };
+  };
+
+  // 🔥 STEP 2: Compute progressChart
+  const progressChart = buildProgressChart(selectedProjectProgress);
 
   // Fetch dashboard stats
   useEffect(() => {
@@ -27,7 +57,6 @@ const EmployeeDashboard = () => {
       try {
         setLoading(true);
         const token = sessionStorage.getItem("token");
-
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/dashboard`, {
           method: "GET",
           headers: {
@@ -35,13 +64,10 @@ const EmployeeDashboard = () => {
             "Content-Type": "application/json"
           }
         });
-
         if (!response.ok) {
           throw new Error(`Server responded with status: ${response.status}`);
         }
-
         const result = await response.json();
-
         if (result.success) {
           setStats(result.stats);
         } else {
@@ -54,7 +80,6 @@ const EmployeeDashboard = () => {
         setLoading(false);
       }
     };
-
     fetchEmployeeDashboard();
   }, []);
 
@@ -63,7 +88,6 @@ const EmployeeDashboard = () => {
     const fetchMyProjects = async () => {
       try {
         const token = sessionStorage.getItem("token");
-
         const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/projects`, {
           method: "GET",
           headers: {
@@ -71,18 +95,13 @@ const EmployeeDashboard = () => {
             "Content-Type": "application/json"
           }
         });
-
         const result = await response.json();
-
         if (result.success && result.data) {
           const allProjects = result.data || [];
-
-          const sortedProjects = [...allProjects].sort((a, b) => 
+          const sortedProjects = [...allProjects].sort((a, b) =>
             new Date(b.created_at || 0) - new Date(a.created_at || 0)
           );
-
           setMyProjects(sortedProjects);
-
           if (sortedProjects.length > 0) {
             setSelectedProjectId(sortedProjects[0].id);
           }
@@ -91,7 +110,6 @@ const EmployeeDashboard = () => {
         console.error("Failed to fetch my projects:", err);
       }
     };
-
     fetchMyProjects();
   }, []);
 
@@ -101,11 +119,9 @@ const EmployeeDashboard = () => {
       setSelectedProjectProgress(null);
       return;
     }
-
     const fetchProjectProgress = async () => {
       try {
         const token = sessionStorage.getItem("token");
-
         const response = await fetch(
           `${apiConfig.API_BASE_URL}/api/employee/project-progress?projectId=${selectedProjectId}`,
           {
@@ -116,9 +132,7 @@ const EmployeeDashboard = () => {
             }
           }
         );
-
         const result = await response.json();
-
         if (result.success && result.data && result.data.length > 0) {
           setSelectedProjectProgress(result.data[0]);
         } else {
@@ -129,26 +143,23 @@ const EmployeeDashboard = () => {
         setSelectedProjectProgress(null);
       }
     };
-
     fetchProjectProgress();
   }, [selectedProjectId]);
 
   // Navigation Handlers
   const goToMyProjects = () => {
-    navigate("/employee/projects", { 
-      state: { activeFilter: "All Projects" } 
+    navigate("/employee/projects", {
+      state: { activeFilter: "All Projects" }
     });
   };
-
   const goToActiveTasks = () => {
-    navigate("/employee/task-insights", { 
-      state: { filter: "In Progress" } 
+    navigate("/employee/task-insights", {
+      state: { filter: "In Progress" }
     });
   };
-
   const goToCompletedTasks = () => {
-    navigate("/employee/task-insights", { 
-      state: { filter: "Completed" } 
+    navigate("/employee/task-insights", {
+      state: { filter: "Completed" }
     });
   };
 
@@ -162,7 +173,6 @@ const EmployeeDashboard = () => {
       </div>
     );
   }
-
   if (error) {
     return (
       <div className="p-6 bg-white min-h-screen flex items-center justify-center text-red-600">
@@ -254,7 +264,7 @@ const EmployeeDashboard = () => {
         </div>
       </div>
 
-      {/* Graphs Section - Unchanged */}
+      {/* Graphs Section */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* My Task Completion Circle */}
         <div className="lg:col-span-2 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
@@ -266,7 +276,6 @@ const EmployeeDashboard = () => {
               This Month
             </span>
           </div>
-
           <div className="flex justify-center my-8 group-hover:scale-105 transition-transform">
             <div className="relative w-52 h-52">
               <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
@@ -289,14 +298,12 @@ const EmployeeDashboard = () => {
                   </linearGradient>
                 </defs>
               </svg>
-
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-5xl font-bold text-gray-900">{stats.overallCompletion}%</span>
                 <span className="text-sm text-gray-500 font-medium mt-1">COMPLETED</span>
               </div>
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
               <p className="text-xs text-blue-600 font-semibold">COMPLETED</p>
@@ -316,7 +323,6 @@ const EmployeeDashboard = () => {
               <h3 className="text-lg font-semibold text-gray-800">My Progress Trend</h3>
               <p className="text-xs text-gray-500">Weekly progress based on my task completions</p>
             </div>
-
             <select
               value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -331,26 +337,27 @@ const EmployeeDashboard = () => {
           </div>
 
           <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
-            {selectedProjectProgress ? (
+            {/* 🔥 STEP 3: Changed condition to progressChart */}
+            {progressChart ? (
               <svg viewBox="0 0 750 280" className="w-full h-full">
                 {[0, 25, 50, 75, 100].map((val, i) => (
-                  <line 
+                  <line
                     key={i}
-                    x1="50" 
-                    y1={250 - val * 2} 
-                    x2="710" 
-                    y2={250 - val * 2} 
-                    stroke="#f1f5f9" 
-                    strokeWidth="1.5" 
+                    x1="50"
+                    y1={250 - val * 2}
+                    x2="710"
+                    y2={250 - val * 2}
+                    stroke="#f1f5f9"
+                    strokeWidth="1.5"
                   />
                 ))}
 
-                {selectedProjectProgress.weeks?.map((week, i) => (
-                  <text 
-                    key={i} 
-                    x={80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1))} 
-                    y="272" 
-                    className="text-xs fill-gray-500" 
+                {progressChart.weeks.map((week, i) => (
+                  <text
+                    key={i}
+                    x={80 + i * (630 / Math.max(1, progressChart.weeks.length - 1))}
+                    y="272"
+                    className="text-xs fill-gray-500"
                     textAnchor="middle"
                   >
                     {week}
@@ -358,11 +365,11 @@ const EmployeeDashboard = () => {
                 ))}
 
                 {[0, 25, 50, 75, 100].map((val, i) => (
-                  <text 
-                    key={i} 
-                    x="38" 
-                    y={255 - val * 2} 
-                    className="text-xs fill-gray-500" 
+                  <text
+                    key={i}
+                    x="38"
+                    y={255 - val * 2}
+                    className="text-xs fill-gray-500"
                     textAnchor="end"
                   >
                     {val}%
@@ -370,27 +377,47 @@ const EmployeeDashboard = () => {
                 ))}
 
                 <g>
-                  <polyline
-                    points={selectedProjectProgress.progress.map((val, i) => {
-                      const xPos = 80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1));
-                      return `${xPos},${250 - (val * 2)}`;
-                    }).join(" ")}
-                    fill="none"
-                    stroke={selectedProjectProgress.color || "#3b82f6"}
-                    strokeWidth="4.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  {selectedProjectProgress.progress.map((val, i) => {
-                    const xPos = 80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1));
+                  {/* 🔥 STEP 4: Segmented Line */}
+                  {progressChart.values.slice(0, -1).map((val, i) => {
+                    const x1 = 80 + i * (630 / Math.max(1, progressChart.weeks.length - 1));
+                    const x2 = 80 + (i + 1) * (630 / Math.max(1, progressChart.weeks.length - 1));
+
+                    const isDelayedSegment =
+                      progressChart.isDelayed &&
+                      progressChart.deadlineWeekIndex !== null &&
+                      i >= progressChart.deadlineWeekIndex;
+
+                    return (
+                      <line
+                        key={i}
+                        x1={x1}
+                        y1={250 - val * 2}
+                        x2={x2}
+                        y2={250 - progressChart.values[i + 1] * 2}
+                        stroke={isDelayedSegment ? "#ef4444" : "#10b981"}
+                        strokeWidth="4.5"
+                        strokeLinecap="round"
+                      />
+                    );
+                  })}
+
+                  {/* 🔥 STEP 5: Colored Points */}
+                  {progressChart.values.map((val, i) => {
+                    const xPos = 80 + i * (630 / Math.max(1, progressChart.weeks.length - 1));
+
+                    const isDelayedPoint =
+                      progressChart.isDelayed &&
+                      progressChart.deadlineWeekIndex !== null &&
+                      i > progressChart.deadlineWeekIndex;
+
                     return (
                       <circle
                         key={i}
                         cx={xPos}
-                        cy={250 - (val * 2)}
+                        cy={250 - val * 2}
                         r="4.5"
-                        fill={selectedProjectProgress.color || "#3b82f6"}
-                        stroke="#ffffff"
+                        fill={isDelayedPoint ? "#ef4444" : "#10b981"}
+                        stroke="#fff"
                         strokeWidth="2"
                       />
                     );
@@ -404,12 +431,13 @@ const EmployeeDashboard = () => {
             )}
           </div>
 
+          {/* 🔥 STEP 6: Updated Legend Color to Green */}
           {selectedProjectProgress && (
             <div className="mt-6 flex justify-center">
               <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border border-gray-100 shadow-sm">
-                <div 
-                  className="w-5 h-0.5 rounded" 
-                  style={{ backgroundColor: selectedProjectProgress.color || "#3b82f6" }}
+                <div
+                  className="w-5 h-0.5 rounded"
+                  style={{ backgroundColor: "#10b981" }}
                 />
                 <span className="text-sm font-medium text-gray-700">
                   {selectedProjectProgress.name}

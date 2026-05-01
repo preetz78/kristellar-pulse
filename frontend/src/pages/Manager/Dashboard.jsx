@@ -4,6 +4,55 @@ import { useNavigate } from "react-router-dom";
 import { Briefcase, Clock, CheckCircle, TrendingUp } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
+const buildProgressChart = (projectProgress) => {
+  if (!projectProgress) return null;
+
+  const progress = Array.isArray(projectProgress.progress) ? projectProgress.progress : [];
+  const normalProgress = Array.isArray(projectProgress.normalProgress)
+    ? projectProgress.normalProgress
+    : [];
+  const delayedProgress = Array.isArray(projectProgress.delayedProgress)
+    ? projectProgress.delayedProgress
+    : [];
+
+  const length = Math.max(
+    projectProgress.weeks?.length || 0,
+    progress.length,
+    normalProgress.length,
+    delayedProgress.length,
+    1
+  );
+
+  const weeks = Array.from({ length }, (_, index) => (
+    projectProgress.weeks?.[index] || `Week ${index + 1}`
+  ));
+
+  const values = Array.from({ length }, (_, index) => {
+    const value = progress[index] ?? normalProgress[index] ?? delayedProgress[index] ?? 0;
+    return Math.max(0, Math.min(100, Number(value) || 0));
+  });
+
+  const delayedStartIndex = delayedProgress.findIndex(
+    (value) => value !== null && value !== undefined
+  );
+
+  const deadlineWeekIndex = Number.isInteger(projectProgress.deadlineWeekIndex)
+    ? Math.max(0, Math.min(projectProgress.deadlineWeekIndex, length - 1))
+    : delayedStartIndex > 0
+      ? delayedStartIndex
+      : null;
+
+  const hasDelayedPoints = delayedProgress.some((value) => value !== null && value !== undefined);
+  const isDelayed = Boolean(projectProgress.isDelayed || hasDelayedPoints);
+
+  return {
+    weeks,
+    values,
+    isDelayed,
+    deadlineWeekIndex
+  };
+};
+
 const ManagerDashboard = () => {
   const navigate = useNavigate();
 
@@ -115,6 +164,8 @@ const ManagerDashboard = () => {
       state: { activeFilter: filter } 
     });
   };
+
+  const progressChart = buildProgressChart(selectedProjectProgress);
 
   if (loading) {
     return (
@@ -298,7 +349,7 @@ const ManagerDashboard = () => {
           </div>
 
           <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
-            {selectedProjectProgress ? (
+            {progressChart ? (
               <svg viewBox="0 0 750 280" className="w-full h-full">
                 {[0, 25, 50, 75, 100].map((val, i) => (
                   <line 
@@ -312,10 +363,10 @@ const ManagerDashboard = () => {
                   />
                 ))}
 
-                {selectedProjectProgress.weeks?.map((week, i) => (
+                {progressChart.weeks.map((week, i) => (
                   <text 
                     key={i} 
-                    x={80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1))} 
+                    x={80 + i * (630 / Math.max(1, progressChart.weeks.length - 1))} 
                     y="272" 
                     className="text-xs fill-gray-500" 
                     textAnchor="middle"
@@ -337,26 +388,40 @@ const ManagerDashboard = () => {
                 ))}
 
                 <g>
-                  <polyline
-                    points={selectedProjectProgress.progress.map((val, i) => {
-                      const xPos = 80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1));
-                      return `${xPos},${250 - (val * 2)}`;
-                    }).join(" ")}
-                    fill="none"
-                    stroke={selectedProjectProgress.color}
-                    strokeWidth="4.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  {selectedProjectProgress.progress.map((val, i) => {
-                    const xPos = 80 + i * (630 / Math.max(1, selectedProjectProgress.weeks.length - 1));
+                  {progressChart.values.slice(0, -1).map((value, i) => {
+                    const x1 = 80 + i * (630 / Math.max(1, progressChart.weeks.length - 1));
+                    const x2 = 80 + (i + 1) * (630 / Math.max(1, progressChart.weeks.length - 1));
+                    const isDelayedSegment = progressChart.isDelayed
+                      && progressChart.deadlineWeekIndex !== null
+                      && i >= progressChart.deadlineWeekIndex;
+
+                    return (
+                      <line
+                        key={`segment-${i}`}
+                        x1={x1}
+                        y1={250 - (value * 2)}
+                        x2={x2}
+                        y2={250 - (progressChart.values[i + 1] * 2)}
+                        stroke={isDelayedSegment ? "#ef4444" : "#10b981"}
+                        strokeWidth="4.5"
+                        strokeLinecap="round"
+                      />
+                    );
+                  })}
+
+                  {progressChart.values.map((value, i) => {
+                    const xPos = 80 + i * (630 / Math.max(1, progressChart.weeks.length - 1));
+                    const isDelayedPoint = progressChart.isDelayed
+                      && progressChart.deadlineWeekIndex !== null
+                      && i > progressChart.deadlineWeekIndex;
+
                     return (
                       <circle
-                        key={i}
+                        key={`point-${i}`}
                         cx={xPos}
-                        cy={250 - (val * 2)}
+                        cy={250 - (value * 2)}
                         r="4.5"
-                        fill={selectedProjectProgress.color}
+                        fill={isDelayedPoint ? "#ef4444" : "#10b981"}
                         stroke="#ffffff"
                         strokeWidth="2"
                       />
@@ -374,13 +439,16 @@ const ManagerDashboard = () => {
           {selectedProjectProgress && (
             <div className="mt-6 flex justify-center">
               <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border border-gray-100 shadow-sm">
-                <div 
-                  className="w-5 h-0.5 rounded" 
-                  style={{ backgroundColor: selectedProjectProgress.color }}
-                />
-                <span className="text-sm font-medium text-gray-700">
-                  {selectedProjectProgress.name}
-                </span>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-0.5 bg-emerald-500"></div>
+                    <span className="text-sm text-gray-600">On Track</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-0.5 bg-red-500"></div>
+                    <span className="text-sm text-gray-600">Delayed</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}

@@ -300,10 +300,7 @@ export const getEmployeeProjectProgress = async (req, res) => {
     const proj = projects[0];
 
     const start = new Date(proj.start_date);
-    const end = new Date(proj.deadline);
-
-    const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-    const numWeeks = Math.ceil(totalDays / 7); // ✅ real weeks
+    const deadline = new Date(proj.deadline);
 
     // 🔹 Parse tasks safely
     let taskList = [];
@@ -313,18 +310,50 @@ export const getEmployeeProjectProgress = async (req, res) => {
       taskList = [];
     }
 
-    // Remove null tasks (important for LEFT JOIN)
+    // Remove null tasks
     taskList = taskList.filter(t => t.id !== null);
 
     const totalTasks = taskList.length;
 
+    // 🔹 Find completed tasks
+    const completedTasks = taskList.filter(
+      t => t.status === "Completed" && t.completed_at
+    );
+
+    // 🔹 Find actual completion date (if all tasks done)
+    let actualEndDate = null;
+
+    if (completedTasks.length === totalTasks && totalTasks > 0) {
+      actualEndDate = new Date(
+        Math.max(...completedTasks.map(t => new Date(t.completed_at)))
+      );
+    }
+
+    // 🔹 Dynamic END date
+    let end;
+
+    if (actualEndDate) {
+      end = actualEndDate;
+    } else {
+      const today = new Date();
+      end = today > deadline ? today : deadline;
+    }
+
+    const totalDays = Math.max(
+      1,
+      Math.ceil((end - start) / (1000 * 3600 * 24))
+    );
+
+    const numWeeks = Math.max(1, Math.ceil(totalDays / 7));
+
     const weeklyProgress = [];
     let prevWeekStart = new Date(start);
-    let cumulativeCompleted = 0; // ✅ key fix
+    let cumulativeCompleted = 0;
 
+    // 🔹 Weekly calculation
     for (let i = 1; i <= numWeeks; i++) {
       const weekEnd = new Date(start);
-      weekEnd.setDate(start.getDate() + (i * 7)); // ✅ proper weekly buckets
+      weekEnd.setDate(start.getDate() + (i * 7));
 
       const completedThisWeek = taskList.filter(task => {
         if (task.status !== 'Completed' || !task.completed_at) return false;
@@ -337,7 +366,6 @@ export const getEmployeeProjectProgress = async (req, res) => {
         );
       }).length;
 
-      // ✅ cumulative logic
       cumulativeCompleted += completedThisWeek;
 
       const percentage = totalTasks > 0
@@ -349,15 +377,42 @@ export const getEmployeeProjectProgress = async (req, res) => {
       prevWeekStart = weekEnd;
     }
 
-    const colors = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444"];
-    const color = colors[(proj.id % colors.length)];
+    // 🔹 Delay logic
+    const isCompletedOnTime = actualEndDate && actualEndDate <= deadline;
+    const isDelayed = !isCompletedOnTime && end > deadline;
+
+    let deadlineWeekIndex = Math.ceil(
+      (deadline - start) / (1000 * 3600 * 24 * 7)
+    ) - 1;
+
+    if (deadlineWeekIndex < 0) deadlineWeekIndex = 0;
+    if (deadlineWeekIndex >= weeklyProgress.length) {
+      deadlineWeekIndex = weeklyProgress.length - 1;
+    }
+
+    let normalProgress = [...weeklyProgress];
+    let delayedProgress = Array(weeklyProgress.length).fill(null);
+
+    if (isDelayed) {
+      normalProgress = weeklyProgress.map((val, idx) =>
+        idx <= deadlineWeekIndex ? val : null
+      );
+
+      delayedProgress = weeklyProgress.map((val, idx) =>
+        idx > deadlineWeekIndex ? val : null
+      );
+    }
 
     const progressData = {
       id: proj.id,
       name: proj.name,
-      color: color,
+      startDate: proj.start_date,
+      deadline: proj.deadline,
+      deadlineWeekIndex,
       weeks: Array.from({ length: numWeeks }, (_, i) => `Week ${i + 1}`),
-      progress: weeklyProgress
+      normalProgress,
+      delayedProgress,
+      isDelayed
     };
 
     res.json({

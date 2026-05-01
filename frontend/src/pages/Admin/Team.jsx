@@ -95,7 +95,7 @@ const Team = () => {
       setTeamMembers(
         users.map((u, i) => ({
           id: u.id,
-          memberKey: `user-${u.id}`,
+          memberKey: `user-${u.entity_type}-${u.id}`,
           name: u.name,
           email: u.email,
           role: u.role ? u.role.charAt(0).toUpperCase() + u.role.slice(1) : "Employee",

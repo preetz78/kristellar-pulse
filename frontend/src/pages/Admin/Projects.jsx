@@ -7,7 +7,9 @@ import {
   TrendingUp,
   Search,
   Plus,
-  X
+  X,
+  Edit2,
+  Trash2
 } from "lucide-react";
 
 import apiConfig from "../../config/apiConfig";
@@ -29,6 +31,9 @@ const Projects = () => {
 
   // Modal states
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [projectToDelete, setProjectToDelete] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [departmentManagers, setDepartmentManagers] = useState([]);
   const [departmentEmployees, setDepartmentEmployees] = useState([]);
@@ -47,6 +52,7 @@ const Projects = () => {
   });
 
   const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [editSelectedEmployees, setEditSelectedEmployees] = useState([]);
 
   // Apply filter when coming from Dashboard
   useEffect(() => {
@@ -60,42 +66,42 @@ const Projects = () => {
     }
   }, [location.state]);
 
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const token = sessionStorage.getItem("token");
+
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/projects`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        setProjects(result.data || []);
+      } else {
+        setError(result.message || "Failed to load projects");
+      }
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+      setError("Failed to connect to server. Please check if backend is running.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch projects from backend
   useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const token = sessionStorage.getItem("token");
-
-        const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/projects`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Server responded with status: ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (result.success) {
-          setProjects(result.data || []);
-        } else {
-          setError(result.message || "Failed to load projects");
-        }
-      } catch (err) {
-        console.error("Error fetching projects:", err);
-        setError("Failed to connect to server. Please check if backend is running.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchProjects();
   }, []);
 
@@ -268,14 +274,25 @@ const Projects = () => {
     setDepartmentEmployees([]);
   };
 
-  const handleDepartmentChange = async (departmentId) => {
-    setFormData((prev) => ({
-      ...prev,
-      department_id: departmentId,
-      manager_id: "",
-      project_manager_name: ""
-    }));
-    setSelectedEmployees([]);
+  const handleDepartmentChange = async (departmentId, isEdit = false) => {
+    if (isEdit) {
+      setFormData((prev) => ({
+        ...prev,
+        department_id: departmentId,
+        manager_id: "",
+        project_manager_name: ""
+      }));
+      setEditSelectedEmployees([]);
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        department_id: departmentId,
+        manager_id: "",
+        project_manager_name: ""
+      }));
+      setSelectedEmployees([]);
+    }
+
     await fetchDepartmentPeople(departmentId);
   };
 
@@ -288,11 +305,14 @@ const Projects = () => {
     }));
   };
 
-  const handleEmployeeToggle = (employeeId) => {
-    setSelectedEmployees((prev) =>
-      prev.includes(employeeId)
-        ? prev.filter((id) => String(id) !== String(employeeId))
-        : [...prev, employeeId]
+  const handleEmployeeToggle = (employeeId, isEdit = false) => {
+    const numericEmployeeId = Number(employeeId);
+    const setter = isEdit ? setEditSelectedEmployees : setSelectedEmployees;
+
+    setter((prev) =>
+      prev.includes(numericEmployeeId)
+        ? prev.filter((id) => Number(id) !== numericEmployeeId)
+        : [...prev, numericEmployeeId]
     );
   };
 
@@ -324,10 +344,111 @@ const Projects = () => {
         throw new Error(result.message || "Failed to create project");
       }
 
-      setProjects((prev) => [result.data, ...prev]);
+      await fetchProjects();
       handleCloseAddModal();
     } catch (err) {
       alert(err.message || "Error creating project");
+    }
+  };
+
+  const handleOpenEditModal = async (project) => {
+    setEditingProject(project);
+    setFormData({
+      project_id: project.project_id || project.idCode || "",
+      name: project.name || project.title || "",
+      description: project.description || "",
+      department_id: project.department_id || "",
+      manager_id: project.manager_id || "",
+      project_manager_name: project.project_manager_name || project.manager || "",
+      start_date: project.start_date ? project.start_date.split("T")[0] : "",
+      deadline: project.deadline && project.deadline !== "No Deadline" ? project.deadline.split("T")[0] : "",
+      priority: project.priority || "Medium"
+    });
+    setEditSelectedEmployees(
+      Array.isArray(project.assigned_employee_ids)
+        ? project.assigned_employee_ids.map(Number).filter(Boolean)
+        : []
+    );
+    setShowEditProjectModal(true);
+    await fetchDepartmentPeople(project.department_id);
+  };
+
+  const handleCloseEditModal = () => {
+    setShowEditProjectModal(false);
+    setEditingProject(null);
+    setEditSelectedEmployees([]);
+    setDepartmentManagers([]);
+    setDepartmentEmployees([]);
+    setFormData({
+      project_id: "",
+      name: "",
+      description: "",
+      department_id: "",
+      manager_id: "",
+      project_manager_name: "",
+      start_date: "",
+      deadline: "",
+      priority: "Medium"
+    });
+  };
+
+  const handleSubmitEditProject = async (e) => {
+    e.preventDefault();
+
+    if (!editingProject) return;
+
+    try {
+      const token = sessionStorage.getItem("token");
+      const payload = {
+        ...formData,
+        assigned_employee_ids: editSelectedEmployees
+      };
+
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/projects/${editingProject.id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Failed to update project");
+      }
+
+      await fetchProjects();
+      handleCloseEditModal();
+    } catch (err) {
+      alert(err.message || "Error updating project");
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+
+    try {
+      const token = sessionStorage.getItem("token");
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/projects/${projectToDelete.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Failed to delete project");
+      }
+
+      setProjectToDelete(null);
+      await fetchProjects();
+    } catch (err) {
+      alert(err.message || "Error deleting project");
     }
   };
 
@@ -528,7 +649,7 @@ const Projects = () => {
               >
                 <div className="h-1.5 bg-gradient-to-r from-blue-600 to-indigo-500"></div>
 
-                <div className="p-6">
+                <div className="p-6 pb-16">
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex-1">
                       <h3 className="text-xl font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
@@ -591,6 +712,31 @@ const Projects = () => {
                       />
                     </div>
                   </div>
+                </div>
+
+                <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenEditModal(project);
+                    }}
+                    className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-blue-50 text-blue-600 border border-blue-200 hover:border-blue-300"
+                    title="Edit Project"
+                  >
+                    <Edit2 size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProjectToDelete(project);
+                    }}
+                    className="p-2.5 bg-white rounded-xl shadow-sm hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300"
+                    title="Delete Project"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               </div>
             );
@@ -767,6 +913,207 @@ const Projects = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Modal */}
+      {showEditProjectModal && editingProject && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Edit Project</h2>
+              <button
+                onClick={handleCloseEditModal}
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitEditProject} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Project ID</label>
+                  <input
+                    type="text"
+                    value={formData.project_id}
+                    onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Project Name</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500 min-h-[110px]"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                  <select
+                    value={formData.department_id}
+                    onChange={(e) => handleDepartmentChange(e.target.value, true)}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Manager</label>
+                  <select
+                    value={formData.manager_id}
+                    onChange={(e) => handleManagerChange(e.target.value)}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                    disabled={!formData.department_id || departmentLoading}
+                  >
+                    <option value="">Select Manager</option>
+                    {departmentManagers.map((manager) => (
+                      <option key={manager.id} value={manager.id}>
+                        {manager.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                  <input
+                    type="date"
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
+                  <input
+                    type="date"
+                    value={formData.deadline}
+                    onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                  <select
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                    className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
+                    required
+                  >
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">Assign Employees</label>
+                <div className="border border-gray-300 rounded-2xl p-4 max-h-56 overflow-y-auto">
+                  {!formData.department_id ? (
+                    <p className="text-sm text-gray-500">Select a department first to load employees.</p>
+                  ) : departmentLoading ? (
+                    <p className="text-sm text-gray-500">Loading employees...</p>
+                  ) : departmentEmployees.length === 0 ? (
+                    <p className="text-sm text-gray-500">No employees found for this department.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {departmentEmployees.map((employee) => (
+                        <label
+                          key={employee.id}
+                          className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-blue-300 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={editSelectedEmployees.includes(Number(employee.id))}
+                            onChange={() => handleEmployeeToggle(employee.id, true)}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <span className="text-sm text-gray-700">{employee.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCloseEditModal}
+                  className="px-5 py-3 rounded-2xl border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Project Modal */}
+      {projectToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8">
+            <div className="mx-auto w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mb-6">
+              <Trash2 size={32} className="text-red-600" />
+            </div>
+            <h2 className="text-2xl font-semibold text-gray-900 text-center mb-2">Delete Project?</h2>
+            <p className="text-gray-600 text-center mb-8">
+              Are you sure you want to delete <strong>{projectToDelete.title}</strong>? This will also remove its tasks and assignments.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setProjectToDelete(null)}
+                className="flex-1 py-3 rounded-2xl border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteProject}
+                className="flex-1 py-3 rounded-2xl bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -6,6 +6,17 @@ import { addNotificationForManager } from './managerController.js';
 // Get ALL projects for Reviewer 
 export const getAllProjectsForReviewer = async (req, res) => {
   try {
+    const reviewer_id = req.user.id;
+
+    // 🔹 Step 1: Get reviewer department
+    const [deptRows] = await pool.execute(
+      `SELECT department_id FROM users WHERE id = ?`,
+      [reviewer_id]
+    );
+
+    const departmentId = deptRows[0]?.department_id;
+
+    // 🔹 Step 2: Fetch ONLY projects from same department
     const [projects] = await pool.execute(`
       SELECT 
         p.*,
@@ -15,10 +26,12 @@ export const getAllProjectsForReviewer = async (req, res) => {
       FROM projects p
       LEFT JOIN users u ON p.manager_id = u.id
       LEFT JOIN tasks t ON p.id = t.project_id
+      WHERE p.department_id = ?   -- ✅ IMPORTANT FILTER ADDED
       GROUP BY p.id
       ORDER BY p.created_at DESC
-    `);
+    `, [departmentId]);
 
+    // 🔹 Step 3: Format response (unchanged)
     const formattedProjects = projects.map(project => {
       const total = Number(project.total_tasks) || 0;
       const completed = Number(project.completed_tasks) || 0;
@@ -35,6 +48,7 @@ export const getAllProjectsForReviewer = async (req, res) => {
       success: true, 
       data: formattedProjects 
     });
+
   } catch (error) {
     console.error("Reviewer getAllProjects error:", error);
     res.status(500).json({ 
@@ -47,6 +61,17 @@ export const getAllProjectsForReviewer = async (req, res) => {
 // Get ALL tasks for Reviewer 
 export const getAllTasksForReviewer = async (req, res) => {
   try {
+    const reviewer_id = req.user.id;
+
+    // 🔹 Step 1: Get reviewer department
+    const [deptRows] = await pool.execute(
+      `SELECT department_id FROM users WHERE id = ?`,
+      [reviewer_id]
+    );
+
+    const departmentId = deptRows[0]?.department_id;
+
+    // 🔹 Step 2: Fetch ONLY tasks from same department projects
     const [tasks] = await pool.execute(`
       SELECT 
         t.id,
@@ -65,11 +90,15 @@ export const getAllTasksForReviewer = async (req, res) => {
       LEFT JOIN users pm ON p.manager_id = pm.id
       LEFT JOIN employees e ON t.assigned_to = e.id
       LEFT JOIN comments c ON t.id = c.task_id
+
+      WHERE p.department_id = ?   -- ✅ IMPORTANT FILTER
+
       GROUP BY t.id, t.project_id, p.name, pm.name, t.title, t.description, 
                t.assigned_to, t.due_date, t.status, e.name
-      ORDER BY p.name ASC, t.due_date DESC;
-    `);
+      ORDER BY p.name ASC, t.due_date DESC
+    `, [departmentId]);
 
+    // 🔹 Step 3: Format response (unchanged)
     const formattedTasks = tasks.map(task => ({
       id: task.id.toString(),
       project: task.project || 'Unknown Project',
@@ -124,8 +153,7 @@ export const getTaskComments = async (req, res) => {
 };
 
 // Add New Comment
-// Add New Comment + Send Notification to Employee
-// Add New Comment + Send Notifications to Employee AND Manager
+
 export const addTaskComment = async (req, res) => {
   const { taskId } = req.params;
   const { comment_text } = req.body;
@@ -192,7 +220,7 @@ export const addTaskComment = async (req, res) => {
   }
 };
 
-// ====================== REVIEWER NOTIFICATIONS ======================
+//REVIEWER NOTIFICATIONS
 
 // Helper: Send notification to a single reviewer
 export const addNotificationForReviewer = async (

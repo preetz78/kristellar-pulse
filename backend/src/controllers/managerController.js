@@ -1019,24 +1019,53 @@ export const getManagerProjectProgress = async (req, res) => {
     });
 
     for (const proj of Object.values(projectGroups)) {
+
       const totalTasks = proj.tasks.length;
 
       if (!proj.start_date || !proj.deadline || totalTasks === 0) {
         projectsProgress.push({
           id: proj.id,
           name: proj.name,
-          color: "#3b82f6",
+          startDate: proj.start_date,
+          deadline: proj.deadline,
+          deadlineWeekIndex: null,
           weeks: ["Week 1", "Week 2", "Week 3", "Week 4"],
-          progress: [0, 0, 0, 0]
+          normalProgress: [0, 0, 0, 0],
+          delayedProgress: [null, null, null, null],
+          isDelayed: false
         });
         continue;
       }
 
       const start = new Date(proj.start_date);
-      const end = new Date(proj.deadline);
+      const deadline = new Date(proj.deadline);
 
-      const totalDays = Math.ceil((end - start) / (1000 * 3600 * 24));
-      const numWeeks = Math.ceil(totalDays / 7);
+      const completedTasks = proj.tasks.filter(
+        t => t.status === "Completed" && t.completed_at
+      );
+
+      let actualEndDate = null;
+
+      if (completedTasks.length === totalTasks) {
+        actualEndDate = new Date(
+          Math.max(...completedTasks.map(t => new Date(t.completed_at)))
+        );
+      }
+
+      let end;
+
+      if (actualEndDate) {
+        end = actualEndDate; // stop when project completes
+      } else {
+        const today = new Date();
+        end = today > deadline ? today : deadline;
+      }
+
+      const totalDays = Math.max(
+        1,
+        Math.ceil((end - start) / (1000 * 3600 * 24))
+      );
+      const numWeeks = Math.max(1, Math.ceil(totalDays / 7));
 
       const weeklyProgress = [];
       let prevWeekStart = new Date(start);
@@ -1062,15 +1091,39 @@ export const getManagerProjectProgress = async (req, res) => {
         prevWeekStart = weekEnd;
       }
 
-      const colors = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444"];
-      const color = colors[(proj.id % colors.length)];
+      // Delay is defined by the project deadline, not by individual task lateness.
+      const isCompletedOnTime = actualEndDate && actualEndDate <= deadline;
+      const isDelayed = !isCompletedOnTime && end > deadline;
+      let deadlineWeekIndex = Math.ceil(
+        (deadline - start) / (1000 * 3600 * 24 * 7)
+      ) - 1;
+
+      if (deadlineWeekIndex < 0) deadlineWeekIndex = 0;
+      if (deadlineWeekIndex >= weeklyProgress.length) deadlineWeekIndex = weeklyProgress.length - 1;
+
+      let normalProgress = [...weeklyProgress];
+      let delayedProgress = Array(weeklyProgress.length).fill(null);
+
+      if (isDelayed) {
+        normalProgress = weeklyProgress.map((val, idx) =>
+          idx <= deadlineWeekIndex ? val : null
+        );
+
+        delayedProgress = weeklyProgress.map((val, idx) =>
+          idx > deadlineWeekIndex ? val : null
+        );
+      }
 
       projectsProgress.push({
         id: proj.id,
         name: proj.name,
-        color: color,
+        startDate: proj.start_date,
+        deadline: proj.deadline,
+        deadlineWeekIndex,
         weeks: Array.from({ length: numWeeks }, (_, i) => `Week ${i + 1}`),
-        progress: weeklyProgress
+        normalProgress,
+        delayedProgress,
+        isDelayed
       });
     }
 
@@ -1081,14 +1134,14 @@ export const getManagerProjectProgress = async (req, res) => {
 
   } catch (error) {
     console.error("Manager project progress error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to generate progress graph" 
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate progress graph"
     });
   }
 };
 
-// ====================== MANAGER NOTIFICATIONS ======================
+// MANAGER NOTIFICATIONS 
 
 export const addNotificationForManager = async (
   message,
@@ -1304,7 +1357,13 @@ export const getManagerProfileStats = async (req, res) => {
     `, [managerId, managerId]);
 
     const [employeeResult] = await pool.execute(
-      "SELECT COUNT(*) as team_members FROM employees WHERE created_by = ?",
+      `
+      SELECT COUNT(e.id) as team_members
+      FROM users u
+      LEFT JOIN employees e ON e.department_id = u.department_id
+      WHERE u.id = ?
+        AND u.role = 'manager'
+      `,
       [managerId]
     );
 
