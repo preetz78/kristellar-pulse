@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
+const validatePassword = (password) => {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(password);
+};
+
 function EmployeeProfile() {
   const [employeeData, setEmployeeData] = useState(null);
   const [stats, setStats] = useState({
@@ -34,6 +38,7 @@ function EmployeeProfile() {
     confirmNewPassword: ""
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
 
   // Fetch Employee Profile + Stats
   useEffect(() => {
@@ -126,8 +131,10 @@ function EmployeeProfile() {
       return;
     }
 
-    if (passwordForm.newPassword.length < 6) {
-      alert("New password must be at least 6 characters long");
+    if (!validatePassword(passwordForm.newPassword)) {
+      alert(
+        "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+      );
       return;
     }
 
@@ -160,6 +167,7 @@ function EmployeeProfile() {
         alert("Password changed successfully! Please use the new password to login next time.");
         setShowChangePassword(false);
         setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
+        setPasswordError("");
       } else {
         alert(data.message || "Failed to change password");
       }
@@ -328,9 +336,24 @@ function EmployeeProfile() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
                 <input type="password" value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setPasswordForm(prev => ({ ...prev, newPassword: value }));
+
+                    if (!validatePassword(value)) {
+                      setPasswordError("Weak password");
+                    } else {
+                      setPasswordError("");
+                    }
+                  }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500"
                   placeholder="Enter new password" />
+                <p className="text-xs text-gray-500 mt-1">
+                  Must be 8+ characters with uppercase, lowercase, number & special character
+                </p>
+                {passwordError && (
+                  <p className="text-xs text-red-500 mt-1">{passwordError}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
@@ -345,6 +368,7 @@ function EmployeeProfile() {
               <button onClick={() => {
                 setShowChangePassword(false);
                 setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
+                setPasswordError("");
               }}
                 className="flex-1 py-3 border border-gray-300 rounded-2xl font-medium text-gray-700 hover:bg-gray-50">
                 Cancel

@@ -158,18 +158,15 @@ export const changePassword = async (req, res) => {
     });
   }
 
-  if (newPassword.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: "New password must be at least 6 characters long"
-    });
-  }
+  // ✅ NEW: Strong password validation (regex)
+  const passwordRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
-  // NEW CHECK: Prevent setting new password same as current
-  if (currentPassword === newPassword) {
+  if (!passwordRegex.test(newPassword)) {
     return res.status(400).json({
       success: false,
-      message: "New password cannot be the same as current password"
+      message:
+        "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
     });
   }
 
@@ -198,11 +195,21 @@ export const changePassword = async (req, res) => {
 
     const bcrypt = (await import('bcryptjs')).default;
 
+    // ✅ Check current password
     const isMatch = await bcrypt.compare(currentPassword, user[0].password);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
         message: "Current password is incorrect"
+      });
+    }
+
+    // ✅ NEW: Prevent using same password again (secure way)
+    const isSamePassword = await bcrypt.compare(newPassword, user[0].password);
+    if (isSamePassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password cannot be the same as current password"
       });
     }
 

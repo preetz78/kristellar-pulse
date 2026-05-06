@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
+const validatePassword = (password) => {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(password);
+};
+
 function ManagerProfile() {
   const [managerData, setManagerData] = useState(null);
   const [stats, setStats] = useState({
@@ -34,6 +38,7 @@ function ManagerProfile() {
     confirmNewPassword: ""
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
 
   // Fetch Manager Profile + Real Stats
   useEffect(() => {
@@ -129,10 +134,14 @@ function ManagerProfile() {
       alert("New passwords do not match!");
       return;
     }
-    if (passwordForm.newPassword.length < 6) {
-      alert("New password must be at least 6 characters long");
+
+    if (!validatePassword(passwordForm.newPassword)) {
+      alert(
+        "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+      );
       return;
     }
+
     if (passwordForm.currentPassword === passwordForm.newPassword) {
       alert("New password cannot be the same as current password!");
       return;
@@ -161,6 +170,7 @@ function ManagerProfile() {
         alert("Password changed successfully! Please login again with the new password.");
         setShowChangePassword(false);
         setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
+        setPasswordError("");
       } else {
         alert(data.message || "Failed to change password");
       }
@@ -373,10 +383,25 @@ function ManagerProfile() {
                 <input
                   type="password"
                   value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setPasswordForm(prev => ({ ...prev, newPassword: value }));
+
+                    if (!validatePassword(value)) {
+                      setPasswordError("Weak password");
+                    } else {
+                      setPasswordError("");
+                    }
+                  }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500"
                   placeholder="Enter new password"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Must be 8+ characters with uppercase, lowercase, number & special character
+                </p>
+                {passwordError && (
+                  <p className="text-xs text-red-500 mt-1">{passwordError}</p>
+                )}
               </div>
 
               <div>
@@ -396,6 +421,7 @@ function ManagerProfile() {
                 onClick={() => {
                   setShowChangePassword(false);
                   setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
+                  setPasswordError("");
                 }}
                 className="flex-1 py-3 border border-gray-300 rounded-2xl font-medium text-gray-700 hover:bg-gray-50"
               >

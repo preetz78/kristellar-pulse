@@ -18,6 +18,10 @@ const EmployeeDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // 🔥 HOVER TOOLTIP STATE
+  const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+
   // 🔥 STEP 1: buildProgressChart FUNCTION
   const buildProgressChart = (projectProgress) => {
     if (!projectProgress) return null;
@@ -36,6 +40,10 @@ const EmployeeDashboard = () => {
       projectProgress.weeks?.[i] || `Week ${i + 1}`
     );
 
+    const weeklyDates = Array.from({ length }, (_, i) =>
+      projectProgress.weeklyDates?.[i] || ""
+    );
+
     const values = Array.from({ length }, (_, i) =>
       normal[i] ?? delayed[i] ?? 0
     );
@@ -45,7 +53,7 @@ const EmployeeDashboard = () => {
 
     const isDelayed = projectProgress.isDelayed;
 
-    return { weeks, values, deadlineWeekIndex, isDelayed };
+    return { weeks, weeklyDates, values, deadlineWeekIndex, isDelayed };
   };
 
   // 🔥 STEP 2: Compute progressChart
@@ -415,13 +423,57 @@ const EmployeeDashboard = () => {
                         key={i}
                         cx={xPos}
                         cy={250 - val * 2}
-                        r="4.5"
+                        r="6"
                         fill={isDelayedPoint ? "#ef4444" : "#10b981"}
                         stroke="#fff"
                         strokeWidth="2"
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={(e) => {
+                          setHoveredPointIndex(i);
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const svg = e.currentTarget.parentElement.parentElement.getBoundingClientRect();
+                          setTooltipPosition({
+                            x: rect.left - svg.left + 5,
+                            y: rect.top - svg.top - 25
+                          });
+                        }}
+                        onMouseLeave={() => setHoveredPointIndex(null)}
                       />
                     );
                   })}
+
+                  {/* TOOLTIP */}
+                  {hoveredPointIndex !== null && progressChart && (
+                    <g>
+                      <rect
+                        x={tooltipPosition.x}
+                        y={tooltipPosition.y}
+                        width="140"
+                        height="50"
+                        rx="6"
+                        fill="#1f2937"
+                        opacity="0.95"
+                        stroke="#4b5563"
+                        strokeWidth="1"
+                      />
+                      <text
+                        x={tooltipPosition.x + 70}
+                        y={tooltipPosition.y + 20}
+                        textAnchor="middle"
+                        className="text-sm fill-white font-semibold"
+                      >
+                        {progressChart.values[hoveredPointIndex]}% Complete
+                      </text>
+                      <text
+                        x={tooltipPosition.x + 70}
+                        y={tooltipPosition.y + 38}
+                        textAnchor="middle"
+                        className="text-xs fill-gray-300"
+                      >
+                        on {progressChart.weeklyDates[hoveredPointIndex]}
+                      </text>
+                    </g>
+                  )}
                 </g>
               </svg>
             ) : (

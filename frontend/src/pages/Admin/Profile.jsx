@@ -13,6 +13,10 @@ import {
 } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
+const validatePassword = (password) => {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(password);
+};
+
 function AdminProfile() {
   const [adminData, setAdminData] = useState(null);
   const [stats, setStats] = useState({
@@ -25,7 +29,7 @@ function AdminProfile() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
-
+  
   // Change Password Modal State
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
@@ -34,34 +38,30 @@ function AdminProfile() {
     confirmNewPassword: ""
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
 
   // Fetch Admin Profile + Real Stats
   useEffect(() => {
     const fetchData = async () => {
       try {
         const token = sessionStorage.getItem("token");
-
         // Fetch Admin Profile
         const profileRes = await fetch(`${apiConfig.API_BASE_URL}/api/admin/profile`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-
         const profileData = await profileRes.json();
         if (profileData.success) {
           setAdminData(profileData.data);
           setEditForm(profileData.data);
         }
-
         // Fetch Real Stats
         const statsRes = await fetch(`${apiConfig.API_BASE_URL}/api/admin/dashboard-stats`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-
         const statsData = await statsRes.json();
         if (statsData.success) {
           setStats(statsData.stats);
         }
-
       } catch (err) {
         console.error("Data fetch error:", err);
         setError("Failed to load data");
@@ -69,7 +69,6 @@ function AdminProfile() {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 
@@ -84,7 +83,6 @@ function AdminProfile() {
     setSaving(true);
     try {
       const token = sessionStorage.getItem("token");
-
       const res = await fetch(`${apiConfig.API_BASE_URL}/api/admin/profile`, {
         method: "PUT",
         headers: {
@@ -99,9 +97,7 @@ function AdminProfile() {
           bio: editForm.bio
         })
       });
-
       const data = await res.json();
-
       if (data.success) {
         setAdminData(data.data || editForm);
         setIsEditing(false);
@@ -129,20 +125,22 @@ function AdminProfile() {
       alert("New passwords do not match!");
       return;
     }
-    if (passwordForm.newPassword.length < 6) {
-      alert("New password must be at least 6 characters long");
+
+    if (!validatePassword(passwordForm.newPassword)) {
+      alert(
+        "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
+      );
       return;
     }
+
     if (passwordForm.currentPassword === passwordForm.newPassword) {
       alert("New password cannot be the same as current password!");
       return;
     }
 
     setPasswordLoading(true);
-
     try {
       const token = sessionStorage.getItem("token");
-
       const res = await fetch(`${apiConfig.API_BASE_URL}/api/admin/change-password`, {
         method: "PUT",
         headers: {
@@ -154,13 +152,12 @@ function AdminProfile() {
           newPassword: passwordForm.newPassword
         })
       });
-
       const data = await res.json();
-
       if (data.success) {
         alert("Password changed successfully! Please login again with the new password.");
         setShowChangePassword(false);
         setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
+        setPasswordError("");
       } else {
         alert(data.message || "Failed to change password");
       }
@@ -177,23 +174,21 @@ function AdminProfile() {
 
   return (
     <div className="p-8">
-
       {/* HEADER */}
       <div className="relative bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 rounded-2xl p-6 text-white shadow-xl">
         <div className="flex flex-col md:flex-row items-center gap-6">
           {/* Avatar */}
           <div className="w-24 h-24 rounded-2xl bg-white text-blue-600 flex items-center justify-center text-4xl font-bold shadow-lg overflow-hidden">
             {adminData.profile_picture ? (
-              <img 
-                src={`${apiConfig.API_BASE_URL}${adminData.profile_picture}`} 
-                alt="Profile" 
+              <img
+                src={`${apiConfig.API_BASE_URL}${adminData.profile_picture}`}
+                alt="Profile"
                 className="w-full h-full object-cover"
               />
             ) : (
               adminData.name?.charAt(0) || "A"
             )}
           </div>
-
           {/* Info */}
           <div className="text-center md:text-left flex-1">
             <h1 className="text-3xl font-bold">
@@ -220,7 +215,6 @@ function AdminProfile() {
             </p>
             <p className="text-xs opacity-80 mt-0.5">{adminData.email}</p>
           </div>
-
           {/* Edit / Save / Cancel Buttons */}
           <div className="flex gap-3">
             {!isEditing ? (
@@ -254,19 +248,17 @@ function AdminProfile() {
 
       {/* MAIN CONTENT */}
       <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6 ">
-
         {/* LEFT PANEL */}
         <div className="lg:col-span-2 bg-white/90 backdrop-blur rounded-2xl p-6 shadow-lg">
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <User size={20} /> Profile Information
           </h2>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700">
             <InfoRow icon={<Mail />} label="Email" value={adminData.email} />
-            
-            <InfoRow 
-              icon={<Phone />} 
-              label="Phone" 
+           
+            <InfoRow
+              icon={<Phone />}
+              label="Phone"
               value={isEditing ? (
                 <input
                   type="text"
@@ -275,12 +267,11 @@ function AdminProfile() {
                   onChange={handleEditChange}
                   className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
                 />
-              ) : (adminData.phone || "")} 
+              ) : (adminData.phone || "")}
             />
-
-            <InfoRow 
-              icon={<MapPin />} 
-              label="Location" 
+            <InfoRow
+              icon={<MapPin />}
+              label="Location"
               value={isEditing ? (
                 <input
                   type="text"
@@ -289,12 +280,11 @@ function AdminProfile() {
                   onChange={handleEditChange}
                   className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
                 />
-              ) : (adminData.location || "")} 
+              ) : (adminData.location || "")}
             />
-
-            <InfoRow 
-              icon={<Briefcase />} 
-              label="Designation" 
+            <InfoRow
+              icon={<Briefcase />}
+              label="Designation"
               value={isEditing ? (
                 <input
                   type="text"
@@ -303,9 +293,8 @@ function AdminProfile() {
                   onChange={handleEditChange}
                   className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
                 />
-              ) : (adminData.designation || "")} 
+              ) : (adminData.designation || "")}
             />
-
             <InfoRow
               icon={<Calendar />}
               label="Joined"
@@ -313,7 +302,6 @@ function AdminProfile() {
             />
             <InfoRow icon={<Shield />} label="Role" value="Admin" />
           </div>
-
           {/* BIO - Editable */}
           <div className="mt-6">
             <h3 className="font-semibold text-sm mb-1">Bio</h3>
@@ -331,9 +319,8 @@ function AdminProfile() {
               </p>
             )}
           </div>
-
           {/* Change Password Button */}
-          <button 
+          <button
             onClick={() => setShowChangePassword(true)}
             className="mt-6 inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm hover:bg-blue-700 transition shadow"
           >
@@ -341,7 +328,6 @@ function AdminProfile() {
             Change Password
           </button>
         </div>
-
         {/* RIGHT PANEL - REAL DATA */}
         <div className="space-y-4">
           <StatCard title="Total Projects" value={stats.totalProjects} />
@@ -355,7 +341,6 @@ function AdminProfile() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl p-8 w-full max-w-md">
             <h3 className="text-2xl font-semibold mb-6">Change Password</h3>
-
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
@@ -372,10 +357,25 @@ function AdminProfile() {
                 <input
                   type="password"
                   value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setPasswordForm(prev => ({ ...prev, newPassword: value }));
+
+                    if (!validatePassword(value)) {
+                      setPasswordError("Weak password");
+                    } else {
+                      setPasswordError("");
+                    }
+                  }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500"
                   placeholder="Enter new password"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Must be 8+ characters with uppercase, lowercase, number & special character
+                </p>
+                {passwordError && (
+                  <p className="text-xs text-red-500 mt-1">{passwordError}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
@@ -388,12 +388,12 @@ function AdminProfile() {
                 />
               </div>
             </div>
-
             <div className="flex gap-3 mt-8">
               <button
                 onClick={() => {
                   setShowChangePassword(false);
                   setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
+                  setPasswordError("");
                 }}
                 className="flex-1 py-3 border border-gray-300 rounded-2xl font-medium text-gray-700 hover:bg-gray-50"
               >

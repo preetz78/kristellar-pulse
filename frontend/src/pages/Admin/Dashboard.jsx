@@ -20,6 +20,10 @@ const Dashboard = () => {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // 🔥 HOVER TOOLTIP STATE
+  const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
   // 🔥 NEW FUNCTION ADDED HERE (STEP 1)
   const buildProgressChart = (projectProgress) => {
@@ -45,6 +49,10 @@ const Dashboard = () => {
       projectProgress.weeks?.[index] || `Week ${index + 1}`
     ));
 
+    const weeklyDates = Array.from({ length }, (_, index) => (
+      projectProgress.weeklyDates?.[index] || ""
+    ));
+
     const values = Array.from({ length }, (_, index) => {
       const value = progress[index] ?? normalProgress[index] ?? delayedProgress[index] ?? 0;
       return Math.max(0, Math.min(100, Number(value) || 0));
@@ -65,6 +73,7 @@ const Dashboard = () => {
 
     return {
       weeks,
+      weeklyDates,
       values,
       isDelayed,
       deadlineWeekIndex
@@ -435,13 +444,57 @@ const Dashboard = () => {
                         key={i}
                         cx={xPos}
                         cy={250 - value * 2}
-                        r="4.5"
+                        r="6"
                         fill={isDelayedPoint ? "#ef4444" : "#10b981"}
                         stroke="#fff"
                         strokeWidth="2"
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={(e) => {
+                          setHoveredPointIndex(i);
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const svg = e.currentTarget.parentElement.getBoundingClientRect();
+                          setTooltipPosition({
+                            x: rect.left - svg.left + 5,
+                            y: rect.top - svg.top - 25
+                          });
+                        }}
+                        onMouseLeave={() => setHoveredPointIndex(null)}
                       />
                     );
                   })}
+
+                  {/* TOOLTIP */}
+                  {hoveredPointIndex !== null && progressChart && (
+                    <g>
+                      <rect
+                        x={tooltipPosition.x}
+                        y={tooltipPosition.y}
+                        width="140"
+                        height="50"
+                        rx="6"
+                        fill="#1f2937"
+                        opacity="0.95"
+                        stroke="#4b5563"
+                        strokeWidth="1"
+                      />
+                      <text
+                        x={tooltipPosition.x + 70}
+                        y={tooltipPosition.y + 20}
+                        textAnchor="middle"
+                        className="text-sm fill-white font-semibold"
+                      >
+                        {progressChart.values[hoveredPointIndex]}% Complete
+                      </text>
+                      <text
+                        x={tooltipPosition.x + 70}
+                        y={tooltipPosition.y + 38}
+                        textAnchor="middle"
+                        className="text-xs fill-gray-300"
+                      >
+                        on {progressChart.weeklyDates[hoveredPointIndex]}
+                      </text>
+                    </g>
+                  )}
                 </svg>
               ) : (
                 <div className="h-full flex items-center justify-center text-gray-400">

@@ -1068,6 +1068,7 @@ export const getManagerProjectProgress = async (req, res) => {
       const numWeeks = Math.max(1, Math.ceil(totalDays / 7));
 
       const weeklyProgress = [];
+      const weeklyDates = [];
       let prevWeekStart = new Date(start);
       let cumulativeCompleted = 0;
 
@@ -1088,6 +1089,9 @@ export const getManagerProjectProgress = async (req, res) => {
           : 0;
 
         weeklyProgress.push(Math.min(100, percentage));
+        // Format date as "DD MMM" (e.g., "17 May")
+        const dateStr = weekEnd.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+        weeklyDates.push(dateStr);
         prevWeekStart = weekEnd;
       }
 
@@ -1121,6 +1125,7 @@ export const getManagerProjectProgress = async (req, res) => {
         deadline: proj.deadline,
         deadlineWeekIndex,
         weeks: Array.from({ length: numWeeks }, (_, i) => `Week ${i + 1}`),
+        weeklyDates,
         normalProgress,
         delayedProgress,
         isDelayed
