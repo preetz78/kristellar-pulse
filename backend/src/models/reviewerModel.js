@@ -12,7 +12,7 @@ export const createReviewerTables = async () => {
         comment_text TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id) REFERENCES pulse_employees(id) ON DELETE CASCADE
       )
     `);
 

@@ -1,553 +1,647 @@
-// src/pages/Reviewer/TaskInsights.jsx
-import { useState, useEffect, useMemo } from 'react';
+// src/pages/Reviewer/TaskReview.jsx
+import { useState, useEffect, useMemo, useRef } from 'react';
 import apiConfig from '../../config/apiConfig';
-import { 
-  Search, 
-  Clock, 
-  User, 
-  MessageSquare, 
-  X, 
-  Send,
-  CheckCircle,
+import {
+  Search,
+  Clock,
+  CheckCircle2,
   AlertCircle,
-  ListTodo,
-  ChevronDown
+  RotateCcw,
+  FileCheck2,
+  ChevronDown,
+  ChevronRight,
+  Send,
+  FileText,
+  Download,
+  MessageSquare,
+  User,
+  Calendar,
+  Layers,
+  Paperclip,
+  Star,
+  Activity,
+  X,
+  ThumbsUp,
+  RefreshCw
 } from 'lucide-react';
 
-const StatusBadge = ({ status }) => {
-  const styles = {
-    'In Progress': 'bg-blue-100 text-blue-700 border border-blue-200',
-    'Delayed': 'bg-red-100 text-red-700 border border-red-200',
-    'Completed': 'bg-emerald-100 text-emerald-700 border border-emerald-200',
-  };
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${styles[status] || 'bg-gray-100 text-gray-700'}`}>
-      {status || "Not Started"}
-    </span>
-  );
+/* ─── helpers ─────────────────────────────────────────────── */
+const formatTimeAgo = (dateStr) => {
+  if (!dateStr) return 'Just now';
+  const diff = Math.floor((new Date() - new Date(dateStr)) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
 };
 
-const StatCard = ({ label, value, icon: Icon, color }) => {
+const PROJECT_COLORS = [
+  { bg: 'bg-violet-500' },
+  { bg: 'bg-sky-500' },
+  { bg: 'bg-rose-500' },
+  { bg: 'bg-amber-500' },
+  { bg: 'bg-teal-500' },
+];
+
+const PRIORITY_META = {
+  High:   { label: 'High',   dot: 'bg-rose-500',    text: 'text-rose-600' },
+  Medium: { label: 'Medium', dot: 'bg-amber-500',   text: 'text-amber-600' },
+  Low:    { label: 'Low',    dot: 'bg-emerald-500', text: 'text-emerald-600' },
+};
+
+/* ─── StatCard ────────────────────────────────────────────── */
+const StatCard = ({ icon: Icon, value, label, color }) => {
+  const colorMap = {
+    amber:   { iconBg: 'bg-amber-100',   iconText: 'text-amber-600',   grad: 'from-amber-50',   border: 'border-amber-200' },
+    emerald: { iconBg: 'bg-emerald-100', iconText: 'text-emerald-600', grad: 'from-emerald-50', border: 'border-emerald-200' },
+    rose:    { iconBg: 'bg-rose-100',    iconText: 'text-rose-600',    grad: 'from-rose-50',    border: 'border-rose-200' },
+    violet:  { iconBg: 'bg-violet-100',  iconText: 'text-violet-600',  grad: 'from-violet-50',  border: 'border-violet-200' },
+  };
+  const c = colorMap[color] || colorMap.violet;
   return (
-    <div className="bg-white border border-blue-200 rounded-2xl p-6 flex items-center justify-between hover:shadow-lg transition-all duration-300">
-      <div>
-        <p className="text-gray-600 text-sm font-medium">{label}</p>
-        <p className="text-4xl font-bold text-gray-900 mt-2">{value}</p>
+    <div className={`flex-1 min-w-0 bg-gradient-to-br ${c.grad} to-white border ${c.border} rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow`}>
+      <div className={`w-11 h-11 rounded-xl ${c.iconBg} flex items-center justify-center flex-shrink-0`}>
+        <Icon size={20} className={c.iconText} />
       </div>
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${color}`}>
-        <Icon size={28} />
+      <div>
+        <div className="text-2xl font-bold text-slate-900 leading-none">{value}</div>
+        <div className="text-xs font-medium text-slate-500 mt-1">{label}</div>
       </div>
     </div>
   );
 };
 
-// Format timestamp (e.g., "2h ago")
-const formatTimeAgo = (timestamp) => {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const seconds = Math.floor((now - date) / 1000);
-
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
-};
-
-export default function ReviewerTaskInsights() {
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [newComment, setNewComment] = useState('');
-  const [comments, setComments] = useState([]);
+/* ─── Main Component ──────────────────────────────────────── */
+export default function TaskReview() {
+  const [tasks, setTasks]                     = useState([]);
+  const [loading, setLoading]                 = useState(true);
+  const [error, setError]                     = useState(null);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedTask, setSelectedTask]       = useState(null);
+  const [searchQuery, setSearchQuery]         = useState('');
+  const [newComment, setNewComment]           = useState('');
+  const [comments, setComments]               = useState([]);
   const [loadingComments, setLoadingComments] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState(new Set());
+  const [actionLoading, setActionLoading]     = useState(null);
+  const [actionDone, setActionDone]           = useState(null);
+  const [commentPosting, setCommentPosting]   = useState(false);
 
-  const selectedTask = tasks.find(t => t.id === selectedTaskId);
+  const commentsEndRef = useRef(null);
 
-  // Fetch all tasks
+  /* ── fetch tasks ── */
   useEffect(() => {
-    const fetchTasks = async () => {
+    (async () => {
       try {
         setLoading(true);
         const token = sessionStorage.getItem('token');
-        const response = await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/tasks`, {
-          method: 'GET',
+        const res = await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/tasks`, {
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          }
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
         });
-
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-
-        const result = await response.json();
+        const result = await res.json();
         if (result.success && Array.isArray(result.data)) {
           setTasks(result.data);
-        } else {
-          throw new Error(result.message || 'Invalid response');
+          const first = [...new Set(result.data.map((t) => t.project))][0];
+          setSelectedProject(first || null);
         }
-      } catch (err) {
-        console.error('Error fetching tasks:', err);
-        setError(err.message || 'Failed to load tasks');
+      } catch {
+        setError('Failed to load tasks');
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchTasks();
+    })();
   }, []);
 
-  // Fetch comments when task is opened
+  /* ── fetch comments ── */
   useEffect(() => {
-    if (!selectedTaskId) {
-      setComments([]);
-      return;
-    }
-
-    const fetchComments = async () => {
+    if (!selectedTask?.id) { setComments([]); return; }
+    (async () => {
       setLoadingComments(true);
       try {
         const token = sessionStorage.getItem('token');
-        const response = await fetch(
-          `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTaskId}/comments`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            }
-          }
+        const res = await fetch(
+          `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTask.id}/comments`,
+          { headers: { Authorization: `Bearer ${token}` } }
         );
-
-        if (!response.ok) throw new Error('Failed to fetch comments');
-
-        const result = await response.json();
-        if (result.success) {
-          setComments(result.data);
-        }
-      } catch (err) {
-        console.error('Error fetching comments:', err);
-        setComments([]);
+        const result = await res.json();
+        if (result.success) setComments(result.data || []);
       } finally {
         setLoadingComments(false);
       }
-    };
+    })();
+  }, [selectedTask?.id]);
 
-    fetchComments();
-  }, [selectedTaskId]);
+  /* auto-scroll to latest comment */
+  useEffect(() => {
+    commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [comments]);
 
-  const updateTaskCommentCount = (taskId, newCount) => {
-    setTasks(prevTasks =>
-      prevTasks.map(task =>
-        task.id === taskId ? { ...task, comments: newCount } : task
-      )
-    );
-  };
-
-  // Stats Calculation
-  const stats = useMemo(() => {
-    return {
-      total: tasks.length,
-      completed: tasks.filter(t => t.status === 'Completed').length,
-      inProgress: tasks.filter(t => t.status === 'In Progress').length,
-      delayed: tasks.filter(t => t.status === 'Delayed').length
-    };
-  }, [tasks]);
-
-  // Filtered Tasks
-  const filteredTasks = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return tasks;
-
-    return tasks.filter(task =>
-      task.title?.toLowerCase().includes(query) ||
-      task.project?.toLowerCase().includes(query) ||
-      task.assignee?.toLowerCase().includes(query)
-    );
-  }, [searchQuery, tasks]);
-
-  // Grouped Tasks by Project
-  const groupedTasks = useMemo(() => {
-    return filteredTasks.reduce((acc, task) => {
-      const projectName = task.project || "Uncategorized";
-      if (!acc[projectName]) acc[projectName] = [];
-      acc[projectName].push(task);
+  /* ── derived ── */
+  const groupedTasks = useMemo(() =>
+    tasks.reduce((acc, task) => {
+      const p = task.project || 'Uncategorized';
+      (acc[p] = acc[p] || []).push(task);
       return acc;
-    }, {});
-  }, [filteredTasks]);
+    }, {}), [tasks]);
 
-  const handleOpenTask = (id) => {
-    setSelectedTaskId(id);
+  const filteredProjects = useMemo(() => {
+    if (!searchQuery) return Object.keys(groupedTasks);
+    const q = searchQuery.toLowerCase();
+    return Object.keys(groupedTasks).filter(
+      (p) => p.toLowerCase().includes(q) ||
+        groupedTasks[p].some((t) =>
+          t.title?.toLowerCase().includes(q) || t.assignee?.toLowerCase().includes(q)
+        )
+    );
+  }, [searchQuery, groupedTasks]);
+
+  const stats = useMemo(() => ({
+    pending: tasks.filter((t) => t.status === 'Pending Review').length,
+    approved: 0,
+    reopened: 0,
+    total:    tasks.length,
+  }), [tasks]);
+
+  /* ── handlers ── */
+  const handleSelectTask = (task) => {
+    setSelectedTask(task);
     setNewComment('');
+    setActionDone(null);
   };
 
-  const handleCloseSidebar = () => {
-    setSelectedTaskId(null);
-    setNewComment('');
-    setComments([]);
-  };
-
-  const toggleProjectExpanded = (projectName) => {
-    const newExpanded = new Set(expandedProjects);
-    if (newExpanded.has(projectName)) {
-      newExpanded.delete(projectName);
-    } else {
-      newExpanded.add(projectName);
-    }
-    setExpandedProjects(newExpanded);
-  };
-
-  const getProjectColor = (index) => {
-    const colors = ['blue', 'purple', 'green', 'orange', 'pink', 'indigo'];
-    return colors[index % colors.length];
-  };
-
-  const getProgressBarColor = (color) => {
-    const colorMap = {
-      blue: 'bg-blue-500',
-      purple: 'bg-purple-500',
-      green: 'bg-green-500',
-      orange: 'bg-orange-500',
-      pink: 'bg-pink-500',
-      indigo: 'bg-indigo-500',
-    };
-    return colorMap[color];
-  };
-
-  // Add comment
-  const handleAddComment = async (e) => {
-    e.preventDefault();
-    if (!newComment.trim() || !selectedTaskId) return;
-
+  const handleApprove = async () => {
+    if (!selectedTask) return;
+    setActionLoading('approve');
     try {
       const token = sessionStorage.getItem('token');
-      const response = await fetch(
-        `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTaskId}/comments`,
+      await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTask.id}/approve`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setTasks(prev =>
+        prev.filter(task => task.id !== selectedTask.id)
+      );
+      setSelectedTask(null);
+      setActionDone('approved');
+    } catch {
+      alert('Failed to approve task');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReopen = async () => {
+    if (!selectedTask) return;
+    setActionLoading('reopen');
+    try {
+      const token = sessionStorage.getItem('token');
+      await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTask.id}/reopen`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setTasks(prev =>
+        prev.filter(task => task.id !== selectedTask.id)
+      );
+      setSelectedTask(null);
+      setActionDone('reopened');
+    } catch {
+      alert('Failed to reopen task');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !selectedTask || commentPosting) return;
+    setCommentPosting(true);
+    try {
+      const token = sessionStorage.getItem('token');
+      const res = await fetch(
+        `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTask.id}/comments`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ comment_text: newComment.trim() })
+          body: JSON.stringify({ comment_text: newComment.trim() }),
         }
       );
-
-      const result = await response.json();
-
+      const result = await res.json();
       if (result.success) {
         setNewComment('');
-
-        // Refresh comments
         const refreshRes = await fetch(
-          `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTaskId}/comments`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
+          `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTask.id}/comments`,
+          { headers: { Authorization: `Bearer ${token}` } }
         );
         const refreshData = await refreshRes.json();
-        if (refreshData.success) {
-          setComments(refreshData.data);
-        }
-
-        // Update comment count
-        updateTaskCommentCount(selectedTaskId, comments.length + 1);
-      } else {
-        alert(result.message || "Failed to add comment");
+        if (refreshData.success) setComments(refreshData.data || []);
       }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to add comment. Please try again.");
+    } catch {
+      alert('Failed to post comment');
+    } finally {
+      setCommentPosting(false);
     }
   };
 
-  if (loading) {
-    return <div className="p-6 text-center">Loading task insights...</div>;
-  }
+  /* Enter sends, Shift+Enter inserts a newline */
+  const handleCommentKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleAddComment();
+    }
+  };
 
-  if (error) {
-    return (
-      <div className="p-6 text-center text-red-600">
-        {error}
-        <button 
-          onClick={() => window.location.reload()}
-          className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700"
-        >
-          Retry
+  /* ── loading / error ── */
+  if (loading) return (
+    <div className="h-screen bg-slate-50 flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-12 h-12 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium">Loading tasks…</p>
+      </div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="h-screen bg-slate-50 flex items-center justify-center">
+      <div className="bg-white border border-rose-200 rounded-2xl p-8 text-center shadow-sm">
+        <AlertCircle className="mx-auto text-rose-500 mb-3" size={36} />
+        <p className="text-rose-600 font-semibold text-lg">{error}</p>
+        <button onClick={() => window.location.reload()} className="mt-4 text-sm text-slate-500 hover:text-slate-700 underline">
+          Try again
         </button>
       </div>
-    );
-  }
+    </div>
+  );
 
+  const priorityMeta = selectedTask
+    ? (PRIORITY_META[selectedTask.priority] || PRIORITY_META.Medium)
+    : null;
+
+  /*
+   * Layout contract
+   * ───────────────
+   * Root div  → h-screen, overflow:hidden  (no page scroll ever)
+   * Header    → flex-shrink-0              (stat cards, fixed height)
+   * Row       → flex-1, min-h-0            (fills the rest of the screen exactly)
+   *   Each aside/main → flex flex-col, min-h-0
+   *     Sticky header  → flex-shrink-0
+   *     Scrollable body→ flex-1 overflow-y-auto
+   */
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold text-slate-900">Task Insights</h1>
-        <p className="text-gray-600 mt-1 flex items-center gap-2">
-          <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
-          Review all projects and tasks
-        </p>
-      </div>
+    <div
+      className="flex flex-col bg-slate-50"
+      style={{ height: '100vh', overflow: 'hidden', fontFamily: "'DM Sans','Segoe UI',sans-serif" }}
+    >
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <StatCard
-          label="Total Tasks"
-          value={stats.total}
-          icon={ListTodo}
-          color="bg-blue-100 text-blue-600"
-        />
-        <StatCard
-          label="Completed"
-          value={stats.completed}
-          icon={CheckCircle}
-          color="bg-emerald-100 text-emerald-600"
-        />
-        <StatCard
-          label="In Progress"
-          value={stats.inProgress}
-          icon={Clock}
-          color="bg-yellow-100 text-yellow-600"
-        />
-        <StatCard
-          label="Delayed"
-          value={stats.delayed}
-          icon={AlertCircle}
-          color="bg-red-100 text-red-600"
-        />
-      </div>
-
-      {/* Search Bar */}
-      <div className="mb-8">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="Search tasks, projects, or team members..."
-            className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-sm"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+      {/* ══ STAT CARDS ══════════════════════════════════════ */}
+      <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-3">
+        <div className="flex items-center gap-3">
+          <StatCard icon={Clock}        value={stats.pending}  label="Pending Review" color="amber"   />
+          <StatCard icon={CheckCircle2} value={stats.approved} label="Approved"        color="emerald" />
+          <StatCard icon={RotateCcw}    value={stats.reopened} label="Reopened"        color="rose"    />
+          <StatCard icon={FileCheck2}   value={stats.total}    label="Total Reviewed"  color="violet"  />
         </div>
       </div>
 
-      {/* Project Grouped Tasks */}
-      <div className="space-y-4">
-        {Object.keys(groupedTasks).length === 0 ? (
-          <div className="text-center py-12 text-gray-400 bg-white rounded-lg border border-slate-200">
-            No tasks found
-          </div>
-        ) : (
-          Object.entries(groupedTasks).map(([projectName, projectTasks], projectIndex) => {
-            const projectColor = getProjectColor(projectIndex);
-            const isExpanded = expandedProjects.has(projectName);
-            const inProgressCount = projectTasks.filter(t => t.status === 'In Progress').length;
-            const completedCount = projectTasks.filter(t => t.status === 'Completed').length;
-            const progressWidth = projectTasks.length > 0
-              ? (completedCount / projectTasks.length) * 100
-              : 0;
+      {/* ══ THREE COLUMNS ═══════════════════════════════════ */}
+      <div className="flex flex-1 min-h-0">
 
-            return (
-              <div key={projectName} className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-                <button
-                  onClick={() => toggleProjectExpanded(projectName)}
-                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className={`w-1 h-12 rounded-full ${getProgressBarColor(projectColor)}`}></div>
-                    <div className="text-left">
-                      <h3 className="font-bold text-slate-900">{projectName}</h3>
-                      <p className="text-sm text-slate-500 mt-1">
-                        {projectTasks.length} tasks
-                        {inProgressCount > 0 ? ` - ${inProgressCount} in progress` : ""}
-                      </p>
-                    </div>
-                  </div>
+        {/* ── LEFT: Projects ─────────────────────────────── */}
+        <aside className="flex flex-col w-72 flex-shrink-0 border-r border-slate-200 bg-white min-h-0">
 
-                  <div className="flex items-center gap-4">
-                    <div className="w-24 h-1 bg-slate-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${getProgressBarColor(projectColor)} transition-all`}
-                        style={{ width: `${progressWidth}%` }}
-                      ></div>
-                    </div>
-                    <ChevronDown
-                      size={20}
-                      className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                    />
-                  </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="border-t border-slate-200">
-                    <div className="px-6 py-4 space-y-3 bg-slate-50 max-h-96 overflow-y-auto">
-                      {projectTasks.map((task) => {
-                        const commentCount = task.comments || 0;
-
-                        return (
-                          <div
-                            key={task.id}
-                            onClick={() => handleOpenTask(task.id)}
-                            className="bg-white border border-slate-200 hover:border-blue-400 rounded-lg p-4 transition-all cursor-pointer hover:shadow-md"
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h4 className="font-medium text-slate-900 hover:text-blue-600 transition-colors">
-                                  {task.title}
-                                </h4>
-                                <div className="flex flex-wrap items-center gap-6 mt-3 text-xs text-slate-500">
-                                  <div className="flex items-center gap-1.5">
-                                    <Clock className="w-3.5 h-3.5" />
-                                    {task.dueDate || 'No due date'}
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <User className="w-3.5 h-3.5" />
-                                    {task.assignee || 'Unassigned'}
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <MessageSquare className="w-3.5 h-3.5" />
-                                    {commentCount}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-3 ml-4">
-                                <StatusBadge status={task.status} />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Sidebar - Task Detail */}
-      {selectedTaskId && selectedTask && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-end"
-          onClick={handleCloseSidebar}
-        >
-          <div
-            className="bg-gradient-to-b from-white to-slate-50 w-full max-w-xl h-full shadow-2xl flex flex-col overflow-hidden animate-slideInRight"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 sticky top-0 z-10 shadow-lg text-white">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs font-semibold tracking-widest uppercase text-blue-100">Task Review</p>
-                  <h2 className="text-2xl font-bold mt-2 leading-tight">{selectedTask.title}</h2>
-                  <p className="text-sm text-blue-100 mt-1">Review and provide feedback</p>
-                </div>
-                <button
-                  onClick={handleCloseSidebar}
-                  className="p-2 rounded-xl bg-white/20 hover:bg-white/30 transition-all duration-200 backdrop-blur-sm"
-                >
-                  <X size={24} className="text-white" />
-                </button>
-              </div>
+          {/* fixed top: search */}
+          <div className="flex-shrink-0 px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center gap-2 mb-3">
+              <Layers size={15} className="text-violet-500" />
+              <h2 className="font-bold text-slate-800 text-sm uppercase tracking-wide">Projects</h2>
+              <span className="ml-auto text-xs bg-violet-100 text-violet-600 font-semibold px-2 py-0.5 rounded-full">
+                {filteredProjects.length}
+              </span>
             </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <input
+                type="text"
+                placeholder="Search projects or tasks…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-                <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <p className="text-xs text-slate-500 font-medium">Project Name</p>
-                    <p className="font-bold text-lg text-slate-800 mt-1">{selectedTask.project || "Uncategorized"}</p>
-                  </div>
-                  <StatusBadge status={selectedTask.status} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <p className="text-xs text-slate-500 font-medium">Assignee</p>
-                    <p className="font-semibold text-slate-800 mt-1">{selectedTask.assignee || "Unassigned"}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <p className="text-xs text-slate-500 font-medium">Due Date</p>
-                    <p className="font-semibold text-slate-800 mt-1">
-                      {selectedTask.dueDate || "No due date"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-                <p className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wide">Description</p>
-                <p className="text-slate-600 leading-relaxed">{selectedTask.description || "No description provided."}</p>
-              </div>
-
-              {/* Progress */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-                <div className="flex justify-between text-sm mb-3">
-                  <span className="font-medium text-slate-700">Progress</span>
-                  <span className="font-bold text-blue-600">{selectedTask.progress || 0}%</span>
-                </div>
-                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-blue-600 rounded-full transition-all"
-                    style={{ width: `${selectedTask.progress || 0}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Comments Section */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-                <p className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-blue-500" />
-                  Reviewer Comments ({comments.length})
-                </p>
-                <div className="space-y-4">
-                  {loadingComments ? (
-                    <p className="text-center py-8 text-slate-400">Loading comments...</p>
-                  ) : comments.length > 0 ? (
-                    comments.map((comment) => (
-                      <div key={comment.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200 hover:shadow-md transition-all duration-200">
-                        <div className="flex justify-between mb-2">
-                          <p className="font-semibold text-slate-800 text-sm">{comment.reviewer_name}</p>
-                          <p className="text-xs text-slate-400">
-                            {comment.created_at ? formatTimeAgo(comment.created_at) : ''}
-                          </p>
-                        </div>
-                        <p className="text-sm text-slate-600 leading-relaxed">{comment.comment_text}</p>
+          {/* scrollable: project + task list */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {filteredProjects.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 text-sm">No projects found</div>
+            ) : (
+              filteredProjects.map((projectName, idx) => {
+                const projectTasks = groupedTasks[projectName];
+                const isOpen = selectedProject === projectName;
+                const col = PROJECT_COLORS[idx % PROJECT_COLORS.length];
+                return (
+                  <div
+                    key={projectName}
+                    className={`rounded-xl overflow-hidden border transition-all ${isOpen ? 'border-slate-200 shadow-sm' : 'border-transparent'}`}
+                  >
+                    <button
+                      onClick={() => {
+                        setSelectedProject(projectName);
+                        setSelectedTask(null);
+                        setActionDone(null);
+                      }}
+                      className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-all ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50'}`}
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${col.bg}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-slate-800 truncate">{projectName}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {projectTasks.length} task{projectTasks.length !== 1 ? 's' : ''}
+                        </p>
                       </div>
-                    ))
+                      <ChevronDown
+                        size={14}
+                        className={`text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+
+                    {isOpen && (
+                      <div className="border-t border-slate-100 bg-slate-50 px-2 pt-2 pb-2 space-y-1.5">
+                        {projectTasks.map((task) => {
+                          const isActive = selectedTask?.id === task.id;
+                          return (
+                            <button
+                              key={task.id}
+                              onClick={() => handleSelectTask(task)}
+                              className={`w-full text-left px-3 py-3 rounded-lg border transition-all ${
+                                isActive
+                                  ? 'bg-white border-violet-300 shadow-sm ring-1 ring-violet-200'
+                                  : 'bg-white border-transparent hover:border-slate-200 hover:shadow-sm'
+                              }`}
+                            >
+                              <p className={`text-sm font-medium truncate ${isActive ? 'text-violet-700' : 'text-slate-700'}`}>
+                                {task.title}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                <span className="flex items-center gap-1 text-xs text-slate-400">
+                                  <User size={10} /> {task.assignee}
+                                </span>
+                                <span className="text-slate-300">·</span>
+                                <span className="flex items-center gap-1 text-xs text-slate-400">
+                                  <Calendar size={10} /> {task.dueDate}
+                                </span>
+                              </div>
+                              <div className="mt-2">
+                                <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-medium">
+                                  Pending Review
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </aside>
+
+        {/* ── MIDDLE: Task Details ────────────────────────── */}
+        <main className="flex flex-col flex-1 min-h-0 min-w-0 bg-slate-50">
+
+          {/* fixed top: breadcrumb + status */}
+          {selectedTask && (
+            <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-semibold uppercase tracking-widest text-violet-500 flex-shrink-0">
+                  {selectedTask.project}
+                </span>
+                <ChevronRight size={12} className="text-slate-400 flex-shrink-0" />
+                <h1 className="text-sm font-bold text-slate-800 truncate">{selectedTask.title}</h1>
+              </div>
+              <span className="flex-shrink-0 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold border border-emerald-200">
+                Pending Review
+              </span>
+            </div>
+          )}
+
+          {/* scrollable: all task detail cards */}
+          <div className="flex-1 overflow-y-auto">
+            {selectedTask ? (
+              <div className="max-w-2xl mx-auto px-6 py-5 space-y-4">
+
+                {/* meta grid */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    { label: 'EMPLOYEE',  value: selectedTask.assignee,                               icon: User,        iconColor: 'text-violet-500' },
+                    { label: 'DUE DATE',  value: selectedTask.dueDate,                                icon: Calendar,    iconColor: 'text-sky-500' },
+                    { label: 'COMPLETED', value: formatTimeAgo(selectedTask.completedAt) || '2h ago',  icon: CheckCircle2,iconColor: 'text-emerald-500' },
+                    {
+                      label: 'PRIORITY',
+                      icon: Star,
+                      iconColor: priorityMeta.text,
+                      extra: (
+                        <span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${priorityMeta.text}`}>
+                          <span className={`w-2 h-2 rounded-full ${priorityMeta.dot}`} />
+                          {priorityMeta.label}
+                        </span>
+                      ),
+                    },
+                  ].map(({ label, value, icon: Icon, iconColor, extra }) => (
+                    <div key={label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Icon size={11} className={iconColor} />
+                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
+                      </div>
+                      {extra || <p className="text-sm font-semibold text-slate-800">{value}</p>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* description */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                  <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">
+                    <FileText size={12} /> Description
+                  </h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    {selectedTask.description ||
+                      'Integrate third-party payment gateway API and implement transaction processing with full error handling, webhook support, and transaction log storage.'}
+                  </p>
+                </div>
+
+                {/* review history */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                  <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 mb-4">
+                    <MessageSquare size={12} /> Review History
+                  </h3>
+                  {loadingComments ? (
+                    <div className="flex justify-center py-6">
+                      <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-slate-200 rounded-xl bg-slate-50">
+                      <MessageSquare size={26} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-sm text-slate-400 font-medium">No review comments yet</p>
+                      <p className="text-xs text-slate-400 mt-1">Post a comment from the right panel.</p>
+                    </div>
                   ) : (
-                    <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-xl border border-dashed">
-                      No reviewer comments yet
+                    <div className="space-y-3">
+                      {comments.map((c, i) => (
+                        <div key={c.id || i} className="flex gap-3">
+                          <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            R
+                          </div>
+                          <div className="flex-1 bg-violet-50 border border-violet-100 rounded-xl p-3">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs font-semibold text-violet-700">Reviewer</span>
+                              <span className="text-xs text-slate-400">{formatTimeAgo(c.createdAt)}</span>
+                            </div>
+                            <p className="text-sm text-slate-700">{c.comment_text || c.text}</p>
+                          </div>
+                        </div>
+                      ))}
+                      <div ref={commentsEndRef} />
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
 
-            {/* Add Comment Input */}
-            <div className="p-6 bg-white border-t border-slate-100">
-              <form onSubmit={handleAddComment} className="flex gap-3">
-                <input 
-                  type="text"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add your review or comment..."
-                  className="flex-1 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500"
-                />
-                <button 
-                  type="submit"
-                  disabled={!newComment.trim()}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white px-6 rounded-2xl transition-all flex items-center justify-center"
-                >
-                  <Send size={18} />
-                </button>
-              </form>
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center px-8">
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                  <FileText size={28} className="text-slate-400" />
+                </div>
+                <p className="text-slate-500 font-semibold">Select a task to view details</p>
+                <p className="text-slate-400 text-sm mt-1">Click on any task from the left panel</p>
+              </div>
+            )}
+          </div>
+        </main>
+
+        {/* ── RIGHT: Reviewer Actions ─────────────────────── */}
+        <aside className="flex flex-col w-80 flex-shrink-0 border-l border-slate-200 bg-white min-h-0">
+
+          {/* fixed top: heading */}
+          <div className="flex-shrink-0 px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Activity size={14} className="text-violet-500" />
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-600">Reviewer Actions</h3>
             </div>
           </div>
-        </div>
-      )}
+
+          {/* scrollable: actions + comment box */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+            {/* status banner */}
+            {actionDone && (
+              <div className={`rounded-xl p-3 border text-sm font-semibold flex items-center gap-2 ${
+                actionDone === 'approved'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-amber-50 border-amber-200 text-amber-700'
+              }`}>
+                {actionDone === 'approved' ? <CheckCircle2 size={15} /> : <RotateCcw size={15} />}
+                Task {actionDone === 'approved' ? 'approved successfully!' : 'sent back to employee.'}
+              </div>
+            )}
+
+            {/* approve */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-1.5">
+                <ThumbsUp size={16} className="text-emerald-600" />
+                <span className="font-bold text-emerald-800 text-sm">Approve Task</span>
+              </div>
+              <p className="text-xs text-emerald-700 mb-4 leading-relaxed">
+                Mark this task as reviewed and approved. The employee will be notified.
+              </p>
+              <button
+                onClick={handleApprove}
+                disabled={!selectedTask || actionLoading === 'approve' || actionDone === 'approved'}
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-md"
+              >
+                {actionLoading === 'approve' ? (
+                  <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Approving…</>
+                ) : (
+                  <><CheckCircle2 size={15} /> Approve</>
+                )}
+              </button>
+            </div>
+
+            {/* reopen */}
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-1.5">
+                <RefreshCw size={16} className="text-rose-600" />
+                <span className="font-bold text-rose-800 text-sm">Reopen Task</span>
+              </div>
+              <p className="text-xs text-rose-700 mb-4 leading-relaxed">
+                Send this task back to the employee with your feedback for corrections.
+              </p>
+              <button
+                onClick={handleReopen}
+                disabled={!selectedTask || actionLoading === 'reopen' || actionDone === 'reopened'}
+                className="w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-md"
+              >
+                {actionLoading === 'reopen' ? (
+                  <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Reopening…</>
+                ) : (
+                  <><RotateCcw size={15} /> Reopen</>
+                )}
+              </button>
+            </div>
+
+            {/* divider */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-slate-200" />
+              <span className="text-xs text-slate-400 font-medium">Review Comment</span>
+              <div className="flex-1 h-px bg-slate-200" />
+            </div>
+
+            {/* comment input */}
+            <div className="space-y-2">
+              <div className="relative">
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value.slice(0, 500))}
+                  onKeyDown={handleCommentKeyDown}
+                  placeholder={selectedTask ? 'Write comment… (Enter to send)' : 'Select a task first…'}
+                  disabled={!selectedTask}
+                  rows={4}
+                  className="w-full text-sm border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 resize-none transition-all disabled:bg-slate-50 disabled:text-slate-400"
+                />
+                <span className={`absolute bottom-2.5 right-3 text-xs pointer-events-none ${newComment.length > 450 ? 'text-rose-400' : 'text-slate-300'}`}>
+                  {newComment.length}/500
+                </span>
+              </div>
+              <button
+                onClick={handleAddComment}
+                disabled={!newComment.trim() || !selectedTask || commentPosting}
+                className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow-md"
+              >
+                {commentPosting ? (
+                  <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Posting…</>
+                ) : (
+                  <><Send size={13} /> Post Comment</>
+                )}
+              </button>
+              <p className="text-xs text-slate-400 text-center">Enter to send · Shift+Enter for new line</p>
+            </div>
+
+          </div>
+        </aside>
+
+      </div>
     </div>
   );
 }

@@ -12,13 +12,11 @@ import AdminProjectDetail from "./pages/Admin/ProjectDetail";
 import TaskInsights from "./pages/Admin/TaskInsights";
 import AdminTeam from "./pages/Admin/Team";
 import AdminProfile from "./pages/Admin/Profile";
-import Department from './pages/Admin/Department';
 
 import ManagerDashboard from "./pages/Manager/Dashboard";
 import ManagerProjects from "./pages/Manager/Projects";
 import ProjectDetail from "./pages/Manager/ProjectDetail";
 import ManagerTaskInsights from "./pages/Manager/TaskInsights";
-import ManagerTeamManagement from "./pages/Manager/TeamManagement";
 import ManagerProfile from "./pages/Manager/Profile";
 
 import ReviewerDashboard from "./pages/Reviewer/Dashboard";
@@ -125,7 +123,7 @@ const App = () => {
         {/* Root Route */}
         <Route path="/" element={<Navigate to={getDefaultRoute()} replace />} />
 
-        {/* ==================== ADMIN ROUTES ==================== */}
+        {/*  ADMIN ROUTES  */}
         <Route
           path="/admin/*"
           element={
@@ -141,11 +139,10 @@ const App = () => {
           <Route path="projects/:projectId" element={<AdminProjectDetail />} />
           <Route path="task-insights" element={<TaskInsights />} />
           <Route path="team" element={<AdminTeam />} />
-          <Route path="department" element={<Department />} />
           <Route path="profile" element={<AdminProfile />} />
         </Route>
 
-        {/* ==================== MANAGER ROUTES ==================== */}
+        {/* MANAGER ROUTES  */}
         <Route
           path="/manager/*"
           element={
@@ -160,7 +157,6 @@ const App = () => {
           <Route path="projects" element={<ManagerProjects />} />
           <Route path="projects/:projectId" element={<ProjectDetail />} />
           <Route path="task-insights" element={<ManagerTaskInsights />} />
-          <Route path="team" element={<ManagerTeamManagement />} />
           <Route path="profile" element={<ManagerProfile />} />
         </Route>
 

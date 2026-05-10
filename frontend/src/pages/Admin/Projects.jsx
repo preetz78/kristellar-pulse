@@ -43,7 +43,7 @@ const Projects = () => {
     project_id: "",
     name: "",
     description: "",
-    department_id: "",
+    department: "",
     manager_id: "",
     project_manager_name: "",
     start_date: "",
@@ -119,7 +119,7 @@ const Projects = () => {
 
         const result = await response.json();
         if (result.success) {
-          setDepartments(result.departments || []);
+          setDepartments(result.data || []);
         }
       } catch (err) {
         console.error("Error fetching departments:", err);
@@ -262,7 +262,7 @@ const Projects = () => {
       project_id: "",
       name: "",
       description: "",
-      department_id: "",
+      department: "",
       manager_id: "",
       project_manager_name: "",
       start_date: "",
@@ -278,7 +278,7 @@ const Projects = () => {
     if (isEdit) {
       setFormData((prev) => ({
         ...prev,
-        department_id: departmentId,
+        department: departmentId,
         manager_id: "",
         project_manager_name: ""
       }));
@@ -286,7 +286,7 @@ const Projects = () => {
     } else {
       setFormData((prev) => ({
         ...prev,
-        department_id: departmentId,
+        department: departmentId,
         manager_id: "",
         project_manager_name: ""
       }));
@@ -357,7 +357,7 @@ const Projects = () => {
       project_id: project.project_id || project.idCode || "",
       name: project.name || project.title || "",
       description: project.description || "",
-      department_id: project.department_id || "",
+      department: project.department || "",
       manager_id: project.manager_id || "",
       project_manager_name: project.project_manager_name || project.manager || "",
       start_date: project.start_date ? project.start_date.split("T")[0] : "",
@@ -370,7 +370,7 @@ const Projects = () => {
         : []
     );
     setShowEditProjectModal(true);
-    await fetchDepartmentPeople(project.department_id);
+    await fetchDepartmentPeople(project.department);
   };
 
   const handleCloseEditModal = () => {
@@ -383,7 +383,7 @@ const Projects = () => {
       project_id: "",
       name: "",
       description: "",
-      department_id: "",
+      department: "",
       manager_id: "",
       project_manager_name: "",
       start_date: "",
@@ -798,15 +798,18 @@ const Projects = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
                   <select
-                    value={formData.department_id}
+                    value={formData.department}
                     onChange={(e) => handleDepartmentChange(e.target.value)}
                     className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
                     required
                   >
                     <option value="">Select Department</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name}
+                    {departments.map((dept, index) => (
+                      <option
+                        key={index}
+                        value={dept.department}
+                      >
+                        {dept.department}
                       </option>
                     ))}
                   </select>
@@ -819,7 +822,7 @@ const Projects = () => {
                     onChange={(e) => handleManagerChange(e.target.value)}
                     className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
                     required
-                    disabled={!formData.department_id || departmentLoading}
+                    disabled={!formData.department || departmentLoading}
                   >
                     <option value="">Select Manager</option>
                     {departmentManagers.map((manager) => (
@@ -870,7 +873,7 @@ const Projects = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">Assign Employees</label>
                 <div className="border border-gray-300 rounded-2xl p-4 max-h-56 overflow-y-auto">
-                  {!formData.department_id ? (
+                  {!formData.department ? (
                     <p className="text-sm text-gray-500">Select a department first to load employees.</p>
                   ) : departmentLoading ? (
                     <p className="text-sm text-gray-500">Loading employees...</p>
@@ -968,15 +971,18 @@ const Projects = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
                   <select
-                    value={formData.department_id}
+                    value={formData.department}
                     onChange={(e) => handleDepartmentChange(e.target.value, true)}
                     className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
                     required
                   >
                     <option value="">Select Department</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name}
+                    {departments.map((dept, index) => (
+                      <option
+                        key={index}
+                        value={dept.department}
+                      >
+                        {dept.department}
                       </option>
                     ))}
                   </select>
@@ -989,7 +995,7 @@ const Projects = () => {
                     onChange={(e) => handleManagerChange(e.target.value)}
                     className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
                     required
-                    disabled={!formData.department_id || departmentLoading}
+                    disabled={!formData.department || departmentLoading}
                   >
                     <option value="">Select Manager</option>
                     {departmentManagers.map((manager) => (
@@ -1040,7 +1046,7 @@ const Projects = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">Assign Employees</label>
                 <div className="border border-gray-300 rounded-2xl p-4 max-h-56 overflow-y-auto">
-                  {!formData.department_id ? (
+                  {!formData.department ? (
                     <p className="text-sm text-gray-500">Select a department first to load employees.</p>
                   ) : departmentLoading ? (
                     <p className="text-sm text-gray-500">Loading employees...</p>

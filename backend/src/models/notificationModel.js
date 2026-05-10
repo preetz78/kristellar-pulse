@@ -3,18 +3,19 @@ import pool from '../config/db.js';
 
 export const createNotificationsTable = async () => {
   try {
-    const query = `
-      CREATE TABLE IF NOT EXISTS notifications (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        recipient_type VARCHAR(20) NOT NULL,        -- 'admin', 'manager', 'reviewer', 'employee'
-        recipient_id INT NOT NULL,                  -- id from users table OR employees table
-        message TEXT NOT NULL,
-        type VARCHAR(50) NULL,                      -- e.g., 'task', 'project', 'deadline', 'feedback', 'review', 'assignment'
-        priority VARCHAR(20) DEFAULT 'medium',      -- 'high', 'medium', 'low'
-        status VARCHAR(20) DEFAULT 'unread',        -- 'unread', 'read'
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    `;
+      const query = `
+        CREATE TABLE IF NOT EXISTS notifications (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          recipient_type VARCHAR(20) NOT NULL,
+          recipient_id INT NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          full_message TEXT NOT NULL,
+          type VARCHAR(50) NULL,
+          priority VARCHAR(20) DEFAULT 'medium',
+          status VARCHAR(20) DEFAULT 'unread',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `;
 
     await pool.query(query);
     console.log('Notifications table created successfully');

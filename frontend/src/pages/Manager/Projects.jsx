@@ -20,9 +20,9 @@ import apiConfig from "../../config/apiConfig";
 
 const ManagerProjects = () => {
   const navigate = useNavigate();
-  const location = useLocation();   // ← For reading navigation state from Dashboard
+  const location = useLocation();   
 
-  // Get logged-in user from sessionStorage, with localStorage fallback for older sessions
+  // Get logged-in user from sessionStorage, with localStorage fallback
   const user = JSON.parse(sessionStorage.getItem("user") || localStorage.getItem("user") || "{}");
   const managerName = user.name || "Manager";
   const canManageProjects = true;
@@ -33,8 +33,7 @@ const ManagerProjects = () => {
   const [managerProfile, setManagerProfile] = useState({
     id: user.id || "",
     name: managerName,
-    department_id: user.department_id || "",
-    department_name: user.department_name || ""
+    department: user.department || ""
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -64,8 +63,7 @@ const ManagerProjects = () => {
     projectId: "",
     title: "",
     description: "",
-    departmentId: "",
-    departmentName: "",
+    department: "",
     managerId: user.id || "",
     projectManagerName: managerName,
     startDate: "",
@@ -156,15 +154,13 @@ const ManagerProjects = () => {
         const nextProfile = {
           id: profile.id || user.id || "",
           name: profile.name || managerName,
-          department_id: profile.department_id || "",
-          department_name: profile.department_name || ""
+          department: profile.department || ""
         };
 
         setManagerProfile(nextProfile);
         setNewProject((prev) => ({
           ...prev,
-          departmentId: nextProfile.department_id,
-          departmentName: nextProfile.department_name,
+          department: profile.department || "",
           managerId: nextProfile.id,
           projectManagerName: nextProfile.name
         }));
@@ -194,7 +190,6 @@ const ManagerProjects = () => {
     return "bg-gradient-to-r from-blue-600 to-cyan-500";
   };
 
-  // Enhanced Status Logic: Completed / Delayed / In Progress
   const getProjectStatus = (project) => {
     const progress = project.progress || 0;
     const today = new Date();
@@ -211,7 +206,6 @@ const ManagerProjects = () => {
     return { status: "In Progress", color: "bg-blue-100 text-blue-700 border-blue-200" };
   };
 
-  // Filtered projects with search + filter
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
       const progress = project.progress || 0;
@@ -239,7 +233,6 @@ const ManagerProjects = () => {
     });
   }, [projects, searchTerm, activeFilter, selectedProjectTitle]);
 
-  // Stats
   const totalProjects = projects.length;
   const inProgressCount = projects.filter(p => (p.progress || 0) < 100).length;
   const highPriorityCount = projects.filter(p => p.priority === "High").length;
@@ -256,37 +249,43 @@ const ManagerProjects = () => {
     try {
       const token = sessionStorage.getItem("token");
 
+      const payload = {
+        project_id: newProject.projectId,
+        name: newProject.title,
+        department: newProject.department,
+        description: newProject.description,
+        manager_id: newProject.managerId,           // Added - critical for backend
+        project_manager_name: newProject.projectManagerName,
+        start_date: newProject.startDate || null,
+        deadline: newProject.deadline,
+        priority: newProject.priority,
+        assigned_employee_ids: newProject.assignedEmployeeIds
+      };
+
+      console.log("Sending project payload:", payload); // Debug
+
       const response = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          project_id: newProject.projectId,
-          name: newProject.title,
-          description: newProject.description,
-          project_manager_name: newProject.projectManagerName,
-          start_date: newProject.startDate || null,
-          deadline: newProject.deadline,
-          priority: newProject.priority,
-          assigned_employee_ids: newProject.assignedEmployeeIds
-        })
+        body: JSON.stringify(payload)
       });
 
       const result = await response.json();
 
-      if (result.success) {
+      if (response.ok && result.success) {
         alert("Project created successfully!");
         handleCloseAddModal();
-
         fetchProjects();
       } else {
-        alert(result.message || "Failed to create project");
+        console.error("Server error response:", result);
+        alert(result.message || `Failed to create project (Status: ${response.status})`);
       }
     } catch (err) {
-      console.error(err);
-      alert("Failed to connect to server");
+      console.error("Add project error:", err);
+      alert("Failed to connect to server. Please check console for details.");
     }
   };
 
@@ -435,10 +434,13 @@ const ManagerProjects = () => {
   const handleOpenAddModal = () => {
     setNewProject((prev) => ({
       ...prev,
-      departmentId: managerProfile.department_id,
-      departmentName: managerProfile.department_name,
+      department: managerProfile.department,
       managerId: managerProfile.id,
-      projectManagerName: managerProfile.name
+      projectManagerName: managerProfile.name,
+      startDate: "",
+      deadline: "",
+      priority: "Medium",
+      assignedEmployeeIds: []
     }));
     setShowAddModal(true);
   };
@@ -449,8 +451,7 @@ const ManagerProjects = () => {
       projectId: "",
       title: "",
       description: "",
-      departmentId: managerProfile.department_id,
-      departmentName: managerProfile.department_name,
+      department: managerProfile.department,
       managerId: managerProfile.id,
       projectManagerName: managerProfile.name,
       startDate: "",
@@ -556,7 +557,6 @@ const ManagerProjects = () => {
 
       {/* Filter Bar with Search */}
       <div className="mb-8 flex flex-wrap items-center gap-3">
-        {/* Search Bar */}
         <div className="relative w-80">
           <div className="relative">
             <input
@@ -570,7 +570,6 @@ const ManagerProjects = () => {
           </div>
         </div>
 
-        {/* Filter Buttons */}
         <div className="flex flex-wrap gap-2 bg-gray-100 p-2 rounded-2xl">
           <button
             onClick={() => { 
@@ -793,7 +792,7 @@ const ManagerProjects = () => {
                     value={newProject.title}
                     onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
                     className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
-                    placeholder="Banking Risk Analysis System"
+                    placeholder="Personalized Recommendation Engine"
                     required
                   />
                 </div>
@@ -804,8 +803,7 @@ const ManagerProjects = () => {
                     value={newProject.description}
                     onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
                     className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500 min-h-[110px]"
-                    placeholder="Credit risk forecasting platform for banking clients"
-                    required
+                    placeholder="Recommends products based on user behavior and purchase history."
                   />
                 </div>
 
@@ -813,7 +811,7 @@ const ManagerProjects = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
                   <input
                     type="text"
-                    value={newProject.departmentName || "Department not assigned"}
+                    value={newProject.department || "Department not assigned"}
                     className="w-full border border-gray-300 rounded-2xl px-4 py-3 bg-gray-50 text-gray-700 focus:outline-none"
                     readOnly
                   />
@@ -837,7 +835,6 @@ const ManagerProjects = () => {
                     value={newProject.startDate}
                     onChange={(e) => setNewProject({ ...newProject, startDate: e.target.value })}
                     className="w-full border border-gray-300 rounded-2xl px-4 py-3 focus:outline-none focus:border-blue-500"
-                    required
                   />
                 </div>
 

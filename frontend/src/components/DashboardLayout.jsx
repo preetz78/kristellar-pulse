@@ -61,7 +61,7 @@ const DashboardLayout = ({ logout }) => {
       case 'manager': return '/api/manager/notifications';
       case 'reviewer': return '/api/reviewer/notifications';
       case 'employee':
-      default: return '/api/employee/notifications';
+      default: return '/api/employees/notifications';
     }
   }, [role]);
 
@@ -164,14 +164,12 @@ const DashboardLayout = ({ logout }) => {
     { path: '/admin/projects', label: 'Projects', icon: FolderKanban },
     { path: '/admin/task-insights', label: 'Task Insights', icon: SearchCheck },
     { path: '/admin/team', label: 'Team Management', icon: UsersRound },
-    { path: '/admin/department', label: 'Department', icon: Building2 },
   ];
 
   const managerMenu = [
     { path: '/manager/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/manager/projects', label: 'Projects', icon: FolderKanban },
     { path: '/manager/task-insights', label: 'Task Insights', icon: SearchCheck },
-    { path: '/manager/team', label: 'Team Management', icon: UsersRound },
   ];
 
   const reviewerMenu = [

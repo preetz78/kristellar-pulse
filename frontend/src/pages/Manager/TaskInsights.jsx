@@ -430,7 +430,7 @@ export default function TaskInsights() {
                             {comment.created_at ? new Date(comment.created_at).toLocaleDateString("en-GB") : ""}
                           </p>
                         </div>
-                        <p className="text-sm text-slate-600 leading-relaxed">{comment.comment_text}</p>
+                        <p className="text-sm text-slate-600 leading-relaxed">{comment.comment}</p>
                       </div>
                     ))
                   ) : (

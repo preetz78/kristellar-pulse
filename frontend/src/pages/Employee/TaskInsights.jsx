@@ -18,6 +18,7 @@ import apiConfig from "../../config/apiConfig";
 const StatusBadge = ({ status }) => {
   const styles = {
     'In Progress': 'bg-blue-100 text-blue-700 border border-blue-200',
+    'Pending Review': 'bg-amber-100 text-amber-700 border border-amber-200',
     'Delayed': 'bg-red-100 text-red-700 border border-red-200',
     'Completed': 'bg-emerald-100 text-emerald-700 border border-emerald-200',
   };
@@ -63,7 +64,7 @@ export default function TaskInsights() {
       setLoading(true);
       const token = sessionStorage.getItem("token");
 
-      const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/tasks`, {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/employees/tasks`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -128,7 +129,7 @@ export default function TaskInsights() {
       setCompletingTaskId(taskId);
       const token = sessionStorage.getItem("token");
 
-      const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/tasks/${taskId}/complete`, {
+      const response = await fetch(`${apiConfig.API_BASE_URL}/api/employees/tasks/${taskId}/complete`, {
         method: "PATCH",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -147,7 +148,7 @@ export default function TaskInsights() {
         setTasks(prevTasks =>
           prevTasks.map(task =>
             task.id === taskId
-              ? { ...task, status: 'Completed', completed_at: new Date().toISOString() }
+              ? { ...task, status: 'Pending Review', completed_at: new Date().toISOString() }
               : task
           )
         );
@@ -165,7 +166,7 @@ export default function TaskInsights() {
   const calculateStats = () => {
     const totalTasks = tasks.length;
     const completedTasks = tasks.filter(t => t.status === 'Completed').length;
-    const inProgressTasks = tasks.filter(t => t.status === 'In Progress').length;
+    const inProgressTasks = tasks.filter(t => t.status === 'In Progress' || t.status === 'Pending Review').length;
     const delayedTasks = tasks.filter(t => t.status === 'Delayed').length;
 
     return {
@@ -323,7 +324,7 @@ export default function TaskInsights() {
           Object.entries(groupedTasks).map(([projectName, projectTasks], projectIndex) => {
             const projectColor = getProjectColor(projectIndex);
             const isExpanded = expandedProjects.has(projectName);
-            const inProgressCount = projectTasks.filter(t => t.status === 'In Progress').length;
+            const inProgressCount = projectTasks.filter(t => t.status === 'In Progress' || t.status === 'Pending Review').length;
             const completedCount = projectTasks.filter(t => t.status === 'Completed').length;
             const delayedCount = projectTasks.filter(t => t.status === 'Delayed').length;
 
@@ -375,15 +376,18 @@ export default function TaskInsights() {
                             ? task.comments.filter(c => c !== null && c !== undefined).length 
                             : 0;
                           const isCompleted = task.status === 'Completed';
+                          const isPendingReview = task.status === 'Pending Review';
                           const isDelayed = isTaskOverdue(task);
 
                           return (
                             <div
                               key={task.id}
                               className={`bg-white border rounded-lg p-4 transition-all ${
-                                isCompleted 
-                                  ? 'border-emerald-200 bg-emerald-50' 
-                                  : isDelayed
+                                  isCompleted
+                                    ? 'border-emerald-200 bg-emerald-50'
+                                    : isPendingReview
+                                    ? 'border-amber-200 bg-amber-50'
+                                    : isDelayed
                                   ? 'border-red-200 bg-red-50 hover:border-red-400'
                                   : 'border-slate-200 hover:border-blue-400 hover:shadow-md'
                               }`}
@@ -396,11 +400,13 @@ export default function TaskInsights() {
                                   className={`mt-1 flex-shrink-0 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
                                     isCompleted
                                       ? 'bg-emerald-500 border-emerald-500 cursor-not-allowed'
+                                      : isPendingReview
+                                      ? 'bg-amber-500 border-amber-500 cursor-not-allowed'
                                       : 'border-slate-300 hover:border-blue-500 cursor-pointer hover:bg-blue-50'
                                   } ${completingTaskId === task.id ? 'opacity-50' : ''}`}
                                   title={isCompleted ? "Task is completed" : "Click to mark as completed"}
                                 >
-                                  {isCompleted && (
+                                  {(isCompleted || isPendingReview) && (
                                     <Check size={16} className="text-white" />
                                   )}
                                   {completingTaskId === task.id && !isCompleted && (
@@ -416,6 +422,8 @@ export default function TaskInsights() {
                                   <h4 className={`font-medium transition-colors ${
                                     isCompleted
                                       ? 'text-emerald-700 line-through'
+                                      : isPendingReview
+                                      ? 'text-amber-700'
                                       : 'text-slate-900 hover:text-blue-600'
                                   }`}>
                                     {task.title}

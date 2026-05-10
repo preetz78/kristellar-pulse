@@ -1,6 +1,5 @@
 // backend/src/routes/managerRoutes.js
 import express from 'express';
-import upload from '../middleware/profileUpload.js';
 import { 
   createProject, 
   getMyProjects, 
@@ -13,17 +12,14 @@ import {
   updateProject, 
   deleteProject, 
   getTaskInsights, 
-  createEmployee,
-  getTeamEmployees, 
-  updateEmployee,    
-  deleteEmployee ,
   getManagerDashboardStats,
   getManagerProjectProgress,
   getManagerProfile,
   getManagerNotifications,
   markManagerNotificationAsRead,
   updateManagerProfile,
-  getManagerProfileStats
+  getManagerProfileStats,
+  getDepartmentEmployees
 } from '../controllers/managerController.js';
 
 import { changePassword } from '../controllers/authController.js';
@@ -42,7 +38,9 @@ router.delete('/projects/:id', protect, deleteProject);
 router.get('/projects/:id', protect, getProjectById);
 
 // Create new task
-router.post('/projects/:id/tasks', protect, addTask);           
+router.post('/projects/:id/tasks', protect, addTask);     
+
+router.get("/employees",protect,getDepartmentEmployees);
 
 // Get all tasks for a project
 router.get('/projects/:id/tasks', protect, getProjectTasks);
@@ -59,12 +57,6 @@ router.delete('/tasks/:taskId', protect, deleteTask);
 // TASK INSIGHTS 
 router.get('/task-insights', protect, getTaskInsights);
 
-// EMPLOYEE MANAGEMENT 
-router.post('/employees', protect, upload.single('profile_picture'), createEmployee);
-router.get('/employees', protect, getTeamEmployees);   
-router.put('/employees/:id', protect, upload.single('profile_picture'), updateEmployee);
-router.delete('/employees/:id', protect, deleteEmployee);
-
 router.get('/dashboard', protect, getManagerDashboardStats);
 router.get('/project-progress', protect, getManagerProjectProgress);
 
@@ -73,7 +65,6 @@ router.get('/profile', protect, getManagerProfile);
 router.get('/notifications', protect, getManagerNotifications);
 router.patch('/notifications/:notificationId/read', protect, markManagerNotificationAsRead);
 
-// router.get('/profile', protect, getManagerProfile);
 router.put('/profile', protect, updateManagerProfile);
 router.get('/profile-stats', protect, getManagerProfileStats);
 

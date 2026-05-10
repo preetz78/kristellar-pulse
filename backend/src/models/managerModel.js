@@ -9,7 +9,7 @@ const createProjectsTable = async () => {
         project_id VARCHAR(50) UNIQUE NOT NULL,
         name VARCHAR(255) NOT NULL,
         description TEXT,
-        department_id INT NOT NULL,
+        department VARCHAR(150) NULL,
         manager_id INT DEFAULT NULL,
         project_manager_name VARCHAR(100) DEFAULT NULL,
         created_by INT NOT NULL,
@@ -20,9 +20,9 @@ const createProjectsTable = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-        FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE,
-        FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL,
-        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+        
+        FOREIGN KEY (manager_id) REFERENCES pulse_employees(id) ON DELETE SET NULL,
+        FOREIGN KEY (created_by) REFERENCES pulse_employees(id) ON DELETE CASCADE
       )
     `);
 
@@ -43,8 +43,8 @@ const createProjectAssignmentsTable = async () => {
         assigned_by INT NULL,
         assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-        FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (employee_id) REFERENCES pulse_employees(id) ON DELETE CASCADE,
+        FOREIGN KEY (assigned_by) REFERENCES pulse_employees(id) ON DELETE SET NULL,
         UNIQUE KEY unique_project_employee (project_id, employee_id)
       )
     `);
@@ -66,15 +66,21 @@ const createTasksTable = async () => {
         created_by INT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         due_date DATE,
-        status ENUM('In Progress', 'Completed', 'Delayed') DEFAULT 'In Progress',
-        completed_at TIMESTAMP NULL,           -- NEW: Timestamp when employee marks task as Completed
+        status ENUM('In Progress','Pending Review','Completed','Delayed') DEFAULT 'In Progress',
+        completed_at TIMESTAMP NULL,
+        reviewed_by INT NULL,
+        reviewed_at TIMESTAMP NULL,
         progress INT DEFAULT 0,
+
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-        FOREIGN KEY (assigned_to) REFERENCES employees(id) ON DELETE CASCADE,
-        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (assigned_to) REFERENCES pulse_employees(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES pulse_employees(id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_by) REFERENCES pulse_employees(id) ON DELETE SET NULL
       )
     `);
+
     console.log("Tasks table created or already exists");
+
   } catch (error) {
     console.error("❌ Error creating tasks table:", error.message);
   }

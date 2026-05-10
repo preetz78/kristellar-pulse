@@ -4,362 +4,54 @@ import bcrypt from 'bcryptjs';
 
 // Get all users (for Team Management page)
 export const getAllUsers = async (req, res) => {
-  try {
-    const [users] = await pool.execute(
-      `SELECT
-         u.id,
-         'user' AS entity_type,
-         u.user_id AS member_code,
-         u.name,
-         u.email,
-         u.role,
-         u.profile_picture,
-         u.department_id,
-         d.name AS department_name,
-         u.created_at
-       FROM users u
-       LEFT JOIN departments d ON d.id = u.department_id
-       WHERE u.role <> 'admin'
-
-       UNION ALL
-
-       SELECT
-         e.id,
-         'employee' AS entity_type,
-         e.employee_id AS member_code,
-         e.name,
-         e.email,
-         e.role,
-         e.profile_picture,
-         e.department_id,
-         d.name AS department_name,
-         e.created_at
-       FROM employees e
-       LEFT JOIN departments d ON d.id = e.department_id
-
-       ORDER BY created_at DESC, id DESC`
-    );
-    res.json(users);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to fetch users" });
-  }
-};
-
-// Create new user (with profile picture support) - FIXED
-export const createUser = async (req, res) => {
-  const {
-    userId,
-    name,
-    email,
-    password,
-    role,
-    phone,
-    designation,
-    location,
-    bio,
-    department,
-    departmentId
-  } = req.body;
-
-  const profilePicPath = req.file
-    ? `/uploads/profile_pics/${req.file.filename}`
-    : null;
-
-  // Validation
-  if (!name || !email || !password || !role) {
-    return res.status(400).json({
-      success: false,
-      message: "Name, email, password and role are required"
-    });
-  }
 
   try {
-    const userRole = role.toLowerCase();
-    const normalizedDepartmentId = departmentId || department || null;
 
-    if (normalizedDepartmentId && Number.isNaN(Number(normalizedDepartmentId))) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid department selected"
-      });
-    }
+    const [users] = await pool.execute(`
 
-    if (normalizedDepartmentId) {
-      const [departmentRows] = await pool.execute(
-        `SELECT id FROM departments WHERE id = ?`,
-        [normalizedDepartmentId]
-      );
+      SELECT
+        id,
+        employee_id AS member_code,
+        firstname,
+        lastname,
+        CONCAT(firstname, ' ', lastname) AS name,
+        email_id,
+        office_role,
+        designation,
+        department,
+        profile_picture,
+        location,
+        created_at
 
-      if (departmentRows.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Selected department does not exist"
-        });
-      }
-    }
+      FROM pulse_employees
+      ORDER BY created_at DESC
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    `);
 
-    /*
-      =========================
-      IF ROLE IS EMPLOYEE
-      SAVE INTO EMPLOYEES TABLE
-      =========================
-    */
-    if (userRole === "employee") {
-      // Check duplicate email in employees table
-      const [existingEmployee] = await pool.execute(
-        `SELECT id FROM employees WHERE email = ?`,
-        [email]
-      );
-
-      if (existingEmployee.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: "Employee email already exists"
-        });
-      }
-
-      if (userId) {
-        const [existingEmployeeId] = await pool.execute(
-          `SELECT id FROM employees WHERE employee_id = ?`,
-          [userId]
-        );
-
-        if (existingEmployeeId.length > 0) {
-          return res.status(409).json({
-            success: false,
-            message: "Employee ID already exists"
-          });
-        }
-      }
-
-      const [result] = await pool.execute(
-        `INSERT INTO employees
-        (
-          employee_id,
-          name,
-          email,
-          password,
-          phone,
-          designation,
-          location,
-          bio,
-          department_id,
-          profile_picture,
-          created_by,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [
-          userId || null,
-          name,
-          email,
-          hashedPassword,
-          phone || null,
-          designation || null,
-          location || null,
-          bio || null,
-          normalizedDepartmentId || null,
-          profilePicPath,
-          req.user?.id || null
-        ]
-      );
-
-      return res.status(201).json({
-        success: true,
-        message: "Employee created successfully",
-        employeeId: result.insertId
-      });
-    }
-
-    /*
-      =========================
-      MANAGER / REVIEWER / ADMIN
-      SAVE INTO USERS TABLE
-      =========================
-    */
-    else {
-      // Check duplicate email in users table
-      const [existingUser] = await pool.execute(
-        `SELECT id FROM users WHERE email = ?`,
-        [email]
-      );
-
-      if (existingUser.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: "User email already exists"
-        });
-      }
-
-      if (userId) {
-        const [existingUserId] = await pool.execute(
-          `SELECT id FROM users WHERE user_id = ?`,
-          [userId]
-        );
-
-        if (existingUserId.length > 0) {
-          return res.status(409).json({
-            success: false,
-            message: "User ID already exists"
-          });
-        }
-      }
-
-      const [result] = await pool.execute(
-        `INSERT INTO users
-        (
-          user_id,
-          name,
-          email,
-          password,
-          role,
-          phone,
-          designation,
-          location,
-          bio,
-          department_id,
-          profile_picture,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [
-          userId || null,
-          name,
-          email,
-          hashedPassword,
-          userRole,
-          phone || null,
-          designation || null,
-          location || null,
-          bio || null,
-          normalizedDepartmentId || null,
-          profilePicPath
-        ]
-      );
-
-      return res.status(201).json({
-        success: true,
-        message: `${role} created successfully`,
-        userId: result.insertId
-      });
-    }
-
-  } catch (error) {
-    console.error("Create user error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create user"
-    });
-  }
-};
-
-// Delete user
-export const deleteUser = async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const [result] = await pool.execute('DELETE FROM users WHERE id = ?', [id]);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    res.json({ 
+    res.json({
       success: true,
-      message: "User deleted successfully" 
+      data: users
     });
+
   } catch (error) {
+
     console.error(error);
-    res.status(500).json({ message: "Failed to delete user" });
-  }
-};
 
-// Update user (name, email, role, password, profile picture)
-export const updateUser = async (req, res) => {
-  const { id } = req.params;
-  const { name, email, role, password } = req.body;
-  const profilePicPath = req.file ? `/uploads/profile_pics/${req.file.filename}` : null;
-
-  if (!name || !email || !role) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "Name, email and role are required" 
-    });
-  }
-
-  try {
-    // Check if email already exists for another user
-    const [existing] = await pool.execute(
-      'SELECT id FROM users WHERE email = ? AND id != ?', 
-      [email, id]
-    );
-
-    if (existing.length > 0) {
-      return res.status(409).json({ 
-        success: false, 
-        message: "Email already exists" 
-      });
-    }
-
-    // Build dynamic update query
-    let query = `
-      UPDATE users 
-      SET name = ?, email = ?, role = ?
-    `;
-    const params = [name, email, role.toLowerCase()];
-
-    // If password is provided, hash and update it
-    if (password && password.trim() !== '') {
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-      query += `, password = ?`;
-      params.push(hashedPassword);
-    }
-
-    // If new profile picture is uploaded, update it
-    if (profilePicPath) {
-      query += `, profile_picture = ?`;
-      params.push(profilePicPath);
-    }
-
-    query += ` WHERE id = ?`;
-    params.push(id);
-
-    const [result] = await pool.execute(query, params);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "User not found" 
-      });
-    }
-
-    res.json({ 
-      success: true,
-      message: "User updated successfully" 
-    });
-  } catch (error) {
-    console.error("Update user error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to update user. Please check server logs." 
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users"
     });
   }
 };
 
 // Create projects 
 export const createAdminProject = async (req, res) => {
+
   const {
     project_id,
     name,
     description,
-    department_id,
+    department,
     manager_id,
     assigned_employee_ids,
     start_date,
@@ -369,7 +61,7 @@ export const createAdminProject = async (req, res) => {
 
   const adminId = req.user.id;
 
-  if (!project_id || !name || !department_id || !deadline) {
+  if (!project_id || !name || !department || !deadline) {
     return res.status(400).json({
       success: false,
       message: "Project ID, Name, Department and Deadline are required"
@@ -377,40 +69,28 @@ export const createAdminProject = async (req, res) => {
   }
 
   try {
-    // =========================
-    // 1. Validate Department
-    // =========================
-    const [departmentRows] = await pool.execute(
-      `
-      SELECT id, name
-      FROM departments
-      WHERE id = ?
-      `,
-      [department_id]
-    );
-
-    if (departmentRows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Department not found"
-      });
-    }
 
     // =========================
-    // 2. Validate Manager
+    // Validate Manager
     // =========================
     let managerName = null;
 
     if (manager_id) {
+
       const [managerRows] = await pool.execute(
         `
-        SELECT id, name
-        FROM users
+        SELECT
+          id,
+          firstname,
+          lastname
+
+        FROM pulse_employees
+
         WHERE id = ?
-        AND role = 'manager'
-        AND department_id = ?
+          AND LOWER(office_role) = 'manager'
+          AND department = ?
         `,
-        [manager_id, department_id]
+        [manager_id, department]
       );
 
       if (managerRows.length === 0) {
@@ -420,11 +100,12 @@ export const createAdminProject = async (req, res) => {
         });
       }
 
-      managerName = managerRows[0].name;
+      managerName =
+        `${managerRows[0].firstname} ${managerRows[0].lastname}`;
     }
 
     // =========================
-    // 3. Validate Employees First
+    // Validate Employees
     // =========================
     let validEmployeeIds = [];
 
@@ -432,15 +113,20 @@ export const createAdminProject = async (req, res) => {
       Array.isArray(assigned_employee_ids) &&
       assigned_employee_ids.length > 0
     ) {
+
       for (const empId of assigned_employee_ids) {
+
         const [employeeRows] = await pool.execute(
           `
-          SELECT id, name
-          FROM employees
+          SELECT id
+
+          FROM pulse_employees
+
           WHERE id = ?
-          AND department_id = ?
+            AND LOWER(office_role) = 'employee'
+            AND department = ?
           `,
-          [empId, department_id]
+          [empId, department]
         );
 
         if (employeeRows.length > 0) {
@@ -449,11 +135,10 @@ export const createAdminProject = async (req, res) => {
       }
     }
 
-    // Final team size should be based on VALID employees only
     const teamSize = validEmployeeIds.length;
 
     // =========================
-    // 4. Insert Project
+    // Insert Project
     // =========================
     const [projectResult] = await pool.execute(
       `
@@ -461,7 +146,7 @@ export const createAdminProject = async (req, res) => {
         project_id,
         name,
         description,
-        department_id,
+        department,
         manager_id,
         project_manager_name,
         created_by,
@@ -470,13 +155,14 @@ export const createAdminProject = async (req, res) => {
         team_size,
         priority
       )
+
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         project_id,
         name,
         description || null,
-        department_id,
+        department,
         manager_id || null,
         managerName,
         adminId,
@@ -490,10 +176,12 @@ export const createAdminProject = async (req, res) => {
     const newProjectId = projectResult.insertId;
 
     // =========================
-    // 5. Insert Project Assignments
+    // Insert Project Assignments
     // =========================
     if (validEmployeeIds.length > 0) {
+
       for (const empId of validEmployeeIds) {
+
         await pool.execute(
           `
           INSERT INTO project_assignments (
@@ -501,6 +189,7 @@ export const createAdminProject = async (req, res) => {
             employee_id,
             assigned_by
           )
+
           VALUES (?, ?, ?)
           `,
           [newProjectId, empId, adminId]
@@ -509,7 +198,7 @@ export const createAdminProject = async (req, res) => {
     }
 
     // =========================
-    // 6. Return Fresh Project Data
+    // Return Project
     // =========================
     const [newProjectRows] = await pool.execute(
       `
@@ -518,13 +207,16 @@ export const createAdminProject = async (req, res) => {
         p.project_id,
         p.name,
         p.description,
+        p.department,
         p.priority,
         p.deadline,
         p.team_size,
         p.created_at,
         p.project_manager_name,
         0 AS progress
+
       FROM projects p
+
       WHERE p.id = ?
       `,
       [newProjectId]
@@ -537,11 +229,16 @@ export const createAdminProject = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Create Admin Project Error:", error);
+
+    console.error(
+      "Create Admin Project Error:",
+      error
+    );
 
     res.status(500).json({
       success: false,
-      message: error.message || "Failed to create project"
+      message:
+        error.message || "Failed to create project"
     });
   }
 };
@@ -556,7 +253,7 @@ export const getAllProjects = async (req, res) => {
         p.name AS title,
         p.name,
         p.description,
-        p.department_id,
+        p.department,
         p.manager_id,
         p.project_manager_name AS manager,
         p.project_manager_name,
@@ -566,95 +263,189 @@ export const getAllProjects = async (req, res) => {
         p.priority,
         p.created_at,
         COUNT(DISTINCT t.id) AS total_tasks,
-        COUNT(DISTINCT CASE WHEN t.status = 'Completed' THEN t.id END) AS completed_tasks,
-        GROUP_CONCAT(DISTINCT pa.employee_id ORDER BY pa.employee_id) AS assigned_employee_ids
+        COUNT(
+          DISTINCT CASE
+            WHEN t.status = 'Completed'
+            THEN t.id
+          END
+        ) AS completed_tasks,
+        GROUP_CONCAT(
+          DISTINCT pa.employee_id
+          ORDER BY pa.employee_id
+        ) AS assigned_employee_ids
+
       FROM projects p
-      LEFT JOIN tasks t ON t.project_id = p.id
-      LEFT JOIN project_assignments pa ON pa.project_id = p.id
-      GROUP BY p.id, p.project_id, p.name, p.project_manager_name, 
-               p.description, p.department_id, p.manager_id, p.team_size, 
-               p.start_date, p.deadline, p.priority, p.created_at
+
+      LEFT JOIN tasks t
+        ON t.project_id = p.id
+
+      LEFT JOIN project_assignments pa
+        ON pa.project_id = p.id
+
+      GROUP BY
+        p.id,
+        p.project_id,
+        p.name,
+        p.project_manager_name,
+        p.description,
+        p.department,
+        p.manager_id,
+        p.team_size,
+        p.start_date,
+        p.deadline,
+        p.priority,
+        p.created_at
+
       ORDER BY p.created_at DESC
     `);
 
     const formattedProjects = projects.map(project => {
-      const total = project.total_tasks || 0;
-      const completed = project.completed_tasks || 0;
-      
-      const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-      
-      // Determine status
-      const status = (total > 0 && completed === total && total > 0) 
-        ? "Completed" 
-        : "In Progress";
+      const total = Number(project.total_tasks) || 0;
+      const completed = Number(project.completed_tasks) || 0;
 
-      // Safe deadline formatting
+      const progress =
+        total > 0
+          ? Math.round((completed / total) * 100)
+          : 0;
+
+      const status =
+        total > 0 && completed === total
+          ? "Completed"
+          : "In Progress";
+
       let formattedDeadline = "No Deadline";
+
       if (project.deadline) {
-        // Handle both string and Date objects safely
-        const deadlineStr = typeof project.deadline === 'string' 
-          ? project.deadline 
-          : project.deadline.toISOString().split('T')[0];
-        
-        formattedDeadline = deadlineStr;
+        formattedDeadline =
+          typeof project.deadline === 'string'
+            ? project.deadline
+            : project.deadline.toISOString().split('T')[0];
       }
 
       return {
         id: project.id,
-        idCode: project.idCode || `PRJ-${String(project.id).padStart(3, '0')}`,
-        project_id: project.project_id || project.idCode,
-        title: project.title || "Untitled Project",
-        name: project.name || project.title || "Untitled Project",
-        description: project.description || "",
-        department_id: project.department_id,
-        manager_id: project.manager_id,
-        manager: project.manager || "Not Assigned",
-        project_manager_name: project.project_manager_name || project.manager || "",
-        start_date: project.start_date
-          ? (typeof project.start_date === 'string' ? project.start_date : project.start_date.toISOString().split('T')[0])
-          : "",
-        teamSize: project.team_size 
-          ? `${project.team_size} Members` 
-          : "0 Members",
-        team_size: Number(project.team_size) || 0,
-        deadline: formattedDeadline,
-        progress: progress,
-        priority: project.priority || "Medium",
-        status: status,
-        total_tasks: Number(project.total_tasks) || 0,
-        completed_tasks: Number(project.completed_tasks) || 0,
-        assigned_employee_ids: project.assigned_employee_ids
-          ? project.assigned_employee_ids.split(',').map(id => Number(id.trim())).filter(Boolean)
-          : []
+
+        idCode:
+          project.idCode ||
+          `PRJ-${String(project.id).padStart(3, '0')}`,
+
+        project_id:
+          project.project_id || project.idCode,
+
+        title:
+          project.title || "Untitled Project",
+
+        name:
+          project.name ||
+          project.title ||
+          "Untitled Project",
+
+        description:
+          project.description || "",
+
+        department:
+          project.department || "",
+
+        manager_id:
+          project.manager_id,
+
+        manager:
+          project.manager || "Not Assigned",
+
+        project_manager_name:
+          project.project_manager_name ||
+          project.manager ||
+          "",
+
+        start_date:
+          project.start_date
+            ? (
+                typeof project.start_date === 'string'
+                  ? project.start_date
+                  : project.start_date
+                      .toISOString()
+                      .split('T')[0]
+              )
+            : "",
+
+        teamSize:
+          project.team_size
+            ? `${project.team_size} Members`
+            : "0 Members",
+
+        team_size:
+          Number(project.team_size) || 0,
+
+        deadline:
+          formattedDeadline,
+
+        progress:
+          progress,
+
+        priority:
+          project.priority || "Medium",
+
+        status:
+          status,
+
+        total_tasks:
+          total,
+
+        completed_tasks:
+          completed,
+
+        assigned_employee_ids:
+          project.assigned_employee_ids
+            ? project.assigned_employee_ids
+                .split(',')
+                .map(id => Number(id.trim()))
+                .filter(Boolean)
+            : []
       };
     });
 
     res.json({
       success: true,
       data: formattedProjects,
+
       stats: {
         total: formattedProjects.length,
-        inProgress: formattedProjects.filter(p => p.status === "In Progress").length,
-        highPriority: formattedProjects.filter(p => p.priority === "High").length
+
+        inProgress:
+          formattedProjects.filter(
+            p => p.status === "In Progress"
+          ).length,
+
+        highPriority:
+          formattedProjects.filter(
+            p => p.priority === "High"
+          ).length
       }
     });
 
   } catch (error) {
-    console.error("Get all projects error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch projects from database" 
+    console.error(
+      "Get all projects error:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Failed to fetch projects from database"
     });
   }
 };
 
 export const updateAdminProject = async (req, res) => {
+
   const { id } = req.params;
+
   const {
     project_id,
     name,
     description,
-    department_id,
+    department,
     manager_id,
     assigned_employee_ids,
     start_date,
@@ -664,16 +455,18 @@ export const updateAdminProject = async (req, res) => {
 
   const adminId = req.user.id;
 
-  if (!project_id || !name || !department_id || !deadline) {
+  if (!project_id || !name || !department || !deadline) {
     return res.status(400).json({
       success: false,
-      message: "Project ID, Name, Department and Deadline are required"
+      message:
+        "Project ID, Name, Department and Deadline are required"
     });
   }
 
   const connection = await pool.getConnection();
 
   try {
+
     await connection.beginTransaction();
 
     const [projectRows] = await connection.execute(
@@ -682,92 +475,106 @@ export const updateAdminProject = async (req, res) => {
     );
 
     if (projectRows.length === 0) {
+
       await connection.rollback();
+
       return res.status(404).json({
         success: false,
         message: "Project not found"
       });
     }
 
-    const [departmentRows] = await connection.execute(
-      `SELECT id FROM departments WHERE id = ?`,
-      [department_id]
-    );
-
-    if (departmentRows.length === 0) {
-      await connection.rollback();
-      return res.status(404).json({
-        success: false,
-        message: "Department not found"
-      });
-    }
-
     let managerName = null;
 
     if (manager_id) {
+
       const [managerRows] = await connection.execute(
         `
-        SELECT id, name
-        FROM users
+        SELECT
+          id,
+          firstname,
+          lastname
+
+        FROM pulse_employees
+
         WHERE id = ?
-          AND role = 'manager'
-          AND department_id = ?
+          AND LOWER(office_role) = 'manager'
+          AND department = ?
         `,
-        [manager_id, department_id]
+        [manager_id, department]
       );
 
       if (managerRows.length === 0) {
+
         await connection.rollback();
+
         return res.status(400).json({
           success: false,
-          message: "Selected manager does not belong to this department"
+          message:
+            "Selected manager does not belong to this department"
         });
       }
 
-      managerName = managerRows[0].name;
+      managerName =
+        `${managerRows[0].firstname} ${managerRows[0].lastname}`;
     }
 
-    const requestedEmployeeIds = Array.isArray(assigned_employee_ids)
-      ? assigned_employee_ids.map(Number).filter(Boolean)
-      : [];
+    const requestedEmployeeIds =
+      Array.isArray(assigned_employee_ids)
+        ? assigned_employee_ids
+            .map(Number)
+            .filter(Boolean)
+        : [];
 
     let validEmployeeIds = [];
 
     if (requestedEmployeeIds.length > 0) {
-      const placeholders = requestedEmployeeIds.map(() => "?").join(",");
+
+      const placeholders =
+        requestedEmployeeIds
+          .map(() => "?")
+          .join(",");
+
       const [employeeRows] = await connection.execute(
         `
         SELECT id
-        FROM employees
-        WHERE department_id = ?
+
+        FROM pulse_employees
+
+        WHERE department = ?
+          AND LOWER(office_role) = 'employee'
           AND id IN (${placeholders})
         `,
-        [department_id, ...requestedEmployeeIds]
+        [department, ...requestedEmployeeIds]
       );
 
-      validEmployeeIds = employeeRows.map(employee => employee.id);
+      validEmployeeIds =
+        employeeRows.map(employee => employee.id);
     }
 
     await connection.execute(
       `
       UPDATE projects
-      SET project_id = ?,
-          name = ?,
-          description = ?,
-          department_id = ?,
-          manager_id = ?,
-          project_manager_name = ?,
-          start_date = ?,
-          deadline = ?,
-          team_size = ?,
-          priority = ?
+
+      SET
+        project_id = ?,
+        name = ?,
+        description = ?,
+        department = ?,
+        manager_id = ?,
+        project_manager_name = ?,
+        start_date = ?,
+        deadline = ?,
+        team_size = ?,
+        priority = ?
+
       WHERE id = ?
       `,
       [
         project_id,
         name,
         description || null,
-        department_id,
+        department,
         manager_id || null,
         managerName,
         start_date || null,
@@ -784,9 +591,15 @@ export const updateAdminProject = async (req, res) => {
     );
 
     for (const employeeId of validEmployeeIds) {
+
       await connection.execute(
         `
-        INSERT INTO project_assignments (project_id, employee_id, assigned_by)
+        INSERT INTO project_assignments (
+          project_id,
+          employee_id,
+          assigned_by
+        )
+
         VALUES (?, ?, ?)
         `,
         [id, employeeId, adminId]
@@ -799,14 +612,24 @@ export const updateAdminProject = async (req, res) => {
       success: true,
       message: "Project updated successfully"
     });
+
   } catch (error) {
+
     await connection.rollback();
-    console.error("Update admin project error:", error);
+
+    console.error(
+      "Update admin project error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
-      message: error.message || "Failed to update project"
+      message:
+        error.message || "Failed to update project"
     });
+
   } finally {
+
     connection.release();
   }
 };
@@ -845,31 +668,72 @@ export const deleteAdminProject = async (req, res) => {
   }
 };
 
+// Get all departments
+export const getDepartments = async (req, res) => {
+  try {
+
+    const [rows] = await pool.execute(`
+      SELECT DISTINCT department
+      FROM pulse_employees
+      WHERE department IS NOT NULL
+        AND department != ''
+      ORDER BY department ASC
+    `);
+
+    res.json({
+      success: true,
+      data: rows
+    });
+
+  } catch (error) {
+
+    console.error("Get departments error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch departments"
+    });
+  }
+};
+
 export const getDepartmentPeople = async (req, res) => {
-  const { departmentId } = req.params;
+
+  const { department } = req.params;
 
   try {
-    // Get managers from users table
+
     const [managers] = await pool.execute(
+
       `
-      SELECT id, name
-      FROM users
-      WHERE role = 'manager'
-      AND department_id = ?
-      ORDER BY name ASC
+      SELECT
+        id,
+        CONCAT(firstname, ' ', lastname) AS name
+
+      FROM pulse_employees
+
+      WHERE LOWER(office_role) = 'manager'
+      AND department = ?
+
+      ORDER BY firstname ASC
       `,
-      [departmentId]
+      [department]
     );
 
-    // Get employees from employees table
     const [employees] = await pool.execute(
+
       `
-      SELECT id, name
-      FROM employees
-      WHERE department_id = ?
-      ORDER BY name ASC
+      SELECT
+        id,
+        CONCAT(firstname, ' ', lastname) AS name
+
+      FROM pulse_employees
+
+      WHERE LOWER(office_role) = 'employee'
+      AND department = ?
+
+      ORDER BY firstname ASC
       `,
-      [departmentId]
+      [department]
     );
 
     res.status(200).json({
@@ -881,7 +745,8 @@ export const getDepartmentPeople = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get Department People Error:", error);
+
+    console.error(error);
 
     res.status(500).json({
       success: false,
@@ -891,29 +756,55 @@ export const getDepartmentPeople = async (req, res) => {
 };
 
 export const getAdminProjectById = async (req, res) => {
+
   const { id } = req.params;
 
   try {
+
     const [projects] = await pool.execute(
       `
       SELECT
         p.*,
-        u.name AS manager_name,
-        u.email AS manager_email,
-        d.name AS department_name,
+
+        CONCAT(
+          u.firstname,
+          ' ',
+          u.lastname
+        ) AS manager_name,
+
+        u.email_id AS manager_email,
+
         COUNT(t.id) AS total_tasks,
-        SUM(CASE WHEN t.status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks
+
+        SUM(
+          CASE
+            WHEN t.status = 'Completed'
+            THEN 1
+            ELSE 0
+          END
+        ) AS completed_tasks
+
       FROM projects p
-      LEFT JOIN users u ON u.id = p.manager_id
-      LEFT JOIN departments d ON d.id = p.department_id
-      LEFT JOIN tasks t ON t.project_id = p.id
+
+      LEFT JOIN pulse_employees u
+        ON u.id = p.manager_id
+
+      LEFT JOIN tasks t
+        ON t.project_id = p.id
+
       WHERE p.id = ?
-      GROUP BY p.id, u.name, u.email, d.name
+
+      GROUP BY
+        p.id,
+        u.firstname,
+        u.lastname,
+        u.email_id
       `,
       [id]
     );
 
     if (projects.length === 0) {
+
       return res.status(404).json({
         success: false,
         message: "Project not found"
@@ -921,21 +812,40 @@ export const getAdminProjectById = async (req, res) => {
     }
 
     const project = projects[0];
-    const totalTasks = Number(project.total_tasks) || 0;
-    const completedTasks = Number(project.completed_tasks) || 0;
+
+    const totalTasks =
+      Number(project.total_tasks) || 0;
+
+    const completedTasks =
+      Number(project.completed_tasks) || 0;
+
+    const progress =
+      totalTasks > 0
+        ? Math.round(
+            (completedTasks / totalTasks) * 100
+          )
+        : 0;
 
     res.json({
       success: true,
+
       data: {
         ...project,
-        progress: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+        progress
       }
     });
+
   } catch (error) {
-    console.error("Get admin project by id error:", error);
+
+    console.error(
+      "Get admin project by id error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
-      message: "Failed to fetch project details"
+      message:
+        "Failed to fetch project details"
     });
   }
 };
@@ -961,10 +871,18 @@ export const getAdminProjectTasks = async (req, res) => {
       SELECT
         t.*,
         e.employee_id,
-        e.name AS assignee_name
+        CONCAT(e.firstname, ' ', e.lastname) AS assignee_name,
+        e.email_id AS assignee_email,
+        e.department,
+        e.designation
+
       FROM tasks t
-      LEFT JOIN employees e ON e.id = t.assigned_to
+
+      LEFT JOIN pulse_employees e
+        ON e.id = t.assigned_to
+
       WHERE t.project_id = ?
+
       ORDER BY t.created_at DESC
       `,
       [id]
@@ -974,8 +892,10 @@ export const getAdminProjectTasks = async (req, res) => {
       success: true,
       data: tasks
     });
+
   } catch (error) {
     console.error("Get admin project tasks error:", error);
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch tasks"
@@ -991,12 +911,20 @@ export const getAdminProjectManagers = async (req, res) => {
       `
       SELECT
         u.id,
-        u.name,
-        u.email
+        u.employee_id,
+        CONCAT(u.firstname, ' ', u.lastname) AS name,
+        u.email_id AS email,
+        u.department,
+        u.designation,
+        u.profile_picture
+
       FROM projects p
-      JOIN users u ON u.id = p.manager_id
+
+      JOIN pulse_employees u
+        ON u.id = p.manager_id
+
       WHERE p.id = ?
-        AND u.role = 'manager'
+        AND LOWER(u.office_role) = 'manager'
       `,
       [id]
     );
@@ -1005,8 +933,10 @@ export const getAdminProjectManagers = async (req, res) => {
       success: true,
       data: managers
     });
+
   } catch (error) {
     console.error("Get admin project managers error:", error);
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch project manager"
@@ -1016,7 +946,7 @@ export const getAdminProjectManagers = async (req, res) => {
 
 export const getAllAdminTasks = async (req, res) => {
   try {
-    // Fetch all tasks with project and employee details
+
     const [tasks] = await pool.execute(`
       SELECT 
         t.id,
@@ -1028,18 +958,28 @@ export const getAllAdminTasks = async (req, res) => {
         t.completed_at,
         t.created_at,
         t.project_id,
+
         p.name AS project_name,
+
         e.id AS assignee_id,
-        e.name AS assignee_name,
-        e.email AS assignee_email,
-        e.profile_picture AS assignee_profile_picture
+        e.employee_id,
+        CONCAT(e.firstname, ' ', e.lastname) AS assignee_name,
+        e.email_id AS assignee_email,
+        e.profile_picture AS assignee_profile_picture,
+        e.department AS assignee_department,
+        e.designation AS assignee_designation
+
       FROM tasks t
-      LEFT JOIN projects p ON t.project_id = p.id
-      LEFT JOIN employees e ON t.assigned_to = e.id
+
+      LEFT JOIN projects p
+        ON t.project_id = p.id
+
+      LEFT JOIN pulse_employees e
+        ON t.assigned_to = e.id
+
       ORDER BY p.name, t.due_date DESC
     `);
 
-    // Fetch all comments efficiently in a single query
     const [allComments] = await pool.execute(`
       SELECT 
         id,
@@ -1047,25 +987,29 @@ export const getAllAdminTasks = async (req, res) => {
         reviewer_name,
         comment_text,
         created_at
+
       FROM comments
+
       ORDER BY task_id, created_at DESC
     `);
 
-    // Create a map of task_id -> comments for faster lookup
     const commentsMap = {};
+
     allComments.forEach(comment => {
+
       if (!commentsMap[comment.task_id]) {
         commentsMap[comment.task_id] = [];
       }
+
       commentsMap[comment.task_id].push({
         id: comment.id,
         reviewer_name: comment.reviewer_name,
         comment_text: comment.comment_text,
         created_at: comment.created_at
       });
+
     });
 
-    // Map comments to tasks
     const tasksWithComments = tasks.map(task => ({
       ...task,
       comments: commentsMap[task.id] || []
@@ -1075,40 +1019,58 @@ export const getAllAdminTasks = async (req, res) => {
       success: true,
       data: tasksWithComments
     });
+
   } catch (error) {
+
     console.error("Get all admin tasks error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch tasks", error: error.message });
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch tasks",
+      error: error.message
+    });
   }
 };
 
 // Get Dashboard Statistics (without weekly progress chart)
 export const getDashboardStats = async (req, res) => {
   try {
-    const userRole = req.user?.role?.toLowerCase();
+
+    const userRole =
+      req.user?.role?.toLowerCase();
+
     let departmentFilter = '';
     let params = [];
 
-    // If user is a reviewer, get their department and filter by it
+    // REVIEWER DEPARTMENT FILTER
     if (userRole === 'reviewer') {
+
       const [deptRows] = await pool.execute(
-        `SELECT department_id FROM users WHERE id = ?`,
+        `
+        SELECT department
+        FROM pulse_employees
+        WHERE id = ?
+        `,
         [req.user.id]
       );
-      const departmentId = deptRows[0]?.department_id;
-      if (departmentId) {
-        departmentFilter = ' WHERE p.department_id = ?';
-        params = [departmentId];
+
+      const department =
+        deptRows[0]?.department;
+
+      if (department) {
+        departmentFilter =
+          ' WHERE p.department = ?';
+
+        params = [department];
       }
     }
 
-    // Total, Active, and Completed Projects
-    const [projectStats] = await pool.execute(`
+    // TOTAL / COMPLETED / ACTIVE PROJECTS
+    const [projectStats] = await pool.execute(
+      `
       SELECT 
         COUNT(*) AS total_projects,
 
-        -- Completed Projects:
-        -- Projects having at least 1 task
-        -- and all tasks are completed
         SUM(
           CASE 
             WHEN EXISTS (
@@ -1116,19 +1078,19 @@ export const getDashboardStats = async (req, res) => {
               FROM tasks t
               WHERE t.project_id = p.id
             )
+
             AND NOT EXISTS (
               SELECT 1
               FROM tasks t
               WHERE t.project_id = p.id
               AND t.status != 'Completed'
             )
+
             THEN 1
             ELSE 0
           END
         ) AS completed_projects,
 
-        -- Active Projects:
-        -- Total Projects - Completed Projects
         SUM(
           CASE 
             WHEN NOT (
@@ -1137,6 +1099,7 @@ export const getDashboardStats = async (req, res) => {
                 FROM tasks t
                 WHERE t.project_id = p.id
               )
+
               AND NOT EXISTS (
                 SELECT 1
                 FROM tasks t
@@ -1144,6 +1107,7 @@ export const getDashboardStats = async (req, res) => {
                 AND t.status != 'Completed'
               )
             )
+
             THEN 1
             ELSE 0
           END
@@ -1151,72 +1115,92 @@ export const getDashboardStats = async (req, res) => {
 
       FROM projects p
       ${departmentFilter}
-    `, params);
+      `,
+      params
+    );
 
-    // Overall Completion % based on tasks (filtered by department for reviewers)
-    let completionQuery = `
-      SELECT 
-        COUNT(*) AS total_tasks,
-        SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks,
-        ROUND(
-          IFNULL(
-            SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0),
-            0
-          ), 0) AS overall_completion
-      FROM tasks t`;
-    
-    let completionParams = [];
-    if (userRole === 'reviewer') {
-      const [deptRows] = await pool.execute(
-        `SELECT department_id FROM users WHERE id = ?`,
-        [req.user.id]
-      );
-      const departmentId = deptRows[0]?.department_id;
-      if (departmentId) {
-        completionQuery += ` JOIN projects p ON t.project_id = p.id WHERE p.department_id = ?`;
-        completionParams = [departmentId];
-      }
-    }
+    const totalProjects =
+      Number(projectStats[0]?.total_projects) || 0;
 
-    const [completionStats] = await pool.execute(completionQuery, completionParams);
+    const completedProjects =
+      Number(projectStats[0]?.completed_projects) || 0;
 
-    // Fetch projects for the dropdown in frontend
-    let projectsQuery = `SELECT id, name FROM projects`;
+    const overallCompletion =
+      totalProjects > 0
+        ? Math.round(
+            (completedProjects / totalProjects) * 100
+          )
+        : 0;
+
+    // FETCH PROJECTS FOR DROPDOWN
+    let projectsQuery = `
+      SELECT id, name
+      FROM projects
+    `;
+
     let projectsParams = [];
+
     if (userRole === 'reviewer') {
+
       const [deptRows] = await pool.execute(
-        `SELECT department_id FROM users WHERE id = ?`,
+        `
+        SELECT department
+        FROM pulse_employees
+        WHERE id = ?
+        `,
         [req.user.id]
       );
-      const departmentId = deptRows[0]?.department_id;
-      if (departmentId) {
-        projectsQuery += ` WHERE department_id = ?`;
-        projectsParams = [departmentId];
+
+      const department =
+        deptRows[0]?.department;
+
+      if (department) {
+        projectsQuery +=
+          ` WHERE department = ?`;
+
+        projectsParams = [department];
       }
     }
+
     projectsQuery += ` ORDER BY name ASC`;
 
-    const [allProjects] = await pool.execute(projectsQuery, projectsParams);
+    const [allProjects] = await pool.execute(
+      projectsQuery,
+      projectsParams
+    );
 
     const stats = projectStats[0] || {};
-    const completion = completionStats[0] || {};
 
     res.json({
       success: true,
+
       stats: {
-        totalProjects: Number(stats.total_projects) || 0,
-        activeProjects: Number(stats.active_projects) || 0,
-        completedProjects: Number(stats.completed_projects) || 0,
-        overallCompletion: Number(completion.overall_completion) || 0,
+        totalProjects:
+          Number(stats.total_projects) || 0,
+
+        activeProjects:
+          Number(stats.active_projects) || 0,
+
+        completedProjects:
+          Number(stats.completed_projects) || 0,
+
+        overallCompletion
       },
-      projects: allProjects   // ← This will be used in the dropdown
+
+      projects: allProjects
     });
 
   } catch (error) {
-    console.error("Dashboard stats error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch dashboard statistics" 
+
+    console.error(
+      "Dashboard stats error:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Failed to fetch dashboard statistics"
     });
   }
 };
@@ -1226,6 +1210,7 @@ export const getProjectProgress = async (req, res) => {
   const { projectId } = req.query;
 
   try {
+
     let sql = `
       SELECT
         p.id,
@@ -1248,13 +1233,12 @@ export const getProjectProgress = async (req, res) => {
 
     const [rows] = await pool.execute(sql, params);
 
-    const projectsProgress = [];
-    const projectGroups = {};
+    const groupedProjects = {};
 
-    // 🔹 GROUP PROJECTS
     rows.forEach(row => {
-      if (!projectGroups[row.id]) {
-        projectGroups[row.id] = {
+
+      if (!groupedProjects[row.id]) {
+        groupedProjects[row.id] = {
           id: row.id,
           name: row.name,
           start_date: row.start_date,
@@ -1264,146 +1248,215 @@ export const getProjectProgress = async (req, res) => {
       }
 
       if (row.task_id) {
-        projectGroups[row.id].tasks.push({
+        groupedProjects[row.id].tasks.push({
           status: row.status,
           completed_at: row.completed_at
         });
       }
     });
 
-    // 🔹 PROCESS EACH PROJECT
-    for (const proj of Object.values(projectGroups)) {
+    const response = [];
 
-      const totalTasks = proj.tasks.length;
+    for (const project of Object.values(groupedProjects)) {
 
-      // Fallback
-      if (!proj.start_date || !proj.deadline || totalTasks === 0) {
-        projectsProgress.push({
-          id: proj.id,
-          name: proj.name,
-          weeks: ["Week 1", "Week 2", "Week 3", "Week 4"],
-          normalProgress: [0, 0, 0, 0],
-          delayedProgress: [null, null, null, null],
+      const totalTasks = project.tasks.length;
+
+      if (!project.start_date || totalTasks === 0) {
+
+        response.push({
+          id: project.id,
+          name: project.name,
+          weeks: ["Week 1"],
+          weeklyDates: [],
+          normalProgress: [0],
+          delayedProgress: [null],
+          actualDots: [],
           isDelayed: false
         });
+
         continue;
       }
 
-      const start = new Date(proj.start_date);
-      const deadline = new Date(proj.deadline);
+      const startDate = new Date(project.start_date);
+      const deadline = new Date(project.deadline);
 
-      // 🔹 Completed tasks
-      const completedTasks = proj.tasks.filter(
-        t => t.status === "Completed" && t.completed_at
-      );
-
-      let actualEndDate = null;
-
-      if (completedTasks.length === totalTasks) {
-        actualEndDate = new Date(
-          Math.max(...completedTasks.map(t => new Date(t.completed_at)))
+      const completedTasks = project.tasks
+        .filter(
+          task =>
+            task.status === "Completed" &&
+            task.completed_at
+        )
+        .sort(
+          (a, b) =>
+            new Date(a.completed_at) -
+            new Date(b.completed_at)
         );
-      }
 
-      // 🔹 Dynamic END DATE
-      let end;
+      let finalEndDate;
 
-      if (actualEndDate) {
-        end = actualEndDate; // stop at completion
+      if (completedTasks.length > 0) {
+
+        finalEndDate = new Date(
+          completedTasks[completedTasks.length - 1].completed_at
+        );
+
       } else {
+
         const today = new Date();
-        end = today > deadline ? today : deadline;
+
+        finalEndDate =
+          today > deadline
+            ? today
+            : deadline;
       }
 
       const totalDays = Math.max(
         1,
-        Math.ceil((end - start) / (1000 * 3600 * 24))
+        Math.ceil(
+          (finalEndDate - startDate) /
+          (1000 * 60 * 60 * 24)
+        )
       );
 
-      const numWeeks = Math.max(1, Math.ceil(totalDays / 7));
+      const totalWeeks = Math.max(
+        1,
+        Math.ceil(totalDays / 7)
+      );
 
-      const weeklyProgress = [];
+      const progressMap = {};
+      const actualDots = [];
+
+      completedTasks.forEach((task, index) => {
+
+        const completedDate = new Date(task.completed_at);
+
+        const diffDays = Math.floor(
+          (completedDate - startDate) /
+          (1000 * 60 * 60 * 24)
+        );
+
+        const weekIndex = Math.floor(diffDays / 7);
+
+        const percentage = Math.round(
+          ((index + 1) / totalTasks) * 100
+        );
+
+        progressMap[weekIndex] = {
+          percentage,
+          date: completedDate.toLocaleDateString(
+            'en-US',
+            {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric'
+            }
+          )
+        };
+
+        actualDots.push({
+          week: weekIndex,
+          percentage,
+          completedTasks: index + 1,
+          completedAt: completedDate
+        });
+
+      });
+
       const weeklyDates = [];
-      let prevWeekStart = new Date(start);
-      let cumulativeCompleted = 0;
+      const progressValues = [];
 
-      // 🔹 WEEKLY PROGRESS
-      for (let i = 1; i <= numWeeks; i++) {
-        const weekEnd = new Date(start);
-        weekEnd.setDate(start.getDate() + (i * 7));
+      let lastPercentage = null;
 
-        const completedThisWeek = proj.tasks.filter(task => {
-          if (task.status !== 'Completed' || !task.completed_at) return false;
+      for (let i = 0; i < totalWeeks; i++) {
 
-          const completedDate = new Date(task.completed_at);
+        const currentWeekDate = new Date(startDate);
 
-          return (
-            completedDate >= prevWeekStart &&
-            completedDate < weekEnd
-          );
-        }).length;
+        currentWeekDate.setDate(
+          startDate.getDate() + (i * 7)
+        );
 
-        cumulativeCompleted += completedThisWeek;
+        weeklyDates.push(
+          currentWeekDate.toLocaleDateString(
+            'en-US',
+            {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric'
+            }
+          )
+        );
 
-        const percentage = totalTasks > 0
-          ? Math.round((cumulativeCompleted / totalTasks) * 100)
-          : 0;
+        if (progressMap[i]) {
 
-        weeklyProgress.push(Math.min(100, percentage));
-        // Format date as "DD MMM" (e.g., "17 May")
-        const dateStr = weekEnd.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-        weeklyDates.push(dateStr);
+          lastPercentage =
+            progressMap[i].percentage;
+        }
 
-        prevWeekStart = weekEnd;
+        progressValues.push(
+        completedTasks.length > 0
+          ? lastPercentage
+          : null
+      );
       }
 
-      // 🔹 DELAY LOGIC (same as manager)
-      const isCompletedOnTime = actualEndDate && actualEndDate <= deadline;
-      const isDelayed = !isCompletedOnTime && end > deadline;
+      const deadlineWeekIndex = Math.floor(
+        (deadline - startDate) /
+        (1000 * 60 * 60 * 24 * 7)
+      );
 
-      let deadlineWeekIndex = Math.ceil(
-        (deadline - start) / (1000 * 3600 * 24 * 7)
-      ) - 1;
+      const isDelayed =
+        finalEndDate > deadline;
 
-      if (deadlineWeekIndex < 0) deadlineWeekIndex = 0;
-      if (deadlineWeekIndex >= weeklyProgress.length) {
-        deadlineWeekIndex = weeklyProgress.length - 1;
-      }
-
-      let normalProgress = [...weeklyProgress];
-      let delayedProgress = Array(weeklyProgress.length).fill(null);
+      let normalProgress = [...progressValues];
+      let delayedProgress = Array(progressValues.length).fill(null);
 
       if (isDelayed) {
-        normalProgress = weeklyProgress.map((val, idx) =>
-          idx <= deadlineWeekIndex ? val : null
+
+        normalProgress = progressValues.map(
+          (value, index) =>
+            index <= deadlineWeekIndex
+              ? value
+              : null
         );
 
-        delayedProgress = weeklyProgress.map((val, idx) =>
-          idx > deadlineWeekIndex ? val : null
+        delayedProgress = progressValues.map(
+          (value, index) =>
+            index > deadlineWeekIndex
+              ? value
+              : null
         );
       }
 
-      projectsProgress.push({
-        id: proj.id,
-        name: proj.name,
-        startDate: proj.start_date,
-        deadline: proj.deadline,
-        deadlineWeekIndex,
-        weeks: Array.from({ length: numWeeks }, (_, i) => `Week ${i + 1}`),
+      response.push({
+        id: project.id,
+        name: project.name,
+        startDate: project.start_date,
+        deadline: project.deadline,
+        weeks: Array.from(
+          { length: totalWeeks },
+          (_, index) => `Week ${index + 1}`
+        ),
         weeklyDates,
         normalProgress,
         delayedProgress,
+        actualDots,
+        deadlineWeekIndex,
         isDelayed
       });
     }
 
     res.json({
       success: true,
-      data: projectsProgress
+      data: response
     });
 
   } catch (error) {
-    console.error("Project progress error:", error);
+
+    console.error(
+      "Project progress error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
       message: "Failed to generate progress graph"
@@ -1418,9 +1471,20 @@ export const getAdminProfile = async (req, res) => {
     const adminId = req.user.id;
 
     const [rows] = await pool.execute(
-      `SELECT id, name, email, phone, designation, location, bio, created_at 
-       FROM users 
-       WHERE id = ? AND role = 'admin'`,
+      `SELECT 
+          id,
+          CONCAT(firstname, ' ', lastname) AS name,
+          email_id,
+          work_phone,
+          designation,
+          bio,
+          location,
+          profile_picture,
+          created_at
+
+      FROM pulse_employees
+
+      WHERE id = ?`,
       [adminId]
     );
 
@@ -1438,8 +1502,8 @@ export const getAdminProfile = async (req, res) => {
       data: {
         id: admin.id,
         name: admin.name,
-        email: admin.email,
-        phone: admin.phone,
+        email: admin.email_id,
+        phone: admin.work_phone,
         designation: admin.designation,
         location: admin.location,
         bio: admin.bio,
@@ -1457,53 +1521,75 @@ export const getAdminProfile = async (req, res) => {
 
 // Change Admin Password
 export const changeAdminPassword = async (req, res) => {
+
   const { currentPassword, newPassword } = req.body;
+
   const adminId = req.user.id;
 
   if (!currentPassword || !newPassword) {
     return res.status(400).json({
       success: false,
-      message: "Current password and new password are required"
+      message:
+        "Current password and new password are required"
     });
   }
 
   if (newPassword.length < 6) {
     return res.status(400).json({
       success: false,
-      message: "New password must be at least 6 characters long"
+      message:
+        "New password must be at least 6 characters long"
     });
   }
 
   try {
-    // Get current hashed password
+
     const [rows] = await pool.execute(
-      'SELECT password FROM users WHERE id = ? AND role = "admin"',
+      `
+      SELECT password
+
+      FROM pulse_employees
+
+      WHERE id = ?
+        AND LOWER(office_role) = 'admin'
+      `,
       [adminId]
     );
 
     if (rows.length === 0) {
+
       return res.status(404).json({
         success: false,
         message: "Admin not found"
       });
     }
 
-    const isMatch = await bcrypt.compare(currentPassword, rows[0].password);
+    const isMatch = await bcrypt.compare(
+      currentPassword,
+      rows[0].password
+    );
 
     if (!isMatch) {
+
       return res.status(400).json({
         success: false,
         message: "Current password is incorrect"
       });
     }
 
-    // Hash new password
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    // Update password
+    const hashedPassword =
+      await bcrypt.hash(newPassword, salt);
+
     await pool.execute(
-      'UPDATE users SET password = ? WHERE id = ?',
+      `
+      UPDATE pulse_employees
+
+      SET password = ?
+
+      WHERE id = ?
+      `,
       [hashedPassword, adminId]
     );
 
@@ -1513,7 +1599,12 @@ export const changeAdminPassword = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Change admin password error:", error);
+
+    console.error(
+      "Change admin password error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
       message: "Failed to change password"
@@ -1524,25 +1615,39 @@ export const changeAdminPassword = async (req, res) => {
 // ====================== ADMIN NOTIFICATIONS ======================
 
 const getAdminIds = async () => {
-  const [admins] = await pool.query(
-    `SELECT id FROM users WHERE role = 'admin'`
-  );
+
+  const [admins] = await pool.query(`
+    SELECT id
+    FROM pulse_employees
+    WHERE LOWER(office_role) = 'admin'
+
+  `);
   return admins.map(admin => admin.id);
 };
 
 // Helper: Send notification to Admin
-export const addNotificationForAdmin = async (
-  message,
+export const addNotificationForAdmin = async ({
+  title,
+  full_message,
   type = 'info',
   priority = 'medium',
   adminId
-) => {
+}) => {
+
   try {
+
     let adminIds = [];
 
+    // Specific admin notification
     if (adminId) {
+
       const [rows] = await pool.query(
-        `SELECT id FROM users WHERE id = ? AND role = 'admin'`,
+        `
+        SELECT id
+        FROM pulse_employees
+        WHERE id = ?
+          AND LOWER(office_role) = 'admin'
+        `,
         [adminId]
       );
 
@@ -1551,36 +1656,61 @@ export const addNotificationForAdmin = async (
       }
     }
 
+    // Notify all admins
     if (adminIds.length === 0) {
       adminIds = await getAdminIds();
     }
 
     if (adminIds.length === 0) {
-      console.warn('No admin users found. Skipping admin notification.');
+
+      console.warn(
+        'No admin users found. Skipping admin notification.'
+      );
+
       return;
     }
 
-    const values = adminIds.map((id) => [
+    const values = adminIds.map(id => [
       'admin',
       id,
-      message.trim(),
+      title.trim(),
+      full_message.trim(),
       type,
       priority,
       'unread'
     ]);
 
-    const placeholders = values.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
+    const placeholders =
+      values.map(() => '(?, ?, ?, ?, ?, ?, ?)')
+        .join(',');
 
     await pool.query(
-      `INSERT INTO notifications 
-        (recipient_type, recipient_id, message, type, priority, status)
-       VALUES ${placeholders}`,
+      `
+      INSERT INTO notifications (
+        recipient_type,
+        recipient_id,
+        title,
+        full_message,
+        type,
+        priority,
+        status
+      )
+
+      VALUES ${placeholders}
+      `,
       values.flat()
     );
 
-    console.log(`✅ Notification sent to admin(s) ${adminIds.join(', ')}: ${message}`);
+    console.log(
+      `✅ Notification sent to admin(s) ${adminIds.join(', ')}: ${title}`
+    );
+
   } catch (err) {
-    console.error('Admin notification failed:', err.message);
+
+    console.error(
+      'Admin notification failed:',
+      err.message
+    );
   }
 };
 
@@ -1601,7 +1731,8 @@ export const getAdminNotifications = async (req, res) => {
     const [rows] = await pool.query(`
       SELECT 
         id, 
-        message, 
+        title,
+        full_message,
         type, 
         priority, 
         status, 
@@ -1671,11 +1802,19 @@ export const markAdminNotificationAsRead = async (req, res) => {
 
 // Update Admin Profile
 export const updateAdminProfile = async (req, res) => {
+
   const adminId = req.user.id;
-  const { name, phone, designation, location, bio } = req.body;
+
+  const {
+    name,
+    phone,
+    designation,
+    location,
+    bio
+  } = req.body;
 
   try {
-    // Basic validation
+
     if (!name) {
       return res.status(400).json({
         success: false,
@@ -1683,29 +1822,68 @@ export const updateAdminProfile = async (req, res) => {
       });
     }
 
+    const firstName =
+      name.trim().split(' ')[0];
+
+    const lastName =
+      name.trim().split(' ').slice(1).join(' ') || null;
+
     const [result] = await pool.execute(
-      `UPDATE users 
-       SET name = ?, 
-           phone = ?, 
-           designation = ?, 
-           location = ?, 
-           bio = ? 
-       WHERE id = ? AND role = 'admin'`,
-      [name, phone || null, designation || null, location || null, bio || null, adminId]
+      `
+      UPDATE pulse_employees
+
+      SET
+        firstname = ?,
+        lastname = ?,
+        work_phone = ?,
+        designation = ?,
+        location = ?,
+        bio = ?
+
+      WHERE id = ?
+        AND LOWER(office_role) = 'admin'
+      `,
+      [
+        firstName,
+        lastName,
+        phone || null,
+        designation || null,
+        location || null,
+        bio || null,
+        adminId
+      ]
     );
 
     if (result.affectedRows === 0) {
+
       return res.status(404).json({
         success: false,
-        message: "Admin profile not found or unauthorized"
+        message:
+          "Admin profile not found or unauthorized"
       });
     }
 
-    // Fetch updated data to return
     const [updatedRows] = await pool.execute(
-      `SELECT id, name, email, phone, designation, location, bio, created_at 
-       FROM users 
-       WHERE id = ?`,
+      `
+      SELECT
+        id,
+        employee_id,
+        firstname,
+        lastname,
+        CONCAT(firstname, ' ', lastname) AS name,
+        email_id,
+        work_phone,
+        designation,
+        department,
+        location,
+        bio,
+        profile_picture,
+        created_at
+
+      FROM pulse_employees
+
+      WHERE id = ?
+      `,
       [adminId]
     );
 
@@ -1716,7 +1894,12 @@ export const updateAdminProfile = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Update admin profile error:", error);
+
+    console.error(
+      "Update admin profile error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
       message: "Failed to update profile"
@@ -1726,117 +1909,120 @@ export const updateAdminProfile = async (req, res) => {
 
 // Get Real Stats for Admin Profile (with correct Team Members count)
 export const getAdminDashboardStats = async (req, res) => {
+
   try {
+
     // Total Projects
-    const [projectResult] = await pool.execute("SELECT COUNT(*) as total_projects FROM projects");
+    const [projectResult] = await pool.execute(
+      `SELECT COUNT(*) AS total_projects FROM projects`
+    );
 
     // Total Completed Tasks
     const [taskResult] = await pool.execute(
-      "SELECT COUNT(*) as total_completed_tasks FROM tasks WHERE status = 'Completed'"
+      `
+      SELECT COUNT(*) AS total_completed_tasks
+
+      FROM tasks
+
+      WHERE status = 'Completed'
+      `
     );
 
-    // Total Users (from users table - managers, reviewers, admins)
-    const [userResult] = await pool.execute("SELECT COUNT(*) as total_users FROM users");
+    // Total Users / Team Members
+    const [userResult] = await pool.execute(
+      `
+      SELECT COUNT(*) AS total_users
 
-    // Total Employees (from employees table)
-    const [employeeResult] = await pool.execute("SELECT COUNT(*) as total_employees FROM employees");
+      FROM pulse_employees
+      `
+    );
 
-    // Total Team Members = Users + Employees
-    const totalTeamMembers = 
-      (userResult[0].total_users || 0) + 
-      (employeeResult[0].total_employees || 0);
+    // Role-based counts
+    const [managerResult] = await pool.execute(
+      `
+      SELECT COUNT(*) AS total_managers
+
+      FROM pulse_employees
+
+      WHERE LOWER(office_role) = 'manager'
+      `
+    );
+
+    const [reviewerResult] = await pool.execute(
+      `
+      SELECT COUNT(*) AS total_reviewers
+
+      FROM pulse_employees
+
+      WHERE LOWER(office_role) = 'reviewer'
+      `
+    );
+
+    const [employeeResult] = await pool.execute(
+      `
+      SELECT COUNT(*) AS total_employees
+
+      FROM pulse_employees
+
+      WHERE LOWER(office_role) = 'employee'
+      `
+    );
+
+    const [adminResult] = await pool.execute(
+      `
+      SELECT COUNT(*) AS total_admins
+
+      FROM pulse_employees
+
+      WHERE LOWER(office_role) = 'admin'
+      `
+    );
 
     res.json({
       success: true,
+
       stats: {
-        totalProjects: projectResult[0].total_projects || 0,
-        totalCompletedTasks: taskResult[0].total_completed_tasks || 0,
-        totalUsers: userResult[0].total_users || 0,
-        totalEmployees: employeeResult[0].total_employees || 0,
-        totalTeamMembers: totalTeamMembers   // ← This is what we will show
+        totalProjects:
+          projectResult[0].total_projects || 0,
+
+        totalCompletedTasks:
+          taskResult[0].total_completed_tasks || 0,
+
+        totalUsers:
+          userResult[0].total_users || 0,
+
+        totalAdmins:
+          adminResult[0].total_admins || 0,
+
+        totalManagers:
+          managerResult[0].total_managers || 0,
+
+        totalReviewers:
+          reviewerResult[0].total_reviewers || 0,
+
+        totalEmployees:
+          employeeResult[0].total_employees || 0,
+
+        totalTeamMembers:
+          userResult[0].total_users || 0
       }
     });
+
   } catch (error) {
-    console.error("Admin dashboard stats error:", error);
+
+    console.error(
+      "Admin dashboard stats error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
-      message: "Failed to fetch dashboard statistics"
+      message:
+        "Failed to fetch dashboard statistics"
     });
   }
 };
 
-// Create New Department
-export const createDepartment = async (req, res) => {
-  const { name, description } = req.body;
-  const adminId = req.user?.id;
-
-  if (!name || name.trim() === '') {
-    return res.status(400).json({ 
-      success: false, 
-      message: "Department name is required" 
-    });
-  }
-
-  try {
-    const [result] = await pool.execute(
-      `INSERT INTO departments (name, description, created_by) 
-       VALUES (?, ?, ?)`,
-      [name.trim(), description?.trim() || null, adminId]
-    );
-
-    res.status(201).json({
-      success: true,
-      message: "Department created successfully",
-      department: {
-        id: result.insertId,
-        name: name.trim(),
-        description: description?.trim() || null
-      }
-    });
-
-  } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ 
-        success: false, 
-        message: "A department with this name already exists" 
-      });
-    }
-
-    console.error("Create Department Error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to create department" 
-    });
-  }
-};
-
-// Get All Departments
-export const getAllDepartments = async (req, res) => {
-  try {
-    const [departments] = await pool.execute(`
-      SELECT 
-        id,
-        name,
-        description,
-        created_by,
-        created_at,
-        updated_at
-      FROM departments 
-      ORDER BY created_at DESC
-    `);
-
-    res.json({
-      success: true,
-      departments: departments
-    });
-  } catch (error) {
-    console.error("Get departments error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch departments" 
-    });
-  }
-};
 
 export const createAdminTask = async (req, res) => {
   const { projectId } = req.params;
@@ -1917,16 +2103,18 @@ export const createAdminTask = async (req, res) => {
 
 // Get Employees Assigned to a Project (Admin view)
 export const getAdminProjectEmployees = async (req, res) => {
+
   const { projectId } = req.params;
 
   try {
-    // Validate project exists
+
     const [projectRows] = await pool.execute(
       `SELECT id FROM projects WHERE id = ?`,
       [projectId]
     );
 
     if (projectRows.length === 0) {
+
       return res.status(404).json({
         success: false,
         message: "Project not found"
@@ -1934,11 +2122,31 @@ export const getAdminProjectEmployees = async (req, res) => {
     }
 
     const [employees] = await pool.execute(
-      `SELECT e.id, e.employee_id, e.name, e.email
-       FROM project_assignments pa
-       JOIN employees e ON pa.employee_id = e.id
-       WHERE pa.project_id = ?
-       ORDER BY e.name ASC`,
+      `
+      SELECT
+        e.id,
+        e.employee_id,
+
+        CONCAT(
+          e.firstname,
+          ' ',
+          e.lastname
+        ) AS name,
+
+        e.email_id AS email,
+        e.department,
+        e.designation,
+        e.profile_picture
+
+      FROM project_assignments pa
+
+      JOIN pulse_employees e
+        ON pa.employee_id = e.id
+
+      WHERE pa.project_id = ?
+
+      ORDER BY name ASC
+      `,
       [projectId]
     );
 
@@ -1948,7 +2156,12 @@ export const getAdminProjectEmployees = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Get admin project employees error:", error);
+
+    console.error(
+      "Get admin project employees error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch assigned employees",

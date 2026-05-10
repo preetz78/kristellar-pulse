@@ -38,17 +38,12 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/manager", managerRoutes);
 app.use("/api/reviewer", reviewerRoutes);
-app.use("/api/employee", employeeRoutes);
+app.use("/api/employees", employeeRoutes);
 
 // ====================== DATABASE INITIALIZATION ======================
 const initDatabase = async () => {
   try {
     console.log("🔄 Initializing database tables...");
-
-    // 1. Users Table + Admin Seeding
-    const adminModule = await import("./src/models/adminModel.js");
-    const adminModel = adminModule.default;
-    await adminModel.initializeDatabase();
 
     // 2. Employees Table
     const employeeModule = await import("./src/models/employeemodel.js");

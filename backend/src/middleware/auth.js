@@ -30,3 +30,33 @@ export const protect = (req, res, next) => {
     });
   }
 };
+
+export const protectInternal = (req, res, next) => {
+
+    try {
+
+        // Read API key from headers
+        const apiKey = req.headers["x-internal-api-key"];
+
+        // Validate key
+        if (
+            !apiKey ||
+            apiKey !== process.env.PULSE_SYNC_API_KEY
+        ) {
+
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized"
+            });
+        }
+
+        next();
+
+    } catch (error) {
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal authentication error"
+        });
+    }
+};

@@ -46,7 +46,7 @@ function EmployeeProfile() {
       try {
         const token = sessionStorage.getItem("token");
 
-        const profileRes = await fetch(`${apiConfig.API_BASE_URL}/api/employee/profile`, {
+        const profileRes = await fetch(`${apiConfig.API_BASE_URL}/api/employees/profile`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const profileData = await profileRes.json();
@@ -55,7 +55,7 @@ function EmployeeProfile() {
           setEditForm(profileData.data);
         }
 
-        const statsRes = await fetch(`${apiConfig.API_BASE_URL}/api/employee/dashboard`, {
+        const statsRes = await fetch(`${apiConfig.API_BASE_URL}/api/employees/dashboard`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const statsData = await statsRes.json();
@@ -88,7 +88,7 @@ function EmployeeProfile() {
     try {
       const token = sessionStorage.getItem("token");
 
-      const res = await fetch(`${apiConfig.API_BASE_URL}/api/employee/profile`, {
+      const res = await fetch(`${apiConfig.API_BASE_URL}/api/employees/profile`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -149,7 +149,7 @@ function EmployeeProfile() {
     try {
       const token = sessionStorage.getItem("token");
 
-      const res = await fetch(`${apiConfig.API_BASE_URL}/api/employee/change-password`, {
+      const res = await fetch(`${apiConfig.API_BASE_URL}/api/employees/change-password`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,

@@ -10,26 +10,26 @@ export const getAllProjectsForReviewer = async (req, res) => {
 
     // 🔹 Step 1: Get reviewer department
     const [deptRows] = await pool.execute(
-      `SELECT department_id FROM users WHERE id = ?`,
+      `SELECT department FROM pulse_employees WHERE id = ?`,
       [reviewer_id]
     );
 
-    const departmentId = deptRows[0]?.department_id;
+    const department = deptRows[0]?.department;
 
     // 🔹 Step 2: Fetch ONLY projects from same department
     const [projects] = await pool.execute(`
       SELECT 
         p.*,
-        u.name as project_manager_name,
+        CONCAT(u.firstname, ' ', u.lastname) AS project_manager_name,
         COUNT(t.id) as total_tasks,
         SUM(CASE WHEN t.status = 'Completed' THEN 1 ELSE 0 END) as completed_tasks
       FROM projects p
-      LEFT JOIN users u ON p.manager_id = u.id
+      LEFT JOIN pulse_employees u ON p.manager_id = u.id
       LEFT JOIN tasks t ON p.id = t.project_id
-      WHERE p.department_id = ?   -- ✅ IMPORTANT FILTER ADDED
-      GROUP BY p.id
+      WHERE p.department = ?   -- ✅ IMPORTANT FILTER ADDED
+      GROUP BY p.id, u.firstname, u.lastname
       ORDER BY p.created_at DESC
-    `, [departmentId]);
+    `, [department]);
 
     // 🔹 Step 3: Format response (unchanged)
     const formattedProjects = projects.map(project => {
@@ -65,11 +65,11 @@ export const getAllTasksForReviewer = async (req, res) => {
 
     // 🔹 Step 1: Get reviewer department
     const [deptRows] = await pool.execute(
-      `SELECT department_id FROM users WHERE id = ?`,
+      `SELECT department FROM pulse_employees WHERE id = ?`,
       [reviewer_id]
     );
 
-    const departmentId = deptRows[0]?.department_id;
+    const department = deptRows[0]?.department;
 
     // 🔹 Step 2: Fetch ONLY tasks from same department projects
     const [tasks] = await pool.execute(`
@@ -77,26 +77,39 @@ export const getAllTasksForReviewer = async (req, res) => {
         t.id,
         t.project_id,
         p.name AS project,
-        COALESCE(pm.name, 'No Manager Assigned') AS project_manager_name,
+        COALESCE(CONCAT(pm.firstname, ' ', pm.lastname),'No Manager Assigned' )AS project_manager_name,
         t.title,
         t.description,
         t.assigned_to,
         t.due_date,
         t.status,
-        COALESCE(e.name, 'Unassigned') AS assignee_name,
+        COALESCE(CONCAT(e.firstname, ' ', e.lastname), 'Unassigned') AS assignee_name,
         COUNT(c.id) AS comment_count                    
       FROM tasks t
       LEFT JOIN projects p ON t.project_id = p.id
-      LEFT JOIN users pm ON p.manager_id = pm.id
-      LEFT JOIN employees e ON t.assigned_to = e.id
+      LEFT JOIN pulse_employees pm ON p.manager_id = pm.id
+      LEFT JOIN pulse_employees e ON t.assigned_to = e.id
       LEFT JOIN comments c ON t.id = c.task_id
 
-      WHERE p.department_id = ?   -- ✅ IMPORTANT FILTER
+      WHERE 
+        p.department = ?
+        AND t.status = 'Pending Review'
 
-      GROUP BY t.id, t.project_id, p.name, pm.name, t.title, t.description, 
-               t.assigned_to, t.due_date, t.status, e.name
+      GROUP BY
+        t.id,
+        t.project_id,
+        p.name,
+        pm.firstname,
+        pm.lastname,
+        t.title,
+        t.description,
+        t.assigned_to,
+        t.due_date,
+        t.status,
+        e.firstname,
+        e.lastname
       ORDER BY p.name ASC, t.due_date DESC
-    `, [departmentId]);
+    `, [department]);
 
     // 🔹 Step 3: Format response (unchanged)
     const formattedTasks = tasks.map(task => ({
@@ -155,42 +168,96 @@ export const getTaskComments = async (req, res) => {
 // Add New Comment
 
 export const addTaskComment = async (req, res) => {
+
   const { taskId } = req.params;
   const { comment_text } = req.body;
+
   const userId = req.user?.id;
-  const reviewerName = req.user?.name || 'Reviewer';
 
   if (!userId) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized"
+    });
   }
 
   if (!comment_text?.trim()) {
-    return res.status(400).json({ success: false, message: "Comment cannot be empty" });
+    return res.status(400).json({
+      success: false,
+      message: "Comment cannot be empty"
+    });
   }
 
   try {
-    // Insert comment
-    await pool.execute(`
-      INSERT INTO comments (task_id, user_id, reviewer_name, comment_text)
-      VALUES (?, ?, ?, ?)
-    `, [taskId, userId, reviewerName, comment_text.trim()]);
 
-    // Get task details + project manager
-    const [taskRows] = await pool.execute(`
-      SELECT 
+    // Get reviewer name
+    const [reviewerRows] = await pool.execute(
+      `
+      SELECT
+        firstname,
+        lastname
+
+      FROM pulse_employees
+
+      WHERE id = ?
+      `,
+      [userId]
+    );
+
+    const reviewerName =
+      reviewerRows.length > 0
+        ? `${reviewerRows[0].firstname} ${reviewerRows[0].lastname}`
+        : 'Reviewer';
+
+    // Insert comment
+    await pool.execute(
+      `
+      INSERT INTO comments (
+        task_id,
+        user_id,
+        reviewer_name,
+        comment_text
+      )
+
+      VALUES (?, ?, ?, ?)
+      `,
+      [
+        taskId,
+        userId,
+        reviewerName,
+        comment_text.trim()
+      ]
+    );
+
+    // Get task details
+    const [taskRows] = await pool.execute(
+      `
+      SELECT
         t.title,
         t.assigned_to,
         p.manager_id
+
       FROM tasks t
-      JOIN projects p ON t.project_id = p.id
+
+      JOIN projects p
+        ON t.project_id = p.id
+
       WHERE t.id = ?
-    `, [taskId]);
+      `,
+      [taskId]
+    );
 
     if (taskRows.length > 0) {
-      const { title: taskTitle, assigned_to: employeeId, manager_id } = taskRows[0];
 
-      // 1. Notification to Employee
+      const {
+        title: taskTitle,
+        assigned_to: employeeId,
+        manager_id
+      } = taskRows[0];
+
+      // Notification to employee
       if (employeeId) {
+
         await addNotificationForEmployee(
           `New feedback received on task: "${taskTitle}"`,
           'feedback',
@@ -199,8 +266,9 @@ export const addTaskComment = async (req, res) => {
         );
       }
 
-      // 2. Notification to Project Manager
+      // Notification to manager
       if (manager_id) {
+
         await addNotificationForManager(
           `New comment on task: "${taskTitle}" by ${reviewerName}`,
           'feedback',
@@ -210,16 +278,78 @@ export const addTaskComment = async (req, res) => {
       }
     }
 
-    res.json({ 
-      success: true, 
-      message: "Comment added successfully" 
+    res.json({
+      success: true,
+      message: "Comment added successfully"
     });
+
   } catch (error) {
-    console.error("Add comment error:", error);
-    res.status(500).json({ success: false, message: "Failed to add comment" });
+
+    console.error(
+      "Add comment error:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to add comment"
+    });
   }
 };
 
+export const getReviewerTaskStats = async (req, res) => {
+  try {
+    const reviewer_id = req.user.id;
+
+    const [deptRows] = await pool.execute(
+      `SELECT department FROM pulse_employees WHERE id = ?`,
+      [reviewer_id]
+    );
+
+    const department = deptRows[0]?.department;
+
+    const [statsRows] = await pool.execute(`
+      SELECT
+        SUM(CASE WHEN status = 'Pending Review' THEN 1 ELSE 0 END) AS pending,
+        
+        SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS approved,
+
+        SUM(
+          CASE 
+            WHEN status = 'In Progress'
+            AND reviewed_by IS NOT NULL
+            THEN 1
+            ELSE 0
+          END
+        ) AS reopened,
+
+        SUM(
+          CASE
+            WHEN reviewed_by IS NOT NULL
+            THEN 1
+            ELSE 0
+          END
+        ) AS totalReviewed
+
+      FROM tasks t
+      JOIN projects p ON t.project_id = p.id
+      WHERE p.department = ?
+    `, [department]);
+
+    res.json({
+      success: true,
+      data: statsRows[0]
+    });
+
+  } catch (error) {
+    console.error("Reviewer stats error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch stats"
+    });
+  }
+};
 //REVIEWER NOTIFICATIONS
 
 // Helper: Send notification to a single reviewer
@@ -325,25 +455,38 @@ export const markReviewerNotificationAsRead = async (req, res) => {
 
 // Get Reviewer Profile (with real data including picture, bio, location)
 export const getReviewerProfile = async (req, res) => {
+
   try {
+
     const reviewerId = req.user.id;
 
-    const [rows] = await pool.execute(`
-      SELECT 
-        id, 
-        name, 
-        email, 
-        phone, 
-        designation, 
-        location, 
-        bio, 
-        profile_picture, 
-        created_at 
-      FROM users 
-      WHERE id = ? AND role = 'reviewer'
-    `, [reviewerId]);
+    const [rows] = await pool.execute(
+      `
+      SELECT
+        id,
+        employee_id,
+        firstname,
+        lastname,
+        CONCAT(firstname, ' ', lastname) AS name,
+        email_id,
+        work_phone,
+        designation,
+        department,
+        location,
+        bio,
+        profile_picture,
+        created_at
+
+      FROM pulse_employees
+
+      WHERE id = ?
+        AND LOWER(office_role) = 'reviewer'
+      `,
+      [reviewerId]
+    );
 
     if (rows.length === 0) {
+
       return res.status(404).json({
         success: false,
         message: "Reviewer profile not found"
@@ -354,8 +497,14 @@ export const getReviewerProfile = async (req, res) => {
       success: true,
       data: rows[0]
     });
+
   } catch (error) {
-    console.error("Get reviewer profile error:", error);
+
+    console.error(
+      "Get reviewer profile error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch reviewer profile"
@@ -365,10 +514,19 @@ export const getReviewerProfile = async (req, res) => {
 
 // Update Reviewer Profile
 export const updateReviewerProfile = async (req, res) => {
+
   const reviewerId = req.user.id;
-  const { name, phone, designation, location, bio } = req.body;
+
+  const {
+    name,
+    phone,
+    designation,
+    location,
+    bio
+  } = req.body;
 
   try {
+
     if (!name) {
       return res.status(400).json({
         success: false,
@@ -376,32 +534,70 @@ export const updateReviewerProfile = async (req, res) => {
       });
     }
 
+    const firstName =
+      name.trim().split(' ')[0];
+
+    const lastName =
+      name.trim().split(' ').slice(1).join(' ') || null;
+
     const [result] = await pool.execute(
-      `UPDATE users 
-       SET name = ?, 
-           phone = ?, 
-           designation = ?, 
-           location = ?, 
-           bio = ? 
-       WHERE id = ? AND role = 'reviewer'`,
-      [name, phone || null, designation || null, location || null, bio || null, reviewerId]
+      `
+      UPDATE pulse_employees
+
+      SET
+        firstname = ?,
+        lastname = ?,
+        work_phone = ?,
+        designation = ?,
+        location = ?,
+        bio = ?
+
+      WHERE id = ?
+        AND LOWER(office_role) = 'reviewer'
+      `,
+      [
+        firstName,
+        lastName,
+        phone || null,
+        designation || null,
+        location || null,
+        bio || null,
+        reviewerId
+      ]
     );
 
     if (result.affectedRows === 0) {
+
       return res.status(404).json({
         success: false,
-        message: "Reviewer profile not found or unauthorized"
+        message:
+          "Reviewer profile not found or unauthorized"
       });
     }
 
-    // Return updated data
-    const [updatedRows] = await pool.execute(`
-      SELECT 
-        id, name, email, phone, designation, location, bio, 
-        profile_picture, created_at 
-      FROM users 
+    const [updatedRows] = await pool.execute(
+      `
+      SELECT
+        id,
+        employee_id,
+        firstname,
+        lastname,
+        CONCAT(firstname, ' ', lastname) AS name,
+        email_id,
+        work_phone,
+        designation,
+        department,
+        location,
+        bio,
+        profile_picture,
+        created_at
+
+      FROM pulse_employees
+
       WHERE id = ?
-    `, [reviewerId]);
+      `,
+      [reviewerId]
+    );
 
     res.json({
       success: true,
@@ -410,10 +606,148 @@ export const updateReviewerProfile = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Update reviewer profile error:", error);
+
+    console.error(
+      "Update reviewer profile error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
       message: "Failed to update profile"
+    });
+  }
+};
+
+export const approveTask = async (req, res) => {
+  const { taskId } = req.params;
+  const reviewerId = req.user.id;
+
+  try {
+    const [taskRows] = await pool.execute(`
+      SELECT 
+        t.title,
+        t.assigned_to,
+        p.manager_id
+      FROM tasks t
+      JOIN projects p ON t.project_id = p.id
+      WHERE t.id = ?
+    `, [taskId]);
+
+    if (taskRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found"
+      });
+    }
+
+    await pool.execute(`
+      UPDATE tasks
+      SET
+        status = 'Completed',
+        reviewed_by = ?,
+        reviewed_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [reviewerId, taskId]);
+
+    const task = taskRows[0];
+
+    if (task.assigned_to) {
+      await addNotificationForEmployee(
+        `Your task "${task.title}" has been approved`,
+        'task_completed',
+        'medium',
+        task.assigned_to
+      );
+    }
+
+    if (task.manager_id) {
+      await addNotificationForManager(
+        `Task "${task.title}" has been approved by reviewer`,
+        'task_completed',
+        'medium',
+        task.manager_id
+      );
+    }
+
+    res.json({
+      success: true,
+      message: "Task approved successfully"
+    });
+
+  } catch (error) {
+    console.error("Approve task error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to approve task"
+    });
+  }
+};
+
+export const reopenTask = async (req, res) => {
+  const { taskId } = req.params;
+  const reviewerId = req.user.id;
+
+  try {
+    const [taskRows] = await pool.execute(`
+      SELECT 
+        t.title,
+        t.assigned_to,
+        p.manager_id
+      FROM tasks t
+      JOIN projects p ON t.project_id = p.id
+      WHERE t.id = ?
+    `, [taskId]);
+
+    if (taskRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found"
+      });
+    }
+
+    await pool.execute(`
+      UPDATE tasks
+      SET
+        status = 'In Progress',
+        reviewed_by = ?,
+        reviewed_at = CURRENT_TIMESTAMP,
+        progress = 50
+      WHERE id = ?
+    `, [reviewerId, taskId]);
+
+    const task = taskRows[0];
+
+    if (task.assigned_to) {
+      await addNotificationForEmployee(
+        `Your task "${task.title}" was reopened by reviewer`,
+        'task_reopened',
+        'high',
+        task.assigned_to
+      );
+    }
+
+    if (task.manager_id) {
+      await addNotificationForManager(
+        `Task "${task.title}" was reopened by reviewer`,
+        'task_reopened',
+        'high',
+        task.manager_id
+      );
+    }
+
+    res.json({
+      success: true,
+      message: "Task reopened successfully"
+    });
+
+  } catch (error) {
+    console.error("Reopen task error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to reopen task"
     });
   }
 };
@@ -424,5 +758,7 @@ export default {
   getTaskComments,
   addTaskComment,
   getReviewerProfile,          
-  updateReviewerProfile
+  updateReviewerProfile,
+  approveTask,
+  reopenTask
 };

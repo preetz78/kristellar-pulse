@@ -8,7 +8,10 @@ import {
     getReviewerNotifications,
     markReviewerNotificationAsRead,
     getReviewerProfile,
-    updateReviewerProfile
+    updateReviewerProfile,
+    approveTask,
+    reopenTask,
+    getReviewerTaskStats
  } from '../controllers/reviewerController.js';
 
 import { 
@@ -29,6 +32,9 @@ router.get('/tasks', protect, getAllTasksForReviewer);
 
 router.get('/tasks/:taskId/comments', protect, getTaskComments);
 router.post('/tasks/:taskId/comments', protect, addTaskComment);
+router.patch('/tasks/:taskId/approve', protect, approveTask);
+router.patch('/tasks/:taskId/reopen', protect, reopenTask);
+router.get('/task-stats', protect, getReviewerTaskStats);
 
 router.get('/dashboard', protect, getDashboardStats);
 router.get('/project-progress', protect, getProjectProgress);

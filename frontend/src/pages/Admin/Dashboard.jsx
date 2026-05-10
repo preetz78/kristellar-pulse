@@ -29,7 +29,6 @@ const Dashboard = () => {
   const buildProgressChart = (projectProgress) => {
     if (!projectProgress) return null;
 
-    const progress = Array.isArray(projectProgress.progress) ? projectProgress.progress : [];
     const normalProgress = Array.isArray(projectProgress.normalProgress)
       ? projectProgress.normalProgress
       : [];
@@ -39,7 +38,6 @@ const Dashboard = () => {
 
     const length = Math.max(
       projectProgress.weeks?.length || 0,
-      progress.length,
       normalProgress.length,
       delayedProgress.length,
       1
@@ -54,9 +52,26 @@ const Dashboard = () => {
     ));
 
     const values = Array.from({ length }, (_, index) => {
-      const value = progress[index] ?? normalProgress[index] ?? delayedProgress[index] ?? 0;
-      return Math.max(0, Math.min(100, Number(value) || 0));
-    });
+
+    const normalValue = normalProgress[index];
+    const delayedValue = delayedProgress[index];
+
+    const value =
+      normalValue !== null && normalValue !== undefined
+        ? normalValue
+        : delayedValue !== null && delayedValue !== undefined
+        ? delayedValue
+        : 0;
+
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    return Math.max(
+      0,
+      Math.min(100, Number(value) || 0)
+    );
+  });
 
     const delayedStartIndex = delayedProgress.findIndex(
       (value) => value !== null && value !== undefined

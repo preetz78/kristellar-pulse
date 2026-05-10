@@ -1,10 +1,128 @@
 // backend/src/controllers/employeeController.js
 import pool from '../config/db.js';
+// import axios from 'axios';
+import bcrypt from "bcrypt";
 import { addNotificationForManager } from './managerController.js';
 import { addNotificationForAdmin } from './adminController.js';
 import { addNotificationForReviewer } from './reviewerController.js';
 
+
+export const syncEmployee = async (req, res) => {
+
+    try {
+
+        // Employee data from HRMS
+        const {
+
+            employee_id,
+            firstname,
+            lastname,
+            email_id,
+            office_role,
+            work_phone,
+            designation,
+            department,
+            profile_picture,
+            location
+
+        } = req.body;
+
+        // Validate required fields
+        if (
+            !employee_id ||
+            !firstname ||
+            !lastname ||
+            !email_id
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Required employee fields are missing"
+            });
+        }
+
+        // Default password = employee_id
+        // Password will be hashed before storing
+        const hashedPassword = await bcrypt.hash(employee_id, 10);
+
+        // Upsert employee
+        const query = `
+
+            INSERT INTO pulse_employees (
+
+                employee_id,
+                firstname,
+                lastname,
+                email_id,
+                password,
+                office_role,
+                work_phone,
+                designation,
+                department,
+                profile_picture,
+                location
+
+            )
+
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+            ON DUPLICATE KEY UPDATE
+
+                firstname = VALUES(firstname),
+                lastname = VALUES(lastname),
+                email_id = VALUES(email_id),
+                office_role = VALUES(office_role),
+                work_phone = VALUES(work_phone),
+                designation = VALUES(designation),
+                department = VALUES(department),
+                profile_picture = VALUES(profile_picture),
+                location = VALUES(location),
+                updated_at = CURRENT_TIMESTAMP
+
+        `;
+
+        await pool.execute(query, [
+
+            employee_id,
+            firstname,
+            lastname,
+            email_id,
+            hashedPassword,
+            office_role,
+            work_phone,
+            designation,
+            department,
+            profile_picture,
+            location
+
+        ]);
+
+        return res.status(200).json({
+
+            success: true,
+            message: "Employee synced successfully"
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Employee sync error:",
+            error.message
+        );
+
+        return res.status(500).json({
+
+            success: false,
+            message: "Internal server error"
+
+        });
+    }
+};
+
+
 // Get all projects assigned to the logged-in employee
+
 export const getMyAssignedProjects = async (req, res) => {
   const employee_id = req.user.id;
 
@@ -18,15 +136,15 @@ export const getMyAssignedProjects = async (req, res) => {
         p.deadline,
         p.priority,
         p.team_size,
-        u.name AS manager,
+        CONCAT(u.firstname, ' ', u.lastname) AS manager,
         COUNT(t.id) as total_tasks,
         SUM(CASE WHEN t.status = 'Completed' THEN 1 ELSE 0 END) as completed_tasks
       FROM project_assignments pa
       JOIN projects p ON pa.project_id = p.id
-      LEFT JOIN users u ON p.manager_id = u.id
+      LEFT JOIN pulse_employees u ON p.manager_id = u.id
       LEFT JOIN tasks t ON p.id = t.project_id
       WHERE pa.employee_id = ?
-      GROUP BY p.id
+      GROUP BY p.id, u.firstname, u.lastname
       ORDER BY p.created_at DESC
     `, [employee_id]);
 
@@ -131,10 +249,10 @@ export const completeTask = async (req, res) => {
         t.project_id,
         p.name AS project_name,
         p.manager_id,
-        e.name AS employee_name
+        CONCAT(e.firstname, ' ', e.lastname) AS employee_name
       FROM tasks t
       JOIN projects p ON t.project_id = p.id
-      JOIN employees e ON t.assigned_to = e.id
+      JOIN pulse_employees e ON t.assigned_to = e.id
       WHERE t.id = ? AND t.assigned_to = ?
     `, [id, employee_id]);
 
@@ -150,15 +268,16 @@ export const completeTask = async (req, res) => {
     // Update task status
     await pool.execute(`
       UPDATE tasks 
-      SET status = 'Completed', 
-          completed_at = CURRENT_TIMESTAMP, 
-          progress = 100 
+      SET 
+        status = 'Pending Review',
+        completed_at = CURRENT_TIMESTAMP,
+        progress = 100
       WHERE id = ?
     `, [id]);
 
     // 1. Notification to Employee
     await addNotificationForEmployee(
-      `You have completed the task: "${taskTitle}"`,
+      `You submitted the task "${taskTitle}" for review`,
       'task_completed',
       'medium',
       employee_id
@@ -167,18 +286,18 @@ export const completeTask = async (req, res) => {
     // 2. Notification to Manager
     if (manager_id) {
       await addNotificationForManager(
-        `Task '${taskTitle}' marked as completed by ${employee_name || 'Employee'}`,
+        `Task '${taskTitle}' submitted for review by ${employee_name || 'Employee'}`,
         'task_completed',
         'medium',
         manager_id
       );
     }
 
-    const [reviewers] = await pool.execute(`SELECT id FROM users WHERE role = 'reviewer'`);
+    const [reviewers] = await pool.execute(`SELECT id FROM pulse_employees WHERE LOWER(office_role) = 'reviewer'`);
     
     for (const reviewer of reviewers) {
       await addNotificationForReviewer(
-        `Employee ${employee_name || 'Employee'} completed task: "${taskTitle}". Please review it.`,
+        `Employee ${employee_name || 'Employee'} submitted task: "${taskTitle}". Please review it.`,
         'task_review',
         'high',
         reviewer.id
@@ -189,7 +308,7 @@ export const completeTask = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Task marked as completed successfully"
+      message: "Task submitted for review successfully"
     });
 
   } catch (error) {
@@ -207,58 +326,143 @@ export const getEmployeeDashboardStats = async (req, res) => {
   const employee_id = req.user.id;
 
   try {
-    // 1. Projects assigned to this employee
-    const [projectStats] = await pool.execute(`
+
+    // TOTAL PROJECTS ASSIGNED TO EMPLOYEE
+    const [projectStats] = await pool.execute(
+      `
       SELECT 
-        COUNT(DISTINCT p.id) AS total_projects
+        COUNT(DISTINCT p.id) AS total_projects,
+
+        -- COMPLETED PROJECTS
+        SUM(
+          CASE 
+            WHEN EXISTS (
+              SELECT 1
+              FROM tasks t
+              WHERE t.project_id = p.id
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM tasks t
+              WHERE t.project_id = p.id
+              AND t.status != 'Completed'
+            )
+            THEN 1
+            ELSE 0
+          END
+        ) AS completed_projects,
+
+        -- ACTIVE PROJECTS
+        SUM(
+          CASE 
+            WHEN NOT (
+              EXISTS (
+                SELECT 1
+                FROM tasks t
+                WHERE t.project_id = p.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM tasks t
+                WHERE t.project_id = p.id
+                AND t.status != 'Completed'
+              )
+            )
+            THEN 1
+            ELSE 0
+          END
+        ) AS active_projects
+
       FROM project_assignments pa
       JOIN projects p ON pa.project_id = p.id
+
       WHERE pa.employee_id = ?
-    `, [employee_id]);
+      `,
+      [employee_id]
+    );
 
-    // 2. Task statistics for this employee
-    const [taskStats] = await pool.execute(`
+    // =========================================
+    // TASK STATS FOR THIS EMPLOYEE
+    // =========================================
+    const [taskStats] = await pool.execute(
+      `
       SELECT 
         COUNT(*) AS total_tasks,
-        SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks,
-        SUM(CASE WHEN status = 'In Progress' OR status = 'Delayed' THEN 1 ELSE 0 END) AS active_tasks
-      FROM tasks 
-      WHERE assigned_to = ?
-    `, [employee_id]);
 
-    // 3. Overall Completion Percentage
-    const [completionStats] = await pool.execute(`
-      SELECT 
-        COUNT(*) AS total_tasks,
-        SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks,
-        ROUND(
-          IFNULL(
-            SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0),
-            0
-          ), 0) AS overall_completion
-      FROM tasks 
+        SUM(
+          CASE 
+            WHEN status = 'Completed'
+            THEN 1
+            ELSE 0
+          END
+        ) AS completed_tasks,
+
+        SUM(
+          CASE 
+            WHEN status = 'In Progress'
+              OR status = 'Delayed'
+            THEN 1
+            ELSE 0
+          END
+        ) AS active_tasks
+
+      FROM tasks
       WHERE assigned_to = ?
-    `, [employee_id]);
+      `,
+      [employee_id]
+    );
+
+    // =========================================
+    // PROJECT COMPLETION %
+    // BASED ON PROJECTS
+    // =========================================
+    const totalProjects =
+      Number(projectStats[0]?.total_projects) || 0;
+
+    const completedProjects =
+      Number(projectStats[0]?.completed_projects) || 0;
+
+    const overallCompletion =
+      totalProjects > 0
+        ? Math.round((completedProjects / totalProjects) * 100)
+        : 0;
 
     const projects = projectStats[0] || {};
     const tasksData = taskStats[0] || {};
-    const completion = completionStats[0] || {};
 
+    // =========================================
+    // FINAL RESPONSE
+    // =========================================
     res.json({
       success: true,
+
       stats: {
-        totalProjects: Number(projects.total_projects) || 0,
-        activeTasks: Number(tasksData.active_tasks) || 0,
-        completedTasks: Number(tasksData.completed_tasks) || 0,
-        overallCompletion: Number(completion.overall_completion) || 0,
+        totalProjects:
+          Number(projects.total_projects) || 0,
+
+        activeProjects:
+          Number(projects.active_projects) || 0,
+
+        completedProjects:
+          Number(projects.completed_projects) || 0,
+
+        activeTasks:
+          Number(tasksData.active_tasks) || 0,
+
+        completedTasks:
+          Number(tasksData.completed_tasks) || 0,
+
+        overallCompletion:
+          overallCompletion,
       }
     });
 
   } catch (error) {
     console.error("Employee dashboard stats error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch employee dashboard statistics" 
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch employee dashboard statistics"
     });
   }
 };
@@ -571,26 +775,38 @@ export const markEmployeeNotificationAsRead = async (req, res) => {
 
 // Get Employee Profile (with real data including picture, bio, location)
 export const getEmployeeProfile = async (req, res) => {
+
   try {
+
     const employeeId = req.user.id;
 
-    const [rows] = await pool.execute(`
-      SELECT 
-        id, 
-        employee_id, 
-        name, 
-        email, 
-        phone, 
-        designation, 
-        location, 
-        bio, 
-        profile_picture, 
-        created_at 
-      FROM employees 
+    const [rows] = await pool.execute(
+      `
+      SELECT
+        id,
+        employee_id,
+        firstname,
+        lastname,
+        CONCAT(firstname, ' ', lastname) AS name,
+        email_id,
+        work_phone,
+        designation,
+        department,
+        location,
+        bio,
+        profile_picture,
+        created_at
+
+      FROM pulse_employees
+
       WHERE id = ?
-    `, [employeeId]);
+        AND LOWER(office_role) = 'employee'
+      `,
+      [employeeId]
+    );
 
     if (rows.length === 0) {
+
       return res.status(404).json({
         success: false,
         message: "Employee profile not found"
@@ -601,8 +817,14 @@ export const getEmployeeProfile = async (req, res) => {
       success: true,
       data: rows[0]
     });
+
   } catch (error) {
-    console.error("Get employee profile error:", error);
+
+    console.error(
+      "Get employee profile error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch employee profile"
@@ -612,10 +834,19 @@ export const getEmployeeProfile = async (req, res) => {
 
 // Update Employee Profile
 export const updateEmployeeProfile = async (req, res) => {
+
   const employeeId = req.user.id;
-  const { name, phone, designation, location, bio } = req.body;
+
+  const {
+    name,
+    phone,
+    designation,
+    location,
+    bio
+  } = req.body;
 
   try {
+
     if (!name) {
       return res.status(400).json({
         success: false,
@@ -623,32 +854,69 @@ export const updateEmployeeProfile = async (req, res) => {
       });
     }
 
+    const firstName =
+      name.trim().split(' ')[0];
+
+    const lastName =
+      name.trim().split(' ').slice(1).join(' ') || null;
+
     const [result] = await pool.execute(
-      `UPDATE employees 
-       SET name = ?, 
-           phone = ?, 
-           designation = ?, 
-           location = ?, 
-           bio = ? 
-       WHERE id = ?`,
-      [name, phone || null, designation || null, location || null, bio || null, employeeId]
+      `
+      UPDATE pulse_employees
+
+      SET
+        firstname = ?,
+        lastname = ?,
+        work_phone = ?,
+        designation = ?,
+        location = ?,
+        bio = ?
+
+      WHERE id = ?
+        AND LOWER(office_role) = 'employee'
+      `,
+      [
+        firstName,
+        lastName,
+        phone || null,
+        designation || null,
+        location || null,
+        bio || null,
+        employeeId
+      ]
     );
 
     if (result.affectedRows === 0) {
+
       return res.status(404).json({
         success: false,
         message: "Employee profile not found"
       });
     }
 
-    // Return updated data
-    const [updatedRows] = await pool.execute(`
-      SELECT 
-        id, employee_id, name, email, phone, designation, 
-        location, bio, profile_picture, created_at 
-      FROM employees 
+    const [updatedRows] = await pool.execute(
+      `
+      SELECT
+        id,
+        employee_id,
+        firstname,
+        lastname,
+        CONCAT(firstname, ' ', lastname) AS name,
+        email_id,
+        work_phone,
+        designation,
+        department,
+        location,
+        bio,
+        profile_picture,
+        created_at
+
+      FROM pulse_employees
+
       WHERE id = ?
-    `, [employeeId]);
+      `,
+      [employeeId]
+    );
 
     res.json({
       success: true,
@@ -657,7 +925,12 @@ export const updateEmployeeProfile = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Update employee profile error:", error);
+
+    console.error(
+      "Update employee profile error:",
+      error
+    );
+
     res.status(500).json({
       success: false,
       message: "Failed to update profile"
@@ -666,6 +939,7 @@ export const updateEmployeeProfile = async (req, res) => {
 };
 
 export default {
+  syncEmployee,
   getMyAssignedProjects,
   getMyTasks,
   completeTask,
@@ -676,5 +950,6 @@ export default {
   addNotificationForEmployee,         
   addNotificationForEmployees,
   getEmployeeProfile,          
-  updateEmployeeProfile         
+  updateEmployeeProfile  
+
 };

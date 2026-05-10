@@ -9,12 +9,13 @@ import {
   getEmployeeNotifications,
   markEmployeeNotificationAsRead,
   getEmployeeProfile,
-  updateEmployeeProfile   
+  updateEmployeeProfile ,
+  syncEmployee  
 } from '../controllers/employeeController.js';
 
 import { changePassword } from '../controllers/authController.js';
 
-import { protect } from '../middleware/auth.js';
+import { protect , protectInternal } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -38,5 +39,8 @@ router.get('/profile', protect, getEmployeeProfile);
 router.put('/profile', protect, updateEmployeeProfile);
 
 router.put('/change-password', protect, changePassword);
+
+router.post('/sync', protectInternal, syncEmployee);
+
 
 export default router;

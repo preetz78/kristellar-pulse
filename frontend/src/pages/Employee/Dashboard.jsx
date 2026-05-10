@@ -7,22 +7,24 @@ import apiConfig from "../../config/apiConfig";
 const EmployeeDashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
-    totalProjects: 0,
-    activeTasks: 0,
-    completedTasks: 0,
-    overallCompletion: 0,
-  });
+  totalProjects: 0,
+  activeTasks: 0,
+  completedTasks: 0,
+  activeProjects: 0,
+  completedProjects: 0,
+  overallCompletion: 0,
+});
   const [myProjects, setMyProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 🔥 HOVER TOOLTIP STATE
+  // HOVER TOOLTIP STATE
   const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
-  // 🔥 STEP 1: buildProgressChart FUNCTION
+  //  STEP 1: buildProgressChart FUNCTION
   const buildProgressChart = (projectProgress) => {
     if (!projectProgress) return null;
 
@@ -65,7 +67,7 @@ const EmployeeDashboard = () => {
       try {
         setLoading(true);
         const token = sessionStorage.getItem("token");
-        const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/dashboard`, {
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/employees/dashboard`, {
           method: "GET",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -96,7 +98,7 @@ const EmployeeDashboard = () => {
     const fetchMyProjects = async () => {
       try {
         const token = sessionStorage.getItem("token");
-        const response = await fetch(`${apiConfig.API_BASE_URL}/api/employee/projects`, {
+        const response = await fetch(`${apiConfig.API_BASE_URL}/api/employees/projects`, {
           method: "GET",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -131,7 +133,7 @@ const EmployeeDashboard = () => {
       try {
         const token = sessionStorage.getItem("token");
         const response = await fetch(
-          `${apiConfig.API_BASE_URL}/api/employee/project-progress?projectId=${selectedProjectId}`,
+          `${apiConfig.API_BASE_URL}/api/employees/project-progress?projectId=${selectedProjectId}`,
           {
             method: "GET",
             headers: {
@@ -278,7 +280,7 @@ const EmployeeDashboard = () => {
         <div className="lg:col-span-2 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-semibold text-gray-800 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text">
-              My Task Completion
+              My Project Completion
             </h3>
             <span className="px-4 py-1 bg-gradient-to-r from-blue-400 to-blue-300 text-blue-700 text-xs font-semibold rounded-full">
               This Month
@@ -315,11 +317,11 @@ const EmployeeDashboard = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
               <p className="text-xs text-blue-600 font-semibold">COMPLETED</p>
-              <p className="text-3xl font-bold text-blue-700 mt-1">{stats.completedTasks}</p>
+              <p className="text-3xl font-bold text-blue-700 mt-1">{stats.completedProjects}</p>
             </div>
             <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
               <p className="text-xs text-blue-600 font-semibold">IN PROGRESS</p>
-              <p className="text-3xl font-bold text-blue-700 mt-1">{stats.activeTasks}</p>
+              <p className="text-3xl font-bold text-blue-700 mt-1">{stats.activeProjects}</p>
             </div>
           </div>
         </div>

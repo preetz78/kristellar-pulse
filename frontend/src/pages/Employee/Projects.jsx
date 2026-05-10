@@ -34,7 +34,7 @@ const EmployeeProjects = () => {
           return;
         }
 
-        const apiUrl = `${apiConfig.API_BASE_URL}/api/employee/projects`;
+        const apiUrl = `${apiConfig.API_BASE_URL}/api/employees/projects`;
         console.log("🔄 Fetching projects from:", apiUrl);
 
         const response = await fetch(apiUrl, {
