@@ -1,5 +1,6 @@
 // src/pages/Employee/Profile.jsx
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Mail,
   Calendar,
@@ -39,6 +40,7 @@ function EmployeeProfile() {
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const navigate = useNavigate();
 
   // Fetch Employee Profile + Stats
   useEffect(() => {
@@ -164,10 +166,13 @@ function EmployeeProfile() {
       const data = await res.json();
 
       if (data.success) {
-        alert("Password changed successfully! Please use the new password to login next time.");
+        alert("Password changed successfully! Please login again with the new password.");
         setShowChangePassword(false);
         setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
         setPasswordError("");
+        sessionStorage.clear();
+        window.dispatchEvent(new Event("auth-change"));
+        navigate("/login", { replace: true });
       } else {
         alert(data.message || "Failed to change password");
       }
@@ -223,7 +228,7 @@ function EmployeeProfile() {
                 />
               ) : employeeData.designation}
             </p>
-            <p className="text-xs opacity-80 mt-0.5">{employeeData.email}</p>
+            <p className="text-xs opacity-80 mt-0.5">{employeeData.email_id}</p>
           </div>
 
           <div className="flex gap-3">
@@ -264,14 +269,14 @@ function EmployeeProfile() {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700">
-            <InfoRow icon={<Mail />} label="Email" value={employeeData.email} />
+            <InfoRow icon={<Mail />} label="Email" value={employeeData.email_id} />
             <InfoRow 
               icon={<Phone />} 
               label="Phone" 
               value={isEditing ? (
-                <input type="text" name="phone" value={editForm.phone || ""} onChange={handleEditChange}
+                <input type="text" name="phone" value={editForm.work_phone || ""} onChange={handleEditChange}
                   className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none" />
-              ) : (employeeData.phone || "")} 
+              ) : (employeeData.work_phone || "")} 
             />
             <InfoRow 
               icon={<MapPin />} 
@@ -328,14 +333,19 @@ function EmployeeProfile() {
             <div className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-                <input type="password" value={passwordForm.currentPassword}
+                <input
+                  type="password"
+                  value={passwordForm.currentPassword}
                   onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500"
-                  placeholder="Enter current password" />
+                  placeholder="Enter current password"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                <input type="password" value={passwordForm.newPassword}
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
                   onChange={(e) => {
                     const value = e.target.value;
                     setPasswordForm(prev => ({ ...prev, newPassword: value }));
@@ -347,7 +357,8 @@ function EmployeeProfile() {
                     }
                   }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500"
-                  placeholder="Enter new password" />
+                  placeholder="Enter new password"
+                />
                 <p className="text-xs text-gray-500 mt-1">
                   Must be 8+ characters with uppercase, lowercase, number & special character
                 </p>
@@ -357,10 +368,13 @@ function EmployeeProfile() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                <input type="password" value={passwordForm.confirmNewPassword}
+                <input
+                  type="password"
+                  value={passwordForm.confirmNewPassword}
                   onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmNewPassword: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500"
-                  placeholder="Confirm new password" />
+                  placeholder="Confirm new password"
+                />
               </div>
             </div>
 

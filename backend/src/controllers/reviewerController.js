@@ -83,6 +83,7 @@ export const getAllTasksForReviewer = async (req, res) => {
         t.assigned_to,
         t.due_date,
         t.status,
+        t.completed_at,
         COALESCE(CONCAT(e.firstname, ' ', e.lastname), 'Unassigned') AS assignee_name,
         COUNT(c.id) AS comment_count                    
       FROM tasks t
@@ -125,7 +126,8 @@ export const getAllTasksForReviewer = async (req, res) => {
       assignee: task.assignee_name,
       progress: task.status === 'Completed' ? 100 : 
                 task.status === 'In Progress' ? 65 : 25,
-      comments: Number(task.comment_count) || 0          
+      comments: Number(task.comment_count) || 0 ,
+      completed_at: task.completed_at
     }));
 
     res.json({ 
@@ -258,23 +260,41 @@ export const addTaskComment = async (req, res) => {
       // Notification to employee
       if (employeeId) {
 
-        await addNotificationForEmployee(
-          `New feedback received on task: "${taskTitle}"`,
-          'feedback',
-          'medium',
-          employeeId
-        );
-      }
+        await addNotificationForEmployee({
+
+          title: "Task Reopened",
+
+          full_message:
+        `Your task '${task.title}' was reopened by the reviewer.
+
+        Please review the feedback and resubmit the task.`,
+
+          type: 'task_reopened',
+
+          priority: 'high',
+
+          employeeId: task.assigned_to
+        });
+              }
 
       // Notification to manager
       if (manager_id) {
 
-        await addNotificationForManager(
-          `New comment on task: "${taskTitle}" by ${reviewerName}`,
-          'feedback',
-          'medium',
-          manager_id
-        );
+        await addNotificationForManager({
+
+          title: "Task Reopened",
+
+          full_message:
+        `Task '${task.title}' was reopened by the reviewer.
+
+        The employee needs to make corrections and resubmit the task.`,
+
+          type: 'task_reopened',
+
+          priority: 'high',
+
+          managerId: task.manager_id
+        });
       }
     }
 
@@ -353,22 +373,23 @@ export const getReviewerTaskStats = async (req, res) => {
 //REVIEWER NOTIFICATIONS
 
 // Helper: Send notification to a single reviewer
-export const addNotificationForReviewer = async (
-  message,
+export const addNotificationForReviewer = async ({
+  title,
+  full_message,
   type = 'info',
   priority = 'medium',
   reviewerId
-) => {
+}) => {
   if (!reviewerId) return;
 
   try {
     await pool.query(
       `INSERT INTO notifications 
-        (recipient_type, recipient_id, message, type, priority, status)
-       VALUES (?, ?, ?, ?, ?, 'unread')`,
-      ['reviewer', reviewerId, message.trim(), type, priority]
+        (recipient_type, recipient_id, title, full_message, type, priority, status)
+       VALUES (?, ?, ?, ?, ?, ?, 'unread')`,
+      ['reviewer', reviewerId, title.trim(), full_message.trim(), type, priority]
     );
-    console.log(`✅ Notification sent to reviewer ${reviewerId}: ${message}`);
+    console.log(`✅ Notification sent to reviewer ${reviewerId}: ${title}`);
   } catch (err) {
     console.error('Reviewer notification failed:', err.message);
   }
@@ -383,7 +404,8 @@ export const getReviewerNotifications = async (req, res) => {
     const [rows] = await pool.query(`
       SELECT 
         id, 
-        message, 
+        title,
+        full_message,
         type, 
         priority, 
         status, 
@@ -653,21 +675,39 @@ export const approveTask = async (req, res) => {
     const task = taskRows[0];
 
     if (task.assigned_to) {
-      await addNotificationForEmployee(
-        `Your task "${task.title}" has been approved`,
-        'task_completed',
-        'medium',
-        task.assigned_to
-      );
+      await addNotificationForEmployee({
+
+        title: "New Feedback Received",
+
+        full_message:
+      `New feedback has been added on task '${taskTitle}'.
+
+      Please review the reviewer comments.`,
+
+        type: 'feedback',
+
+        priority: 'medium',
+
+        employeeId
+      });
     }
 
     if (task.manager_id) {
-      await addNotificationForManager(
-        `Task "${task.title}" has been approved by reviewer`,
-        'task_completed',
-        'medium',
-        task.manager_id
-      );
+      await addNotificationForManager({
+
+        title: "New Task Comment",
+
+        full_message:
+      `Reviewer ${reviewerName} added a comment on task '${taskTitle}'.
+
+      Please review the feedback.`,
+
+        type: 'feedback',
+
+        priority: 'medium',
+
+        managerId: manager_id
+      });
     }
 
     res.json({
@@ -720,21 +760,39 @@ export const reopenTask = async (req, res) => {
     const task = taskRows[0];
 
     if (task.assigned_to) {
-      await addNotificationForEmployee(
-        `Your task "${task.title}" was reopened by reviewer`,
-        'task_reopened',
-        'high',
-        task.assigned_to
-      );
+      await addNotificationForEmployee({
+
+        title: "Task Approved",
+
+        full_message:
+      `Your task '${task.title}' has been approved by the reviewer.
+
+      Great work on completing the task.`,
+
+        type: 'task_completed',
+
+        priority: 'medium',
+
+        employeeId: task.assigned_to
+      });
     }
 
     if (task.manager_id) {
-      await addNotificationForManager(
-        `Task "${task.title}" was reopened by reviewer`,
-        'task_reopened',
-        'high',
-        task.manager_id
-      );
+      await addNotificationForManager({
+
+        title: "Task Approved",
+
+        full_message:
+      `Task '${task.title}' has been approved by the reviewer.
+
+      The task is now marked as completed.`,
+
+        type: 'task_completed',
+
+        priority: 'medium',
+
+        managerId: task.manager_id
+      });
     }
 
     res.json({

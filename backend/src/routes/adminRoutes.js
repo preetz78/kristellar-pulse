@@ -22,7 +22,8 @@ import {
   deleteAdminTask,
   updateAdminProject,
   deleteAdminProject,
-  getDepartments
+  getDepartments,
+  updateUserRole
 } from '../controllers/adminController.js';
 
 import { changePassword } from '../controllers/authController.js';
@@ -64,5 +65,6 @@ router.put('/profile', protect, updateAdminProfile);
 router.get('/dashboard-stats', protect, getAdminDashboardStats);
 
 router.put('/change-password', protect, changePassword);
+router.put('/users/:userId/role', protect, updateUserRole);
 
 export default router;

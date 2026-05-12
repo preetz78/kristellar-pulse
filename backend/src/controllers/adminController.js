@@ -1256,6 +1256,20 @@ export const getProjectProgress = async (req, res) => {
     });
 
     const response = [];
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    const normaliseDate = (value) => {
+      const date = new Date(value);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    };
+    const formatDate = (date) =>
+      date.toLocaleDateString('en-US', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    const getDayOffset = (date, startDate) =>
+      Math.max(0, Math.floor((normaliseDate(date) - startDate) / MS_PER_DAY));
 
     for (const project of Object.values(groupedProjects)) {
 
@@ -1266,19 +1280,34 @@ export const getProjectProgress = async (req, res) => {
         response.push({
           id: project.id,
           name: project.name,
+          startDate: project.start_date,
+          deadline: project.deadline,
+          actualCompletionDate: null,
+          isCompleted: false,
+          currentDate: new Date().toISOString(),
+          totalTasks,
+          completedTasks: 0,
+          totalDays: 1,
+          deadlineDayOffset: 0,
+          currentDayOffset: 0,
           weeks: ["Week 1"],
           weeklyDates: [],
           normalProgress: [0],
           delayedProgress: [null],
           actualDots: [],
+          linePoints: [{ dayOffset: 0, percentage: 0, type: "start" }],
+          projectionPoint: null,
           isDelayed: false
         });
 
         continue;
       }
 
-      const startDate = new Date(project.start_date);
-      const deadline = new Date(project.deadline);
+      const startDate = normaliseDate(project.start_date);
+      const deadline = project.deadline
+        ? normaliseDate(project.deadline)
+        : normaliseDate(project.start_date);
+      const today = normaliseDate(new Date());
 
       const completedTasks = project.tasks
         .filter(
@@ -1292,29 +1321,23 @@ export const getProjectProgress = async (req, res) => {
             new Date(b.completed_at)
         );
 
-      let finalEndDate;
-
-      if (completedTasks.length > 0) {
-
-        finalEndDate = new Date(
-          completedTasks[completedTasks.length - 1].completed_at
-        );
-
-      } else {
-
-        const today = new Date();
-
-        finalEndDate =
-          today > deadline
-            ? today
-            : deadline;
-      }
+      const allTasksCompleted = completedTasks.length === totalTasks;
+      const lastCompletionDate = completedTasks.length > 0
+        ? normaliseDate(completedTasks[completedTasks.length - 1].completed_at)
+        : null;
+      const finalEndDate = allTasksCompleted
+        ? lastCompletionDate > deadline
+          ? lastCompletionDate
+          : deadline
+        : today > deadline
+          ? today
+          : deadline;
 
       const totalDays = Math.max(
         1,
         Math.ceil(
           (finalEndDate - startDate) /
-          (1000 * 60 * 60 * 24)
+          MS_PER_DAY
         )
       );
 
@@ -1323,47 +1346,35 @@ export const getProjectProgress = async (req, res) => {
         Math.ceil(totalDays / 7)
       );
 
-      const progressMap = {};
       const actualDots = [];
+      const dotsByDate = {};
+      let cumulativeCompleted = 0;
 
-      completedTasks.forEach((task, index) => {
-
-        const completedDate = new Date(task.completed_at);
-
-        const diffDays = Math.floor(
-          (completedDate - startDate) /
-          (1000 * 60 * 60 * 24)
-        );
-
-        const weekIndex = Math.floor(diffDays / 7);
+      completedTasks.forEach((task) => {
+        const completedDate = normaliseDate(task.completed_at);
+        const dateKey = completedDate.toISOString().slice(0, 10);
+        cumulativeCompleted += 1;
 
         const percentage = Math.round(
-          ((index + 1) / totalTasks) * 100
+          (cumulativeCompleted / totalTasks) * 100
         );
 
-        progressMap[weekIndex] = {
+        dotsByDate[dateKey] = {
+          dayOffset: getDayOffset(completedDate, startDate),
           percentage,
-          date: completedDate.toLocaleDateString(
-            'en-US',
-            {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric'
-            }
-          )
+          date: formatDate(completedDate),
+          completedTasks: cumulativeCompleted,
+          tasksCompletedOnDate:
+            (dotsByDate[dateKey]?.tasksCompletedOnDate || 0) + 1,
+          completedAt: completedDate.toISOString()
         };
-
-        actualDots.push({
-          week: weekIndex,
-          percentage,
-          completedTasks: index + 1,
-          completedAt: completedDate
-        });
-
       });
+
+      actualDots.push(...Object.values(dotsByDate));
 
       const weeklyDates = [];
       const progressValues = [];
+      const weekMarkers = [];
 
       let lastPercentage = null;
 
@@ -1375,34 +1386,33 @@ export const getProjectProgress = async (req, res) => {
           startDate.getDate() + (i * 7)
         );
 
-        weeklyDates.push(
-          currentWeekDate.toLocaleDateString(
-            'en-US',
-            {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric'
-            }
-          )
-        );
+        const weekDate = formatDate(currentWeekDate);
 
-        if (progressMap[i]) {
+        weeklyDates.push(weekDate);
+        weekMarkers.push({
+          label: `Week ${i + 1}`,
+          date: weekDate,
+          dayOffset: Math.min(i * 7, totalDays)
+        });
 
-          lastPercentage =
-            progressMap[i].percentage;
+        const weekEndOffset = Math.min((i + 1) * 7, totalDays);
+        const dotsInWeek = actualDots.filter(dot => dot.dayOffset <= weekEndOffset);
+        const lastDotInWeek = dotsInWeek[dotsInWeek.length - 1];
+
+        if (lastDotInWeek) {
+          lastPercentage = lastDotInWeek.percentage;
         }
 
         progressValues.push(
-        completedTasks.length > 0
-          ? lastPercentage
-          : null
-      );
+          completedTasks.length > 0
+            ? lastPercentage
+            : null
+        );
       }
 
-      const deadlineWeekIndex = Math.floor(
-        (deadline - startDate) /
-        (1000 * 60 * 60 * 24 * 7)
-      );
+      const deadlineDayOffset = getDayOffset(deadline, startDate);
+      const currentDayOffset = Math.min(getDayOffset(today, startDate), totalDays);
+      const deadlineWeekIndex = Math.floor(deadlineDayOffset / 7);
 
       const isDelayed =
         finalEndDate > deadline;
@@ -1427,19 +1437,76 @@ export const getProjectProgress = async (req, res) => {
         );
       }
 
+      const linePoints = [
+        { dayOffset: 0, percentage: 0, date: formatDate(startDate), type: "start" },
+        ...actualDots.map(dot => ({ ...dot, type: "completed" }))
+      ];
+
+      let projectionPoint = null;
+
+      if (!allTasksCompleted) {
+        const lastPoint = linePoints[linePoints.length - 1];
+        const projectionDate = today < startDate
+          ? startDate
+          : today > finalEndDate
+            ? finalEndDate
+            : today;
+        const projectionDayOffset = Math.min(
+          getDayOffset(projectionDate, startDate),
+          totalDays
+        );
+        const nextTaskPercentage = Math.min(
+          100,
+          Math.round(((completedTasks.length + 1) / totalTasks) * 100)
+        );
+        const availableDays = Math.max(1, deadlineDayOffset - lastPoint.dayOffset);
+        const elapsedDays = Math.max(0, projectionDayOffset - lastPoint.dayOffset);
+        const progressRatio = Math.min(1, elapsedDays / availableDays);
+        const percentage = Math.round(
+          lastPoint.percentage +
+          ((nextTaskPercentage - lastPoint.percentage) * progressRatio)
+        );
+
+        projectionPoint = {
+          dayOffset: projectionDayOffset,
+          percentage,
+          date: formatDate(projectionDate),
+          completedTasks: completedTasks.length,
+          nextTaskPercentage,
+          type: "projection"
+        };
+
+        if (projectionPoint.dayOffset > lastPoint.dayOffset) {
+          linePoints.push(projectionPoint);
+        }
+      }
+
       response.push({
         id: project.id,
         name: project.name,
         startDate: project.start_date,
         deadline: project.deadline,
+        actualCompletionDate: allTasksCompleted && lastCompletionDate
+          ? lastCompletionDate.toISOString()
+          : null,
+        isCompleted: allTasksCompleted,
+        currentDate: today.toISOString(),
+        totalTasks,
+        completedTasks: completedTasks.length,
+        totalDays,
+        deadlineDayOffset,
+        currentDayOffset,
         weeks: Array.from(
           { length: totalWeeks },
           (_, index) => `Week ${index + 1}`
         ),
         weeklyDates,
+        weekMarkers,
         normalProgress,
         delayedProgress,
         actualDots,
+        linePoints,
+        projectionPoint,
         deadlineWeekIndex,
         isDelayed
       });
@@ -2285,6 +2352,100 @@ export const deleteAdminTask = async (req, res) => {
       success: false,
       message: "Failed to delete task",
       error: error.message
+    });
+  }
+};
+
+export const getAllTeamMembers = async (req, res) => {
+
+  try {
+
+    const [rows] = await pool.execute(
+      `
+      SELECT
+        id,
+        employee_id,
+
+        CONCAT(firstname, ' ', lastname) AS name,
+
+        email_id AS email,
+
+        office_role AS role,
+
+        department,
+
+        designation,
+
+        work_phone AS phone,
+
+        location,
+
+        bio,
+
+        profile_picture
+
+      FROM pulse_employees
+
+      ORDER BY created_at DESC
+      `
+    );
+
+    return res.status(200).json(rows);
+
+  } catch (error) {
+
+    console.error(
+      "Get team members error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch team members"
+    });
+  }
+};
+
+export const updateUserRole = async (req, res) => {
+
+  try {
+
+    const { userId } = req.params;
+
+    const { role } = req.body;
+
+    if (!role) {
+
+      return res.status(400).json({
+        success: false,
+        message: "Role is required"
+      });
+    }
+
+    await pool.execute(
+      `
+      UPDATE pulse_employees
+      SET office_role = ?
+      WHERE id = ?
+      `,
+      [role, userId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Role updated successfully"
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Update role error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update role"
     });
   }
 };

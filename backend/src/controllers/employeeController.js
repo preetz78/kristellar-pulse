@@ -193,9 +193,11 @@ export const getMyTasks = async (req, res) => {
         t.status,
         t.due_date,
         p.name AS project_name,
-        p.project_id
+        p.project_id,
+        CONCAT( e.firstname, ' ', e.lastname) AS assignee_name
       FROM tasks t
       JOIN projects p ON t.project_id = p.id
+      LEFT JOIN pulse_employees e ON t.assigned_to = e.id
       WHERE t.assigned_to = ?
       ORDER BY t.due_date ASC, t.created_at DESC
     `, [employee_id]);
@@ -276,32 +278,59 @@ export const completeTask = async (req, res) => {
     `, [id]);
 
     // 1. Notification to Employee
-    await addNotificationForEmployee(
-      `You submitted the task "${taskTitle}" for review`,
-      'task_completed',
-      'medium',
-      employee_id
-    );
+    await addNotificationForEmployee({
+
+      title: "Task Submitted",
+
+      full_message:
+    `You submitted the task '${taskTitle}' for review.
+
+    Please wait for reviewer approval.`,
+
+      type: 'task_completed',
+
+      priority: 'medium',
+
+      employeeId: employee_id
+    });
 
     // 2. Notification to Manager
     if (manager_id) {
-      await addNotificationForManager(
-        `Task '${taskTitle}' submitted for review by ${employee_name || 'Employee'}`,
-        'task_completed',
-        'medium',
-        manager_id
-      );
+      await addNotificationForManager({
+
+        title: "Task Submitted For Review",
+
+        full_message:
+      `Task '${taskTitle}' has been submitted for review by ${employee_name || 'Employee'}.
+
+      Please monitor the review process.`,
+
+        type: 'task_completed',
+
+        priority: 'medium',
+
+        managerId: manager_id
+      });
     }
 
     const [reviewers] = await pool.execute(`SELECT id FROM pulse_employees WHERE LOWER(office_role) = 'reviewer'`);
     
     for (const reviewer of reviewers) {
-      await addNotificationForReviewer(
-        `Employee ${employee_name || 'Employee'} submitted task: "${taskTitle}". Please review it.`,
-        'task_review',
-        'high',
-        reviewer.id
-      );
+      await addNotificationForReviewer({
+
+        title: "Task Review Required",
+
+        full_message:
+      `Employee ${employee_name || 'Employee'} submitted task '${taskTitle}' for review.
+
+      Please review the task submission.`,
+
+        type: 'task_review',
+
+        priority: 'high',
+
+        reviewerId: reviewer.id
+      });
     }
 
     console.log(`✅ Reviewer notified about task completion: "${taskTitle}"`);
@@ -472,13 +501,16 @@ export const getEmployeeProjectProgress = async (req, res) => {
   const { projectId } = req.query;
 
   if (!projectId) {
-    return res.status(400).json({ success: false, message: "projectId is required" });
+    return res.status(400).json({
+      success: false,
+      message: "projectId is required"
+    });
   }
 
   try {
-    // 🔹 Get project + ONLY employee's tasks
+
     const [projects] = await pool.execute(`
-      SELECT 
+      SELECT
         p.id,
         p.name,
         p.start_date,
@@ -491,124 +523,409 @@ export const getEmployeeProjectProgress = async (req, res) => {
           )
         ) AS tasks
       FROM projects p
-      JOIN project_assignments pa ON p.id = pa.project_id
-      LEFT JOIN tasks t ON p.id = t.project_id AND t.assigned_to = ?
-      WHERE p.id = ? AND pa.employee_id = ?
-      GROUP BY p.id, p.name, p.start_date, p.deadline
+      JOIN project_assignments pa
+        ON p.id = pa.project_id
+      LEFT JOIN tasks t
+        ON p.id = t.project_id
+        AND t.assigned_to = ?
+      WHERE p.id = ?
+      AND pa.employee_id = ?
+      GROUP BY
+        p.id,
+        p.name,
+        p.start_date,
+        p.deadline
     `, [employee_id, projectId, employee_id]);
 
     if (projects.length === 0) {
-      return res.json({ success: true, data: [] });
+      return res.json({
+        success: true,
+        data: []
+      });
     }
 
     const proj = projects[0];
 
-    const start = new Date(proj.start_date);
-    const deadline = new Date(proj.deadline);
-
-    // 🔹 Parse tasks safely
     let taskList = [];
+
     try {
-      taskList = typeof proj.tasks === "string" ? JSON.parse(proj.tasks) : proj.tasks;
+      taskList =
+        typeof proj.tasks === "string"
+          ? JSON.parse(proj.tasks)
+          : proj.tasks;
     } catch {
       taskList = [];
     }
 
-    // Remove null tasks
-    taskList = taskList.filter(t => t.id !== null);
+    taskList = taskList.filter(
+      task => task.id !== null
+    );
 
     const totalTasks = taskList.length;
 
-    // 🔹 Find completed tasks
-    const completedTasks = taskList.filter(
-      t => t.status === "Completed" && t.completed_at
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+    const normaliseDate = (value) => {
+      const date = new Date(value);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    };
+
+    const formatDate = (date) =>
+      date.toLocaleDateString("en-US", {
+        day: "numeric",
+        month: "short",
+        year: "numeric"
+      });
+
+    const getDayOffset = (date, startDate) =>
+      Math.max(
+        0,
+        Math.floor(
+          (normaliseDate(date) - startDate) /
+          MS_PER_DAY
+        )
+      );
+
+    if (!proj.start_date || totalTasks === 0) {
+
+      return res.json({
+        success: true,
+        data: [{
+          id: proj.id,
+          name: proj.name,
+          startDate: proj.start_date,
+          deadline: proj.deadline,
+          actualCompletionDate: null,
+          isCompleted: false,
+          currentDate: new Date().toISOString(),
+          totalTasks,
+          completedTasks: 0,
+          totalDays: 1,
+          deadlineDayOffset: 0,
+          currentDayOffset: 0,
+          weeks: ["Week 1"],
+          weeklyDates: [],
+          normalProgress: [null],
+          delayedProgress: [null],
+          actualDots: [],
+          linePoints: [],
+          projectionPoint: null,
+          isDelayed: false
+        }]
+      });
+    }
+
+    const startDate = normaliseDate(
+      proj.start_date
     );
 
-    // 🔹 Find actual completion date (if all tasks done)
-    let actualEndDate = null;
+    const deadline = proj.deadline
+      ? normaliseDate(proj.deadline)
+      : normaliseDate(proj.start_date);
 
-    if (completedTasks.length === totalTasks && totalTasks > 0) {
-      actualEndDate = new Date(
-        Math.max(...completedTasks.map(t => new Date(t.completed_at)))
+    const today = normaliseDate(
+      new Date()
+    );
+
+    const completedTasks = taskList
+      .filter(
+        task =>
+          task.status === "Completed" &&
+          task.completed_at
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.completed_at) -
+          new Date(b.completed_at)
       );
-    }
 
-    // 🔹 Dynamic END date
-    let end;
+    const allTasksCompleted =
+      completedTasks.length === totalTasks;
 
-    if (actualEndDate) {
-      end = actualEndDate;
-    } else {
-      const today = new Date();
-      end = today > deadline ? today : deadline;
-    }
+    const lastCompletionDate =
+      completedTasks.length > 0
+        ? normaliseDate(
+            completedTasks[
+              completedTasks.length - 1
+            ].completed_at
+          )
+        : null;
+
+    const finalEndDate = allTasksCompleted
+      ? lastCompletionDate > deadline
+        ? lastCompletionDate
+        : deadline
+      : today > deadline
+        ? today
+        : deadline;
 
     const totalDays = Math.max(
       1,
-      Math.ceil((end - start) / (1000 * 3600 * 24))
+      Math.ceil(
+        (finalEndDate - startDate) /
+        MS_PER_DAY
+      )
     );
 
-    const numWeeks = Math.max(1, Math.ceil(totalDays / 7));
+    const totalWeeks = Math.max(
+      1,
+      Math.ceil(totalDays / 7)
+    );
 
-    const weeklyProgress = [];
-    const weeklyDates = [];
-    let prevWeekStart = new Date(start);
+    const actualDots = [];
+    const dotsByDate = {};
+
     let cumulativeCompleted = 0;
 
-    // 🔹 Weekly calculation
-    for (let i = 1; i <= numWeeks; i++) {
-      const weekEnd = new Date(start);
-      weekEnd.setDate(start.getDate() + (i * 7));
+    completedTasks.forEach(task => {
 
-      const completedThisWeek = taskList.filter(task => {
-        if (task.status !== 'Completed' || !task.completed_at) return false;
+      const completedDate =
+        normaliseDate(task.completed_at);
 
-        const completedDate = new Date(task.completed_at);
+      const dateKey =
+        completedDate
+          .toISOString()
+          .slice(0, 10);
 
-        return (
-          completedDate >= prevWeekStart &&
-          completedDate < weekEnd
+      cumulativeCompleted += 1;
+
+      const percentage = Math.round(
+        (cumulativeCompleted / totalTasks) * 100
+      );
+
+      dotsByDate[dateKey] = {
+        dayOffset: getDayOffset(
+          completedDate,
+          startDate
+        ),
+        percentage,
+        date: formatDate(completedDate),
+        completedTasks: cumulativeCompleted,
+        tasksCompletedOnDate:
+          (
+            dotsByDate[dateKey]
+              ?.tasksCompletedOnDate || 0
+          ) + 1,
+        completedAt:
+          completedDate.toISOString()
+      };
+    });
+
+    actualDots.push(
+      ...Object.values(dotsByDate)
+    );
+
+    const weeklyDates = [];
+    const progressValues = [];
+    const weekMarkers = [];
+
+    let lastPercentage = null;
+
+    for (let i = 0; i < totalWeeks; i++) {
+
+      const currentWeekDate =
+        new Date(startDate);
+
+      currentWeekDate.setDate(
+        startDate.getDate() + (i * 7)
+      );
+
+      const weekDate =
+        formatDate(currentWeekDate);
+
+      weeklyDates.push(weekDate);
+
+      weekMarkers.push({
+        label: `Week ${i + 1}`,
+        date: weekDate,
+        dayOffset: Math.min(
+          i * 7,
+          totalDays
+        )
+      });
+
+      const weekEndOffset =
+        Math.min(
+          (i + 1) * 7,
+          totalDays
         );
-      }).length;
 
-      cumulativeCompleted += completedThisWeek;
+      const dotsInWeek =
+        actualDots.filter(
+          dot =>
+            dot.dayOffset <=
+            weekEndOffset
+        );
 
-      const percentage = totalTasks > 0
-        ? Math.round((cumulativeCompleted / totalTasks) * 100)
-        : 0;
+      const lastDotInWeek =
+        dotsInWeek[dotsInWeek.length - 1];
 
-      weeklyProgress.push(Math.min(100, percentage));
-      // Format date as "DD MMM" (e.g., "17 May")
-      const dateStr = weekEnd.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-      weeklyDates.push(dateStr);
+      if (lastDotInWeek) {
+        lastPercentage =
+          lastDotInWeek.percentage;
+      }
 
-      prevWeekStart = weekEnd;
+      progressValues.push(
+        completedTasks.length > 0
+          ? lastPercentage
+          : null
+      );
     }
 
-    // 🔹 Delay logic
-    const isCompletedOnTime = actualEndDate && actualEndDate <= deadline;
-    const isDelayed = !isCompletedOnTime && end > deadline;
+    const deadlineDayOffset =
+      getDayOffset(deadline, startDate);
 
-    let deadlineWeekIndex = Math.ceil(
-      (deadline - start) / (1000 * 3600 * 24 * 7)
-    ) - 1;
+    const currentDayOffset =
+      Math.min(
+        getDayOffset(today, startDate),
+        totalDays
+      );
 
-    if (deadlineWeekIndex < 0) deadlineWeekIndex = 0;
-    if (deadlineWeekIndex >= weeklyProgress.length) {
-      deadlineWeekIndex = weeklyProgress.length - 1;
-    }
+    const deadlineWeekIndex =
+      Math.floor(deadlineDayOffset / 7);
 
-    let normalProgress = [...weeklyProgress];
-    let delayedProgress = Array(weeklyProgress.length).fill(null);
+    const isDelayed =
+      finalEndDate > deadline;
+
+    let normalProgress = [
+      ...progressValues
+    ];
+
+    let delayedProgress =
+      Array(progressValues.length)
+        .fill(null);
 
     if (isDelayed) {
-      normalProgress = weeklyProgress.map((val, idx) =>
-        idx <= deadlineWeekIndex ? val : null
-      );
 
-      delayedProgress = weeklyProgress.map((val, idx) =>
-        idx > deadlineWeekIndex ? val : null
-      );
+      normalProgress =
+        progressValues.map(
+          (value, index) =>
+            index <= deadlineWeekIndex
+              ? value
+              : null
+        );
+
+      delayedProgress =
+        progressValues.map(
+          (value, index) =>
+            index > deadlineWeekIndex
+              ? value
+              : null
+        );
+    }
+
+    const linePoints =
+      completedTasks.length > 0
+        ? [
+            {
+              dayOffset: 0,
+              percentage: 0,
+              date: formatDate(startDate),
+              type: "start"
+            },
+
+            ...actualDots.map(dot => ({
+              ...dot,
+              type: "completed"
+            }))
+          ]
+        : [];
+
+    let projectionPoint = null;
+
+    if (
+      !allTasksCompleted &&
+      totalTasks > 0
+    ) {
+
+      const lastPoint =
+        linePoints.length > 0
+          ? linePoints[
+              linePoints.length - 1
+            ]
+          : {
+              dayOffset: 0,
+              percentage: 0
+            };
+
+      const projectionDate =
+        today < startDate
+          ? startDate
+          : today > finalEndDate
+            ? finalEndDate
+            : today;
+
+      const projectionDayOffset =
+        Math.min(
+          getDayOffset(
+            projectionDate,
+            startDate
+          ),
+          totalDays
+        );
+
+      const nextTaskPercentage =
+        Math.min(
+          100,
+          Math.round(
+            (
+              (
+                completedTasks.length + 1
+              ) / totalTasks
+            ) * 100
+          )
+        );
+
+      const availableDays =
+        Math.max(
+          1,
+          deadlineDayOffset -
+          lastPoint.dayOffset
+        );
+
+      const elapsedDays =
+        Math.max(
+          0,
+          projectionDayOffset -
+          lastPoint.dayOffset
+        );
+
+      const progressRatio =
+        Math.min(
+          1,
+          elapsedDays / availableDays
+        );
+
+      const percentage =
+        Math.round(
+          lastPoint.percentage +
+          (
+            (
+              nextTaskPercentage -
+              lastPoint.percentage
+            ) * progressRatio
+          )
+        );
+
+      projectionPoint = {
+        dayOffset: projectionDayOffset,
+        percentage,
+        date: formatDate(projectionDate),
+        completedTasks:
+          completedTasks.length,
+        nextTaskPercentage,
+        type: "projection"
+      };
+
+      if (
+        projectionPoint.dayOffset >
+        lastPoint.dayOffset
+      ) {
+        linePoints.push(
+          projectionPoint
+        );
+      }
     }
 
     const progressData = {
@@ -616,11 +933,32 @@ export const getEmployeeProjectProgress = async (req, res) => {
       name: proj.name,
       startDate: proj.start_date,
       deadline: proj.deadline,
-      deadlineWeekIndex,
-      weeks: Array.from({ length: numWeeks }, (_, i) => `Week ${i + 1}`),
+      actualCompletionDate:
+        allTasksCompleted &&
+        lastCompletionDate
+          ? lastCompletionDate.toISOString()
+          : null,
+      isCompleted: allTasksCompleted,
+      currentDate: today.toISOString(),
+      totalTasks,
+      completedTasks:
+        completedTasks.length,
+      totalDays,
+      deadlineDayOffset,
+      currentDayOffset,
+      weeks: Array.from(
+        { length: totalWeeks },
+        (_, index) =>
+          `Week ${index + 1}`
+      ),
       weeklyDates,
+      weekMarkers,
       normalProgress,
       delayedProgress,
+      actualDots,
+      linePoints,
+      projectionPoint,
+      deadlineWeekIndex,
       isDelayed
     };
 
@@ -630,62 +968,70 @@ export const getEmployeeProjectProgress = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Employee project progress error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to generate your progress graph" 
+
+    console.error(
+      "Employee project progress error:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Failed to generate your progress graph"
     });
   }
 };
-
 // EMPLOYEE NOTIFICATIONS 
 
 // Send notification to a single employee
-export const addNotificationForEmployee = async (
-  message,
+export const addNotificationForEmployee = async ({
+  title,
+  full_message,
   type = 'info',
   priority = 'medium',
   employeeId
-) => {
+}) => {
   if (!employeeId) return;
 
   try {
     await pool.query(
       `INSERT INTO notifications 
-        (recipient_type, recipient_id, message, type, priority, status)
-       VALUES (?, ?, ?, ?, ?, 'unread')`,
-      ['employee', employeeId, message.trim(), type, priority]
+        (recipient_type, recipient_id, title, full_message, type, priority, status)
+       VALUES (?, ?, ?, ?, ?, ?, 'unread')`,
+      ['employee', employeeId, title.trim(), full_message.trim(), type, priority]
     );
-    console.log(`✅ Notification sent to employee ${employeeId}: ${message}`);
+    console.log(`✅ Notification sent to employee ${employeeId}: ${title}`);
   } catch (err) {
     console.error('Employee notification failed:', err.message);
   }
 };
 
 // Helper: Send notification to multiple employees (bulk)
-export const addNotificationForEmployees = async (
-  message,
+export const addNotificationForEmployees = async ({
+  title,
+  full_message,
   type = 'info',
   priority = 'medium',
   employeeIds = []
-) => {
+}) => {
   if (!Array.isArray(employeeIds) || employeeIds.length === 0) return;
 
   const values = employeeIds.map(id => [
     'employee',
     Number(id),
-    message.trim(),
+    title.trim(),
+    full_message.trim(),
     type,
     priority,
     'unread'
   ]);
 
-  const placeholders = values.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
+  const placeholders = values.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(',');
 
   try {
     await pool.query(`
       INSERT INTO notifications 
-        (recipient_type, recipient_id, message, type, priority, status)
+        (recipient_type, recipient_id, title, full_message, type, priority, status)
       VALUES ${placeholders}
     `, values.flat());
     console.log(`✅ Sent notification to ${employeeIds.length} employees`);
@@ -703,7 +1049,8 @@ export const getEmployeeNotifications = async (req, res) => {
     const [rows] = await pool.query(`
       SELECT 
         id, 
-        message, 
+        title,
+        full_message,
         type, 
         priority, 
         status, 

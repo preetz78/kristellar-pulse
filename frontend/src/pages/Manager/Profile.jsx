@@ -1,5 +1,6 @@
 // src/pages/Manager/Profile.jsx
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Mail,
   Calendar,
@@ -39,6 +40,7 @@ function ManagerProfile() {
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const navigate = useNavigate();
 
   // Fetch Manager Profile + Real Stats
   useEffect(() => {
@@ -171,6 +173,9 @@ function ManagerProfile() {
         setShowChangePassword(false);
         setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
         setPasswordError("");
+        sessionStorage.clear();
+        window.dispatchEvent(new Event("auth-change"));
+        navigate("/login", { replace: true });
       } else {
         alert(data.message || "Failed to change password");
       }
@@ -228,7 +233,7 @@ function ManagerProfile() {
                 />
               ) : managerData.designation}
             </p>
-            <p className="text-xs opacity-80 mt-0.5">{managerData.email}</p>
+            <p className="text-xs opacity-80 mt-0.5">{managerData.email_id}</p>
           </div>
 
           {/* Edit / Save / Cancel Buttons */}
@@ -272,7 +277,7 @@ function ManagerProfile() {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700">
-            <InfoRow icon={<Mail />} label="Email" value={managerData.email} />
+            <InfoRow icon={<Mail />} label="Email" value={managerData.email_id} />
             
             <InfoRow 
               icon={<Phone />} 
@@ -285,7 +290,7 @@ function ManagerProfile() {
                   onChange={handleEditChange}
                   className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
                 />
-              ) : (managerData.phone || "")} 
+              ) : (managerData.work_phone || "")} 
             />
 
             <InfoRow 

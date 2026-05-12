@@ -25,11 +25,83 @@ const ReviewerDashboard = () => {
   const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
-  // 🔥 NEW FUNCTION ADDED HERE
+  // 🔥 ADVANCED PROGRESS CHART BUILDER
   const buildProgressChart = (projectProgress) => {
     if (!projectProgress) return null;
 
-    const progress = Array.isArray(projectProgress.progress) ? projectProgress.progress : [];
+    const clampPercent = (value) => Math.max(0, Math.min(100, Number(value) || 0));
+
+    if (
+      Array.isArray(projectProgress.actualDots) ||
+      Array.isArray(projectProgress.linePoints)
+    ) {
+      const totalDays = Math.max(1, Number(projectProgress.totalDays) || 1);
+      const rawDeadlineDayOffset = Number(projectProgress.deadlineDayOffset) || 0;
+      const deadlineDayOffset = Math.max(0, rawDeadlineDayOffset);
+      const currentDayOffset = Math.max(
+        0,
+        Math.min(totalDays, Number(projectProgress.currentDayOffset) || 0)
+      );
+      const isCompleted = Boolean(projectProgress.isCompleted);
+      const showDeadlineMarker = deadlineDayOffset <= totalDays;
+      const showCurrentMarker = !isCompleted;
+      const dots = (projectProgress.actualDots || [])
+        .map((dot) => ({
+          ...dot,
+          dayOffset: Math.max(0, Math.min(totalDays, Number(dot.dayOffset) || 0)),
+          percentage: clampPercent(dot.percentage),
+          date: dot.date || "",
+          completedTasks: Number(dot.completedTasks) || 0,
+          tasksCompletedOnDate: Number(dot.tasksCompletedOnDate) || 0,
+        }))
+        .sort((a, b) => a.dayOffset - b.dayOffset);
+      const linePoints = (projectProgress.linePoints?.length
+        ? projectProgress.linePoints
+        : [
+            { dayOffset: 0, percentage: 0, type: "start" },
+            ...dots.map((dot) => ({ ...dot, type: "completed" })),
+            projectProgress.projectionPoint,
+          ].filter(Boolean)
+      )
+        .map((point) => ({
+          ...point,
+          dayOffset: Math.max(0, Math.min(totalDays, Number(point.dayOffset) || 0)),
+          percentage: clampPercent(point.percentage),
+        }))
+        .sort((a, b) => a.dayOffset - b.dayOffset);
+      const weekMarkers = (projectProgress.weekMarkers?.length
+        ? projectProgress.weekMarkers
+        : (projectProgress.weeks || ["Week 1"]).map((week, index) => ({
+            label: week,
+            date: projectProgress.weeklyDates?.[index] || "",
+            dayOffset: Math.min(index * 7, totalDays),
+          }))
+      ).map((marker) => ({
+        ...marker,
+        dayOffset: Math.max(0, Math.min(totalDays, Number(marker.dayOffset) || 0)),
+      }));
+
+      return {
+        name: projectProgress.name,
+        totalTasks: Number(projectProgress.totalTasks) || 0,
+        completedTasks: Number(projectProgress.completedTasks) || 0,
+        totalDays,
+        deadlineDayOffset,
+        currentDayOffset,
+        showDeadlineMarker,
+        showCurrentMarker,
+        deadline: projectProgress.deadline,
+        currentDate: projectProgress.currentDate,
+        actualCompletionDate: projectProgress.actualCompletionDate,
+        isCompleted,
+        weekMarkers,
+        dots,
+        linePoints,
+        projectionPoint: projectProgress.projectionPoint || null,
+        isDelayed: Boolean(projectProgress.isDelayed),
+      };
+    }
+
     const normalProgress = Array.isArray(projectProgress.normalProgress)
       ? projectProgress.normalProgress
       : [];
@@ -39,7 +111,6 @@ const ReviewerDashboard = () => {
 
     const length = Math.max(
       projectProgress.weeks?.length || 0,
-      progress.length,
       normalProgress.length,
       delayedProgress.length,
       1
@@ -54,8 +125,24 @@ const ReviewerDashboard = () => {
     ));
 
     const values = Array.from({ length }, (_, index) => {
-      const value = progress[index] ?? normalProgress[index] ?? delayedProgress[index] ?? 0;
-      return Math.max(0, Math.min(100, Number(value) || 0));
+      const normalValue = normalProgress[index];
+      const delayedValue = delayedProgress[index];
+
+      const value =
+        normalValue !== null && normalValue !== undefined
+          ? normalValue
+          : delayedValue !== null && delayedValue !== undefined
+          ? delayedValue
+          : 0;
+
+      if (value === null || value === undefined) {
+        return null;
+      }
+
+      return Math.max(
+        0,
+        Math.min(100, Number(value) || 0)
+      );
     });
 
     const delayedStartIndex = delayedProgress.findIndex(
@@ -80,7 +167,72 @@ const ReviewerDashboard = () => {
     };
   };
 
-  // 🔥 PROGRESS CHART COMPUTATION
+  // 🔥 CHART HELPERS
+  const chartX = (dayOffset, totalDays) => (
+    80 + (Math.max(0, Math.min(totalDays, dayOffset)) * (630 / Math.max(1, totalDays)))
+  );
+
+  const chartY = (percentage) => 250 - (Math.max(0, Math.min(100, percentage)) * 2);
+
+  const renderProgressSegment = (point, nextPoint, index, chart) => {
+    const x1 = chartX(point.dayOffset, chart.totalDays);
+    const y1 = chartY(point.percentage);
+    const x2 = chartX(nextPoint.dayOffset, chart.totalDays);
+    const y2 = chartY(nextPoint.percentage);
+    const shouldSplitAtDeadline =
+      chart.isDelayed &&
+      point.dayOffset < chart.deadlineDayOffset &&
+      nextPoint.dayOffset > chart.deadlineDayOffset;
+
+    if (shouldSplitAtDeadline) {
+      const ratio =
+        (chart.deadlineDayOffset - point.dayOffset) /
+        Math.max(1, nextPoint.dayOffset - point.dayOffset);
+      const deadlineX = chartX(chart.deadlineDayOffset, chart.totalDays);
+      const deadlineY = y1 + ((y2 - y1) * ratio);
+
+      return (
+        <g key={index}>
+          <line
+            x1={x1}
+            y1={y1}
+            x2={deadlineX}
+            y2={deadlineY}
+            stroke="#10b981"
+            strokeWidth="4.5"
+            strokeLinecap="round"
+          />
+          <line
+            x1={deadlineX}
+            y1={deadlineY}
+            x2={x2}
+            y2={y2}
+            stroke="#ef4444"
+            strokeWidth="4.5"
+            strokeLinecap="round"
+            strokeDasharray={nextPoint.type === "projection" ? "8 7" : undefined}
+          />
+        </g>
+      );
+    }
+
+    const isRed = chart.isDelayed && point.dayOffset >= chart.deadlineDayOffset;
+
+    return (
+      <line
+        key={index}
+        x1={x1}
+        y1={y1}
+        x2={x2}
+        y2={y2}
+        stroke={isRed ? "#ef4444" : "#10b981"}
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeDasharray={nextPoint.type === "projection" ? "8 7" : undefined}
+      />
+    );
+  };
+
   const progressChart = buildProgressChart(selectedProjectProgress);
 
   // Fetch dashboard data
@@ -108,14 +260,12 @@ const ReviewerDashboard = () => {
           setStats(result.stats);
           const allProjects = result.projects || [];
 
-          // Sort projects by created_at DESC (newest first)
           const sortedProjects = [...allProjects].sort((a, b) => 
             new Date(b.created_at) - new Date(a.created_at)
           );
 
           setProjects(sortedProjects);
 
-          // Auto-select the newest project
           if (sortedProjects.length > 0) {
             setSelectedProjectId(sortedProjects[0].id);
           }
@@ -338,7 +488,7 @@ const ReviewerDashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS */}
+        {/* PROJECT PROGRESS - Advanced Version */}
         <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -360,142 +510,189 @@ const ReviewerDashboard = () => {
           </div>
 
           <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
-            {selectedProjectProgress ? (
-              // Updated Progress Chart Logic
-              progressChart ? (
-                <svg viewBox="0 0 750 280" className="w-full h-full">
-                  {/* GRID */}
-                  {[0, 25, 50, 75, 100].map((val, i) => (
-                    <line 
-                      key={i}
-                      x1="50" 
-                      y1={250 - val * 2} 
-                      x2="710" 
-                      y2={250 - val * 2} 
-                      stroke="#f1f5f9" 
-                      strokeWidth="1.5" 
-                    />
-                  ))}
+            {selectedProjectProgress && progressChart ? (
+              <svg viewBox="0 0 750 280" className="w-full h-full">
+                {/* GRID */}
+                {[0, 25, 50, 75, 100].map((val, i) => (
+                  <line 
+                    key={i} 
+                    x1="50" 
+                    y1={250 - val * 2} 
+                    x2="710" 
+                    y2={250 - val * 2} 
+                    stroke="#f1f5f9" 
+                    strokeWidth="1.5" 
+                  />
+                ))}
 
-                  {/* WEEKS */}
-                  {progressChart.weeks.map((week, i) => (
-                    <text 
-                      key={i} 
-                      x={80 + i * (630 / Math.max(1, progressChart.weeks.length - 1))} 
-                      y="272" 
-                      className="text-xs fill-gray-500" 
+                {/* WEEKS */}
+                {progressChart.weekMarkers.map((marker, i) => (
+                  <g key={i}>
+                    <line
+                      x1={chartX(marker.dayOffset, progressChart.totalDays)}
+                      y1="54"
+                      x2={chartX(marker.dayOffset, progressChart.totalDays)}
+                      y2="252"
+                      stroke="#f8fafc"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={chartX(marker.dayOffset, progressChart.totalDays)}
+                      y="272"
+                      className="text-xs fill-gray-500"
                       textAnchor="middle"
                     >
-                      {week}
+                      {marker.label}
                     </text>
-                  ))}
+                  </g>
+                ))}
 
-                  {/* Y-AXIS LABELS */}
-                  {[0, 25, 50, 75, 100].map((val, i) => (
-                    <text 
-                      key={i} 
-                      x="38" 
-                      y={255 - val * 2} 
-                      className="text-xs fill-gray-500" 
-                      textAnchor="end"
+                {/* Y-AXIS LABELS */}
+                {[0, 25, 50, 75, 100].map((val, i) => (
+                  <text 
+                    key={i} 
+                    x="38" 
+                    y={255 - val * 2} 
+                    className="text-xs fill-gray-500" 
+                    textAnchor="end"
+                  >
+                    {val}%
+                  </text>
+                ))}
+
+                {/* DEADLINE + CURRENT DATE */}
+                {progressChart.showDeadlineMarker && (
+                  <g>
+                    <line
+                      x1={chartX(progressChart.deadlineDayOffset, progressChart.totalDays)}
+                      y1="50"
+                      x2={chartX(progressChart.deadlineDayOffset, progressChart.totalDays)}
+                      y2="250"
+                      stroke="#ef4444"
+                      strokeWidth="1.5"
+                      strokeDasharray="5 5"
+                    />
+                    <text
+                      x={chartX(progressChart.deadlineDayOffset, progressChart.totalDays)}
+                      y="44"
+                      className="text-xs fill-red-500 font-medium"
+                      textAnchor="middle"
                     >
-                      {val}%
+                      {progressChart.deadline
+                        ? new Date(progressChart.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : 'Deadline'}
                     </text>
-                  ))}
+                  </g>
+                )}
+                {progressChart.showCurrentMarker && (
+                  <g>
+                    <line
+                      x1={chartX(progressChart.currentDayOffset, progressChart.totalDays)}
+                      y1="50"
+                      x2={chartX(progressChart.currentDayOffset, progressChart.totalDays)}
+                      y2="250"
+                      stroke="#2563eb"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 6"
+                    />
+                    <text
+                      x={chartX(progressChart.currentDayOffset, progressChart.totalDays)}
+                      y="32"
+                      className="text-xs fill-blue-600 font-medium"
+                      textAnchor="middle"
+                    >
+                      {progressChart.currentDate
+                        ? new Date(progressChart.currentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+                        : 'Today'}
+                    </text>
+                  </g>
+                )}
+                {progressChart.isCompleted && progressChart.actualCompletionDate && (
+                  <text
+                    x={chartX(progressChart.totalDays, progressChart.totalDays)}
+                    y="32"
+                    className="text-xs fill-emerald-600 font-medium"
+                    textAnchor="middle"
+                  >
+                    Completed {new Date(progressChart.actualCompletionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                  </text>
+                )}
 
-                  {/* LINE SEGMENTS */}
-                  {progressChart.values.slice(0, -1).map((value, i) => {
-                    const x1 = 80 + i * (630 / Math.max(1, progressChart.weeks.length - 1));
-                    const x2 = 80 + (i + 1) * (630 / Math.max(1, progressChart.weeks.length - 1));
+                {/* LINE SEGMENTS */}
+                {progressChart.linePoints.slice(0, -1).map((point, i) => (
+                  renderProgressSegment(point, progressChart.linePoints[i + 1], i, progressChart)
+                ))}
 
-                    const isDelayedSegment = progressChart.isDelayed
-                      && progressChart.deadlineWeekIndex !== null
-                      && i >= progressChart.deadlineWeekIndex;
+                {/* COMPLETION DOTS */}
+                {progressChart.dots.map((dot, i) => {
+                  const isDelayedPoint =
+                    progressChart.isDelayed && dot.dayOffset > progressChart.deadlineDayOffset;
 
-                    return (
-                      <line
-                        key={i}
-                        x1={x1}
-                        y1={250 - value * 2}
-                        x2={x2}
-                        y2={250 - progressChart.values[i + 1] * 2}
-                        stroke={isDelayedSegment ? "#ef4444" : "#10b981"}
-                        strokeWidth="4.5"
-                        strokeLinecap="round"
-                      />
-                    );
-                  })}
+                  return (
+                    <circle
+                      key={`${dot.dayOffset}-${i}`}
+                      cx={chartX(dot.dayOffset, progressChart.totalDays)}
+                      cy={chartY(dot.percentage)}
+                      r="6"
+                      fill={isDelayedPoint ? "#ef4444" : "#10b981"}
+                      stroke="#fff"
+                      strokeWidth="2"
+                      style={{ cursor: 'pointer' }}
+                      onMouseEnter={(e) => {
+                        setHoveredPointIndex(i);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const svg = e.currentTarget.parentElement.getBoundingClientRect();
+                        setTooltipPosition({
+                          x: rect.left - svg.left + 5,
+                          y: rect.top - svg.top - 25
+                        });
+                      }}
+                      onMouseLeave={() => setHoveredPointIndex(null)}
+                    />
+                  );
+                })}
 
-                  {/* POINTS */}
-                  {progressChart.values.map((value, i) => {
-                    const xPos = 80 + i * (630 / Math.max(1, progressChart.weeks.length - 1));
-
-                    const isDelayedPoint = progressChart.isDelayed
-                      && progressChart.deadlineWeekIndex !== null
-                      && i > progressChart.deadlineWeekIndex;
-
-                    return (
-                      <circle
-                        key={i}
-                        cx={xPos}
-                        cy={250 - value * 2}
-                        r="6"
-                        fill={isDelayedPoint ? "#ef4444" : "#10b981"}
-                        stroke="#fff"
-                        strokeWidth="2"
-                        style={{ cursor: 'pointer' }}
-                        onMouseEnter={(e) => {
-                          setHoveredPointIndex(i);
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const svg = e.currentTarget.parentElement.parentElement.getBoundingClientRect();
-                          setTooltipPosition({
-                            x: rect.left - svg.left + 5,
-                            y: rect.top - svg.top - 25
-                          });
-                        }}
-                        onMouseLeave={() => setHoveredPointIndex(null)}
-                      />
-                    );
-                  })}
-
-                  {/* TOOLTIP */}
-                  {hoveredPointIndex !== null && progressChart && (
-                    <g>
-                      <rect
-                        x={tooltipPosition.x}
-                        y={tooltipPosition.y}
-                        width="140"
-                        height="50"
-                        rx="6"
-                        fill="#1f2937"
-                        opacity="0.95"
-                        stroke="#4b5563"
-                        strokeWidth="1"
-                      />
-                      <text
-                        x={tooltipPosition.x + 70}
-                        y={tooltipPosition.y + 20}
-                        textAnchor="middle"
-                        className="text-sm fill-white font-semibold"
-                      >
-                        {progressChart.values[hoveredPointIndex]}% Complete
-                      </text>
-                      <text
-                        x={tooltipPosition.x + 70}
-                        y={tooltipPosition.y + 38}
-                        textAnchor="middle"
-                        className="text-xs fill-gray-300"
-                      >
-                        on {progressChart.weeklyDates[hoveredPointIndex]}
-                      </text>
-                    </g>
-                  )}
-                </svg>
-              ) : (
-                <div className="h-full flex items-center justify-center text-gray-400">
-                  Select a project to view its weekly progress
-                </div>
-              )
+                {/* TOOLTIP */}
+                {hoveredPointIndex !== null && progressChart.dots[hoveredPointIndex] && (
+                  <g>
+                    <rect
+                      x={tooltipPosition.x}
+                      y={tooltipPosition.y}
+                      width="170"
+                      height="66"
+                      rx="6"
+                      fill="#1f2937"
+                      opacity="0.95"
+                      stroke="#4b5563"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={tooltipPosition.x + 85}
+                      y={tooltipPosition.y + 20}
+                      textAnchor="middle"
+                      className="text-sm fill-white font-semibold"
+                    >
+                      {progressChart.dots[hoveredPointIndex].percentage}% Complete
+                    </text>
+                    <text
+                      x={tooltipPosition.x + 85}
+                      y={tooltipPosition.y + 38}
+                      textAnchor="middle"
+                      className="text-xs fill-gray-300"
+                    >
+                      {progressChart.dots[hoveredPointIndex].tasksCompletedOnDate || 1} task(s) on {progressChart.dots[hoveredPointIndex].date}
+                    </text>
+                    <text
+                      x={tooltipPosition.x + 85}
+                      y={tooltipPosition.y + 54}
+                      textAnchor="middle"
+                      className="text-xs fill-gray-300"
+                    >
+                      {progressChart.dots[hoveredPointIndex].completedTasks}/{progressChart.totalTasks} tasks done
+                    </text>
+                  </g>
+                )}
+              </svg>
             ) : (
               <div className="h-full flex items-center justify-center text-gray-400">
                 Select a project to view its weekly progress
@@ -508,7 +705,7 @@ const ReviewerDashboard = () => {
               <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border border-gray-100 shadow-sm">
                 <div 
                   className="w-5 h-0.5 rounded" 
-                  style={{ backgroundColor: selectedProjectProgress.color }}
+                  style={{ backgroundColor: selectedProjectProgress.color || '#10b981' }}
                 />
                 <span className="text-sm font-medium text-gray-700">
                   {selectedProjectProgress.name}

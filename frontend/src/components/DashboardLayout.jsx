@@ -25,7 +25,7 @@ const DashboardLayout = ({ logout }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [selectedNotification, setSelectedNotification] = useState(null); // NEW
+  const [selectedNotification, setSelectedNotification] = useState(null);
 
   const API_BASE_URL = apiConfig.API_BASE_URL || 'http://localhost:5000';
 
@@ -34,7 +34,7 @@ const DashboardLayout = ({ logout }) => {
   const location = useLocation();
 
   // Get role and user data from sessionStorage
-  const role = sessionStorage.getItem("role")?.toLowerCase() || "employee";
+  const role = (sessionStorage.getItem("role")?.toLowerCase() || "employee").trim();
   const token = sessionStorage.getItem("token");
   const userStr = sessionStorage.getItem("user");
 
@@ -110,15 +110,16 @@ const DashboardLayout = ({ logout }) => {
     }
   };
 
-  // NEW: Open notification in modal
+  // Open notification in modal
   const openNotification = async (notif) => {
+    setShowNotifications(false);                    // STEP 5: Close dropdown
     setSelectedNotification(notif);
     if (notif.status === 'unread') {
       await markAsRead(notif.id);
     }
   };
 
-  // NEW: Close modal
+  // Close modal
   const closeModal = () => {
     setSelectedNotification(null);
   };
@@ -145,7 +146,7 @@ const DashboardLayout = ({ logout }) => {
       if (event.key === 'Escape') {
         setShowNotifications(false);
         setShowProfileMenu(false);
-        closeModal(); // NEW
+        closeModal();
       }
     };
 
@@ -158,7 +159,7 @@ const DashboardLayout = ({ logout }) => {
     };
   }, []);
 
-  // Role-based menu (unchanged)
+  // Role-based menu
   const adminMenu = [
     { path: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/admin/projects', label: 'Projects', icon: FolderKanban },
@@ -214,9 +215,8 @@ const DashboardLayout = ({ logout }) => {
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100 text-slate-900">
 
-      {/* SIDEBAR - Unchanged */}
+      {/* SIDEBAR */}
       <aside className={`${sidebarOpen ? 'w-72' : 'w-24'} relative flex h-full flex-shrink-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_20%_0%,rgba(56,189,248,0.22),transparent_30%),linear-gradient(160deg,#06111f_0%,#132044_48%,#0b1220_100%)] text-white shadow-2xl transition-all duration-300`}>
-        {/* ... (all sidebar code remains exactly the same) ... */}
         <div className={`relative z-10 flex items-center gap-3 px-5 py-6 ${sidebarOpen ? '' : 'justify-center'}`}>
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-2xl font-black text-blue-700 shadow-xl shadow-blue-950/40">
             K
@@ -269,9 +269,8 @@ const DashboardLayout = ({ logout }) => {
       {/* MAIN CONTENT AREA */}
       <div className="flex min-w-0 flex-1 flex-col">
 
-        {/* NAVBAR - Unchanged */}
+        {/* NAVBAR */}
         <nav className="relative z-20 flex h-20 items-center justify-between border-b border-slate-200/80 bg-white/90 px-6 shadow-sm backdrop-blur-xl">
-          {/* ... (navbar content unchanged) ... */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -326,7 +325,7 @@ const DashboardLayout = ({ logout }) => {
                       notifications.map((notif) => (
                         <div
                           key={notif.id}
-                          onClick={() => openNotification(notif)}   // CHANGED
+                          onClick={() => openNotification(notif)}
                           className={`mb-2 cursor-pointer rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50 ${
                             notif.status === 'unread' ? 'border-blue-100 bg-blue-50/80' : 'border-slate-100 bg-white'
                           }`}
@@ -334,7 +333,16 @@ const DashboardLayout = ({ logout }) => {
                           <div className="flex gap-3">
                             <div className={`mt-2 h-2.5 w-2.5 flex-shrink-0 rounded-full ${notif.status === 'unread' ? 'bg-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.12)]' : 'bg-slate-300'}`} />
                             <div className="flex-1">
-                              <p className="line-clamp-2 text-sm leading-relaxed text-slate-800">{notif.message}</p>
+                              {/* STEP 1: Updated Notification Card */}
+                              <div className="space-y-1">
+                                <h4 className="text-sm font-semibold text-slate-900">
+                                  {notif.title}
+                                </h4>
+                                <p className="line-clamp-2 text-sm leading-relaxed text-slate-600">
+                                  {notif.full_message}
+                                </p>
+                              </div>
+
                               <div className="flex items-center gap-2 mt-2">
                                 <span className="text-xs font-medium text-slate-500">
                                   {new Date(notif.created_at).toLocaleDateString('en-IN', { 
@@ -352,9 +360,8 @@ const DashboardLayout = ({ logout }) => {
               )}
             </div>
 
-            {/* PROFILE SECTION - Unchanged */}
+            {/* PROFILE SECTION */}
             <div className="relative" ref={profileMenuRef}>
-              {/* ... (profile dropdown code unchanged) ... */}
               <div
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                 className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-transparent p-1.5 transition hover:border-blue-100 hover:bg-blue-50"
@@ -387,7 +394,6 @@ const DashboardLayout = ({ logout }) => {
 
               {showProfileMenu && (
                 <div className="absolute right-0 z-50 mt-4 w-80 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
-                  {/* ... profile dropdown content unchanged ... */}
                   <div className="border-b border-blue-100 bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.22),transparent_36%),linear-gradient(135deg,#eff6ff,#ffffff)] p-6">
                     <div className="flex gap-4">
                       <div className="h-14 w-14 overflow-hidden rounded-2xl border border-blue-200 shadow-sm">
@@ -443,13 +449,11 @@ const DashboardLayout = ({ logout }) => {
         </main>
       </div>
 
-      {/* ==================== NEW NOTIFICATION MODAL ==================== */}
+      {/* ==================== NOTIFICATION MODAL ==================== */}
       {selectedNotification && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-
           <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden">
-
-            {/* HEADER (keep similar, slightly refined) */}
+            {/* HEADER - STEP 2 */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="bg-blue-100 p-2.5 rounded-full">
@@ -457,7 +461,7 @@ const DashboardLayout = ({ logout }) => {
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg text-slate-900">
-                    Notification
+                    {selectedNotification.title}
                   </h3>
                 </div>
               </div>
@@ -470,19 +474,36 @@ const DashboardLayout = ({ logout }) => {
               </button>
             </div>
 
-            {/* 🔥 IMPROVED BODY */}
+            {/* BODY */}
             <div className="px-6 py-6 space-y-5">
+              {/* STEP 4: Priority Badge */}
+              {selectedNotification.priority && (
+                <div className="flex items-center gap-2">
+                  <span className={`
+                    px-3 py-1 rounded-full text-xs font-semibold
+                    ${selectedNotification.priority === 'high'
+                      ? 'bg-red-100 text-red-700'
+                      : selectedNotification.priority === 'medium'
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'bg-green-100 text-green-700'
+                    }
+                  `}>
+                    {selectedNotification.priority.toUpperCase()}
+                  </span>
+                </div>
+              )}
 
-              {/* MESSAGE CARD */}
-              <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-2xl p-4">
-                <p className="text-slate-800 text-[15px] leading-relaxed">
-                  {selectedNotification.message}
+              {/* MESSAGE - STEP 3 */}
+              <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-2xl p-5">
+                <p
+                  className="text-slate-800 text-[15px] leading-relaxed whitespace-pre-line"
+                >
+                  {selectedNotification.full_message}
                 </p>
               </div>
 
-              {/* DATE + TIME (clean alignment) */}
+              {/* DATE + TIME */}
               <div className="flex items-center justify-between text-sm text-slate-500">
-
                 <span>
                   {new Date(selectedNotification.created_at).toLocaleDateString('en-IN', {
                     day: 'numeric',
@@ -490,14 +511,12 @@ const DashboardLayout = ({ logout }) => {
                     year: 'numeric'
                   })}
                 </span>
-
                 <span>
                   {new Date(selectedNotification.created_at).toLocaleTimeString('en-IN', {
                     hour: '2-digit',
                     minute: '2-digit'
                   })}
                 </span>
-
               </div>
             </div>
 
@@ -510,10 +529,9 @@ const DashboardLayout = ({ logout }) => {
                 Close
               </button>
             </div>
-
           </div>
         </div>
-)}
+      )}
     </div>
   );
 };

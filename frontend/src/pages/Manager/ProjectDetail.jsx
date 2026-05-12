@@ -230,9 +230,30 @@ const ProjectDetail = () => {
         <div>
           <button 
             onClick={() => navigate(-1)} 
-            className="text-blue-600 hover:text-blue-700 mb-8 flex items-center gap-1"
+            className="
+              group
+              mb-4
+              flex
+              items-center
+              gap-2
+              px-3
+              py-2
+              rounded-xl
+              text-blue-600
+              font-medium
+              transition-all
+              duration-200
+              hover:text-blue-700
+              hover:bg-blue-50
+            "
           >
-            ← Back to Projects
+            <span className="transition-transform duration-200 group-hover:-translate-x-1">
+              ←
+            </span>
+
+            <span>
+              Back to Projects
+            </span>
           </button>
           <h1 className="text-3xl font-semibold text-blue-700">{project.name}</h1>
           <p className="text-gray-600 mt-1">{project.description}</p>

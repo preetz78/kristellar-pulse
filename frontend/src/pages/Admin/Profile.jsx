@@ -1,5 +1,6 @@
 // src/pages/Admin/Profile.jsx
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Mail,
   Calendar,
@@ -39,6 +40,7 @@ function AdminProfile() {
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const navigate = useNavigate();
 
   // Fetch Admin Profile + Real Stats
   useEffect(() => {
@@ -119,7 +121,7 @@ function AdminProfile() {
     setIsEditing(false);
   };
 
-  // Change Password Handler (with fix)
+  // Change Password Handler
   const handleChangePassword = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
       alert("New passwords do not match!");
@@ -158,6 +160,9 @@ function AdminProfile() {
         setShowChangePassword(false);
         setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
         setPasswordError("");
+        sessionStorage.clear();
+        window.dispatchEvent(new Event("auth-change"));
+        navigate("/login", { replace: true });
       } else {
         alert(data.message || "Failed to change password");
       }
@@ -342,6 +347,7 @@ function AdminProfile() {
           <div className="bg-white rounded-3xl p-8 w-full max-w-md">
             <h3 className="text-2xl font-semibold mb-6">Change Password</h3>
             <div className="space-y-5">
+              {/* Current Password */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
                 <input
@@ -352,6 +358,8 @@ function AdminProfile() {
                   placeholder="Enter current password"
                 />
               </div>
+
+              {/* New Password */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
                 <input
@@ -377,6 +385,8 @@ function AdminProfile() {
                   <p className="text-xs text-red-500 mt-1">{passwordError}</p>
                 )}
               </div>
+
+              {/* Confirm New Password */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
                 <input
@@ -388,6 +398,7 @@ function AdminProfile() {
                 />
               </div>
             </div>
+
             <div className="flex gap-3 mt-8">
               <button
                 onClick={() => {

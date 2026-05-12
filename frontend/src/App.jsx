@@ -42,7 +42,7 @@ const App = () => {
     if (token && userStr) {
       try {
         const user = JSON.parse(userStr);
-        let role = (user.role || sessionStorage.getItem("role") || "").toLowerCase();
+        let role = (user.role || sessionStorage.getItem("role") || "").toLowerCase().trim();
 
         // Fallback for employee role
         if (!role && user.employee_id) role = "employee";

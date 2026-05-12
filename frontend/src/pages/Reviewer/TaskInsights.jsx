@@ -86,6 +86,14 @@ export default function TaskReview() {
   const [actionDone, setActionDone]           = useState(null);
   const [commentPosting, setCommentPosting]   = useState(false);
 
+  // NEW: Stats from backend
+  const [stats, setStats] = useState({
+    pending: 0,
+    approved: 0,
+    reopened: 0,
+    totalReviewed: 0
+  });
+
   const commentsEndRef = useRef(null);
 
   /* ── fetch tasks ── */
@@ -105,6 +113,28 @@ export default function TaskReview() {
           setTasks(result.data);
           const first = [...new Set(result.data.map((t) => t.project))][0];
           setSelectedProject(first || null);
+
+          // Fetch reviewer stats
+          const statsRes = await fetch(
+            `${apiConfig.API_BASE_URL}/api/reviewer/task-stats`,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+            }
+          );
+
+          const statsResult = await statsRes.json();
+
+          if (statsResult.success) {
+            setStats({
+              pending: Number(statsResult.data.pending) || 0,
+              approved: Number(statsResult.data.approved) || 0,
+              reopened: Number(statsResult.data.reopened) || 0,
+              totalReviewed: Number(statsResult.data.totalReviewed) || 0,
+            });
+          }
         }
       } catch {
         setError('Failed to load tasks');
@@ -156,13 +186,6 @@ export default function TaskReview() {
         )
     );
   }, [searchQuery, groupedTasks]);
-
-  const stats = useMemo(() => ({
-    pending: tasks.filter((t) => t.status === 'Pending Review').length,
-    approved: 0,
-    reopened: 0,
-    total:    tasks.length,
-  }), [tasks]);
 
   /* ── handlers ── */
   const handleSelectTask = (task) => {
@@ -231,13 +254,20 @@ export default function TaskReview() {
       );
       const result = await res.json();
       if (result.success) {
+
+        const optimisticComment = {
+          id: Date.now(),
+          reviewer_name: 'Reviewer',
+          comment_text: newComment.trim(),
+          created_at: new Date().toISOString()
+        };
+
+        setComments(prev => [
+          optimisticComment,
+          ...prev
+        ]);
+
         setNewComment('');
-        const refreshRes = await fetch(
-          `${apiConfig.API_BASE_URL}/api/reviewer/tasks/${selectedTask.id}/comments`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        const refreshData = await refreshRes.json();
-        if (refreshData.success) setComments(refreshData.data || []);
       }
     } catch {
       alert('Failed to post comment');
@@ -280,16 +310,6 @@ export default function TaskReview() {
     ? (PRIORITY_META[selectedTask.priority] || PRIORITY_META.Medium)
     : null;
 
-  /*
-   * Layout contract
-   * ───────────────
-   * Root div  → h-screen, overflow:hidden  (no page scroll ever)
-   * Header    → flex-shrink-0              (stat cards, fixed height)
-   * Row       → flex-1, min-h-0            (fills the rest of the screen exactly)
-   *   Each aside/main → flex flex-col, min-h-0
-   *     Sticky header  → flex-shrink-0
-   *     Scrollable body→ flex-1 overflow-y-auto
-   */
   return (
     <div
       className="flex flex-col bg-slate-50"
@@ -299,10 +319,10 @@ export default function TaskReview() {
       {/* ══ STAT CARDS ══════════════════════════════════════ */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-3">
         <div className="flex items-center gap-3">
-          <StatCard icon={Clock}        value={stats.pending}  label="Pending Review" color="amber"   />
-          <StatCard icon={CheckCircle2} value={stats.approved} label="Approved"        color="emerald" />
-          <StatCard icon={RotateCcw}    value={stats.reopened} label="Reopened"        color="rose"    />
-          <StatCard icon={FileCheck2}   value={stats.total}    label="Total Reviewed"  color="violet"  />
+          <StatCard icon={Clock}        value={stats.pending}      label="Pending Review" color="amber"   />
+          <StatCard icon={CheckCircle2} value={stats.approved}     label="Approved"        color="emerald" />
+          <StatCard icon={RotateCcw}    value={stats.reopened}     label="Reopened"        color="rose"    />
+          <StatCard icon={FileCheck2}   value={stats.totalReviewed} label="Total Reviewed"  color="violet"  />
         </div>
       </div>
 
@@ -444,21 +464,23 @@ export default function TaskReview() {
               <div className="max-w-2xl mx-auto px-6 py-5 space-y-4">
 
                 {/* meta grid */}
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {[
                     { label: 'EMPLOYEE',  value: selectedTask.assignee,                               icon: User,        iconColor: 'text-violet-500' },
                     { label: 'DUE DATE',  value: selectedTask.dueDate,                                icon: Calendar,    iconColor: 'text-sky-500' },
-                    { label: 'COMPLETED', value: formatTimeAgo(selectedTask.completedAt) || '2h ago',  icon: CheckCircle2,iconColor: 'text-emerald-500' },
                     {
-                      label: 'PRIORITY',
-                      icon: Star,
-                      iconColor: priorityMeta.text,
-                      extra: (
-                        <span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${priorityMeta.text}`}>
-                          <span className={`w-2 h-2 rounded-full ${priorityMeta.dot}`} />
-                          {priorityMeta.label}
-                        </span>
-                      ),
+                      label: 'COMPLETED',
+                      value: selectedTask.completed_at
+                        ? new Date(selectedTask.completed_at).toLocaleString('en-GB', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
+                        : 'Not completed',
+                      icon: CheckCircle2,
+                      iconColor: 'text-emerald-500'
                     },
                   ].map(({ label, value, icon: Icon, iconColor, extra }) => (
                     <div key={label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
@@ -507,7 +529,7 @@ export default function TaskReview() {
                           <div className="flex-1 bg-violet-50 border border-violet-100 rounded-xl p-3">
                             <div className="flex justify-between items-center mb-1">
                               <span className="text-xs font-semibold text-violet-700">Reviewer</span>
-                              <span className="text-xs text-slate-400">{formatTimeAgo(c.createdAt)}</span>
+                              <span className="text-xs text-slate-400">{formatTimeAgo(c.created_at)}</span>
                             </div>
                             <p className="text-sm text-slate-700">{c.comment_text || c.text}</p>
                           </div>

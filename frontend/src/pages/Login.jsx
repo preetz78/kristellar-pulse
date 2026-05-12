@@ -43,7 +43,7 @@ const Login = () => {
 
       if (response.ok && result.success) {
         const userData = result.user;
-        let role = (userData.role || "").toLowerCase();
+        let role = (userData.role || "").trim().toLowerCase();
 
         // Handle employee role fallback
         if (!role && userData.employee_id) role = "employee";

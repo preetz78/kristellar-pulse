@@ -63,11 +63,13 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    const normalizedOfficeRole = employee.office_role ? employee.office_role.trim() : "";
+
     // Generate JWT Token
     const token = jwt.sign(
       {
         id: employee.id,
-        role: employee.office_role.toLowerCase()
+        role: normalizedOfficeRole.toLowerCase()
       },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
@@ -87,8 +89,8 @@ export const loginUser = async (req, res) => {
         email: employee.email_id,
 
         role:
-          employee.office_role.charAt(0).toUpperCase() +
-          employee.office_role.slice(1),
+          normalizedOfficeRole.charAt(0).toUpperCase() +
+          normalizedOfficeRole.slice(1),
 
         designation:
           employee.designation || employee.office_role,
