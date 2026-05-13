@@ -1,7 +1,26 @@
 // src/pages/Admin/Dashboard.jsx
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Briefcase, Clock, CheckCircle, TrendingUp } from "lucide-react";
+import {
+  Briefcase,
+  Clock,
+  CheckCircle,
+  TrendingUp
+} from "lucide-react";
+
+import dayjs from "dayjs";
+
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip
+} from "recharts";
+
 import apiConfig from "../../config/apiConfig";
 
 const Dashboard = () => {
@@ -14,270 +33,75 @@ const Dashboard = () => {
     overallCompletion: 0,
   });
 
-  const [projects, setProjects] = useState([]);                    
+  const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedProjectProgress, setSelectedProjectProgress] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // 🔥 HOVER TOOLTIP STATE
-  const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
-  // 🔥 NEW FUNCTION ADDED HERE (STEP 1)
-  const buildProgressChart = (projectProgress) => {
-    if (!projectProgress) return null;
 
-    const clampPercent = (value) => Math.max(0, Math.min(100, Number(value) || 0));
+  const buildChartData = (project) => {
+    if (!project) return [];
 
-    if (
-      Array.isArray(projectProgress.actualDots) ||
-      Array.isArray(projectProgress.linePoints)
-    ) {
-      const totalDays = Math.max(1, Number(projectProgress.totalDays) || 1);
-      const rawDeadlineDayOffset = Number(projectProgress.deadlineDayOffset) || 0;
-      const deadlineDayOffset = Math.max(0, rawDeadlineDayOffset);
-      const currentDayOffset = Math.max(
-        0,
-        Math.min(totalDays, Number(projectProgress.currentDayOffset) || 0)
-      );
-      const isCompleted = Boolean(projectProgress.isCompleted);
-      const showDeadlineMarker = deadlineDayOffset <= totalDays;
-      const showCurrentMarker = !isCompleted;
-      const dots = (projectProgress.actualDots || [])
-        .map((dot) => ({
-          ...dot,
-          dayOffset: Math.max(0, Math.min(totalDays, Number(dot.dayOffset) || 0)),
-          percentage: clampPercent(dot.percentage),
-          date: dot.date || "",
-          completedTasks: Number(dot.completedTasks) || 0,
-          tasksCompletedOnDate: Number(dot.tasksCompletedOnDate) || 0,
-        }))
-        .sort((a, b) => a.dayOffset - b.dayOffset);
-      const linePoints = (projectProgress.linePoints?.length
-        ? projectProgress.linePoints
-        : [
-            { dayOffset: 0, percentage: 0, type: "start" },
-            ...dots.map((dot) => ({ ...dot, type: "completed" })),
-            projectProgress.projectionPoint,
-          ].filter(Boolean)
-      )
-        .map((point) => ({
-          ...point,
-          dayOffset: Math.max(0, Math.min(totalDays, Number(point.dayOffset) || 0)),
-          percentage: clampPercent(point.percentage),
-        }))
-        .sort((a, b) => a.dayOffset - b.dayOffset);
-      const weekMarkers = (projectProgress.weekMarkers?.length
-        ? projectProgress.weekMarkers
-        : (projectProgress.weeks || ["Week 1"]).map((week, index) => ({
-            label: week,
-            date: projectProgress.weeklyDates?.[index] || "",
-            dayOffset: Math.min(index * 7, totalDays),
-          }))
-      ).map((marker) => ({
-        ...marker,
-        dayOffset: Math.max(0, Math.min(totalDays, Number(marker.dayOffset) || 0)),
-      }));
-
-      return {
-        name: projectProgress.name,
-        totalTasks: Number(projectProgress.totalTasks) || 0,
-        completedTasks: Number(projectProgress.completedTasks) || 0,
-        totalDays,
-        deadlineDayOffset,
-        currentDayOffset,
-        showDeadlineMarker,
-        showCurrentMarker,
-        deadline: projectProgress.deadline,
-        currentDate: projectProgress.currentDate,
-        actualCompletionDate: projectProgress.actualCompletionDate,
-        isCompleted,
-        weekMarkers,
-        dots,
-        linePoints,
-        projectionPoint: projectProgress.projectionPoint || null,
-        isDelayed: Boolean(projectProgress.isDelayed),
-      };
-    }
-
-    const normalProgress = Array.isArray(projectProgress.normalProgress)
-      ? projectProgress.normalProgress
-      : [];
-    const delayedProgress = Array.isArray(projectProgress.delayedProgress)
-      ? projectProgress.delayedProgress
-      : [];
-
-    const length = Math.max(
-      projectProgress.weeks?.length || 0,
-      normalProgress.length,
-      delayedProgress.length,
-      1
-    );
-
-    const weeks = Array.from({ length }, (_, index) => (
-      projectProgress.weeks?.[index] || `Week ${index + 1}`
-    ));
-
-    const weeklyDates = Array.from({ length }, (_, index) => (
-      projectProgress.weeklyDates?.[index] || ""
-    ));
-
-    const values = Array.from({ length }, (_, index) => {
-
-    const normalValue = normalProgress[index];
-    const delayedValue = delayedProgress[index];
-
-    const value =
-      normalValue !== null && normalValue !== undefined
-        ? normalValue
-        : delayedValue !== null && delayedValue !== undefined
-        ? delayedValue
-        : 0;
-
-    if (value === null || value === undefined) {
-      return null;
-    }
-
-    return Math.max(
-      0,
-      Math.min(100, Number(value) || 0)
-    );
-  });
-
-    const delayedStartIndex = delayedProgress.findIndex(
-      (value) => value !== null && value !== undefined
-    );
-
-    const deadlineWeekIndex = Number.isInteger(projectProgress.deadlineWeekIndex)
-      ? Math.max(0, Math.min(projectProgress.deadlineWeekIndex, length - 1))
-      : delayedStartIndex > 0
-        ? delayedStartIndex
-        : null;
-
-    const hasDelayedPoints = delayedProgress.some((value) => value !== null && value !== undefined);
-    const isDelayed = Boolean(projectProgress.isDelayed || hasDelayedPoints);
-
-    return {
-      weeks,
-      weeklyDates,
-      values,
-      isDelayed,
-      deadlineWeekIndex
-    };
+    return (project.progressHistory || []).map((item) => ({
+      label: item.xLabel,
+      progress: item.percentage,
+      greenProgress: item.greenProgress,
+      redProgress: item.redProgress,
+      completedTasks: item.completedTasks,
+      totalTasks: item.totalTasks,
+      date: item.date,
+      isDeadlineCrossed: item.isDeadlineCrossed
+    }));
   };
 
-  // 🔥 ADD THIS LINE INSIDE COMPONENT (STEP 2)
-  const progressChart = buildProgressChart(selectedProjectProgress);
+  const chartData = buildChartData(selectedProjectProgress);
 
-  const chartX = (dayOffset, totalDays) => (
-    80 + (Math.max(0, Math.min(totalDays, dayOffset)) * (630 / Math.max(1, totalDays)))
-  );
+  // FETCH DASHBOARD STATS
 
-  const chartY = (percentage) => 250 - (Math.max(0, Math.min(100, percentage)) * 2);
-
-  const renderProgressSegment = (point, nextPoint, index, chart) => {
-    const x1 = chartX(point.dayOffset, chart.totalDays);
-    const y1 = chartY(point.percentage);
-    const x2 = chartX(nextPoint.dayOffset, chart.totalDays);
-    const y2 = chartY(nextPoint.percentage);
-    const shouldSplitAtDeadline =
-      chart.isDelayed &&
-      point.dayOffset < chart.deadlineDayOffset &&
-      nextPoint.dayOffset > chart.deadlineDayOffset;
-
-    if (shouldSplitAtDeadline) {
-      const ratio =
-        (chart.deadlineDayOffset - point.dayOffset) /
-        Math.max(1, nextPoint.dayOffset - point.dayOffset);
-      const deadlineX = chartX(chart.deadlineDayOffset, chart.totalDays);
-      const deadlineY = y1 + ((y2 - y1) * ratio);
-
-      return (
-        <g key={index}>
-          <line
-            x1={x1}
-            y1={y1}
-            x2={deadlineX}
-            y2={deadlineY}
-            stroke="#10b981"
-            strokeWidth="4.5"
-            strokeLinecap="round"
-          />
-          <line
-            x1={deadlineX}
-            y1={deadlineY}
-            x2={x2}
-            y2={y2}
-            stroke="#ef4444"
-            strokeWidth="4.5"
-            strokeLinecap="round"
-            strokeDasharray={nextPoint.type === "projection" ? "8 7" : undefined}
-          />
-        </g>
-      );
-    }
-
-    const isRed = chart.isDelayed && point.dayOffset >= chart.deadlineDayOffset;
-
-    return (
-      <line
-        key={index}
-        x1={x1}
-        y1={y1}
-        x2={x2}
-        y2={y2}
-        stroke={isRed ? "#ef4444" : "#10b981"}
-        strokeWidth="4.5"
-        strokeLinecap="round"
-        strokeDasharray={nextPoint.type === "projection" ? "8 7" : undefined}
-      />
-    );
-  };
-
-  // Fetch dashboard stats + projects list
   useEffect(() => {
     const fetchDashboardStats = async () => {
       try {
         setLoading(true);
+
         const token = sessionStorage.getItem("token");
 
-        const response = await fetch(`${apiConfig.API_BASE_URL}/api/admin/dashboard`, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
+        const response = await fetch(
+          `${apiConfig.API_BASE_URL}/api/admin/dashboard`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json"
+            }
           }
-        });
+        );
 
         if (!response.ok) {
-          throw new Error(`Server responded with status: ${response.status}`);
+          throw new Error("Failed to fetch dashboard");
         }
 
         const result = await response.json();
 
         if (result.success) {
           setStats(result.stats);
-          const allProjects = result.projects || [];
 
-          // Sort projects by created_at DESC (newest first)
-          const sortedProjects = [...allProjects].sort((a, b) => 
-            new Date(b.created_at) - new Date(a.created_at)
+          const sortedProjects = [...(result.projects || [])].sort(
+            (a, b) => new Date(b.created_at) - new Date(a.created_at)
           );
 
           setProjects(sortedProjects);
 
-          // Auto-select the newest project
           if (sortedProjects.length > 0) {
             setSelectedProjectId(sortedProjects[0].id);
           }
         } else {
-          setError(result.message || "Failed to load dashboard statistics");
+          setError(result.message);
         }
       } catch (err) {
-        console.error("Dashboard fetch error:", err);
-        setError("Failed to connect to server. Please check if backend is running.");
+        console.error(err);
+        setError("Failed to load dashboard");
       } finally {
         setLoading(false);
       }
@@ -286,37 +110,38 @@ const Dashboard = () => {
     fetchDashboardStats();
   }, []);
 
-  // Fetch REAL project progress when a project is selected
+  // =========================
+  // FETCH PROJECT PROGRESS
+  // =========================
+
   useEffect(() => {
     const fetchProjectProgress = async () => {
-      if (!selectedProjectId) {
-        setSelectedProjectProgress(null);
-        return;
-      }
+      if (!selectedProjectId) return;
 
       try {
         const token = sessionStorage.getItem("token");
+
         const response = await fetch(
           `${apiConfig.API_BASE_URL}/api/admin/project-progress?projectId=${selectedProjectId}`,
           {
             headers: {
-              "Authorization": `Bearer ${token}`,
+              Authorization: `Bearer ${token}`,
               "Content-Type": "application/json"
             }
           }
         );
 
-        if (!response.ok) throw new Error("Failed to fetch progress");
-
         const result = await response.json();
 
-        if (result.success && result.data && result.data.length > 0) {
-          setSelectedProjectProgress(result.data[0]);
+        if (result.success) {
+          setSelectedProjectProgress(
+            result.data?.[0] || null
+          );
         } else {
           setSelectedProjectProgress(null);
         }
       } catch (err) {
-        console.error("Project progress fetch error:", err);
+        console.error(err);
         setSelectedProjectProgress(null);
       }
     };
@@ -324,190 +149,259 @@ const Dashboard = () => {
     fetchProjectProgress();
   }, [selectedProjectId]);
 
-  // Navigation Handlers for Stat Cards
+  // =========================
+  // NAVIGATION
+  // =========================
+
   const goToProjects = (filter) => {
-    navigate("/admin/projects", { 
-      state: { activeFilter: filter } 
+    navigate("/admin/projects", {
+      state: { activeFilter: filter }
     });
   };
 
+  // =========================
+  // LOADING
+  // =========================
+
   if (loading) {
     return (
-      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
+      <div className="p-6 min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading dashboard...</p>
+          <p>Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
+  // =========================
+  // ERROR
+  // =========================
+
   if (error) {
     return (
-      <div className="p-6 bg-white min-h-screen flex items-center justify-center">
-        <div className="text-center text-red-600">
-          <p className="text-xl font-medium mb-2">Error</p>
+      <div className="p-6 min-h-screen flex items-center justify-center">
+        <div className="text-red-600 text-center">
+          <p className="text-xl font-semibold">Error</p>
           <p>{error}</p>
         </div>
       </div>
     );
   }
 
+  // =========================
+  // MAIN UI
+  // =========================
+
   return (
     <div className="p-6 bg-white min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-semibold text-blue-700">Dashboard</h1>
-          <p className="text-gray-600 mt-1 flex items-center gap-2">
-            <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
-            Real-time Project Overview
-          </p>
-        </div>
+
+      {/* HEADER */}
+
+      <div className="mb-8">
+        <h1 className="text-3xl font-semibold text-blue-700">
+          Dashboard
+        </h1>
+
+        <p className="text-gray-600 mt-1">
+          Real-time Project Overview
+        </p>
       </div>
 
-      {/* Top Stats Cards - Clickable */}
+      {/* STATS */}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
-        {/* Total Projects Card */}
+
+        {/* TOTAL */}
+
         <div
           onClick={() => goToProjects("All Projects")}
-          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+          className="bg-blue-50 border border-blue-200 rounded-2xl p-6 cursor-pointer hover:shadow-xl transition"
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
+              <p className="text-xs text-gray-500">
                 TOTAL PROJECTS
               </p>
-              <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+
+              <p className="text-4xl font-semibold mt-3">
                 {stats.totalProjects}
               </p>
             </div>
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center">
               <Briefcase size={28} className="text-white" />
             </div>
           </div>
-          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
+
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1">
             <TrendingUp size={16} />
             12% from last month
           </p>
         </div>
 
-        {/* Active Projects Card */}
+        {/* ACTIVE */}
+
         <div
           onClick={() => goToProjects("In Progress")}
-          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+          className="bg-blue-50 border border-blue-200 rounded-2xl p-6 cursor-pointer hover:shadow-xl transition"
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
+              <p className="text-xs text-gray-500">
                 ACTIVE PROJECTS
               </p>
-              <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+
+              <p className="text-4xl font-semibold mt-3">
                 {stats.activeProjects}
               </p>
             </div>
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center">
               <Clock size={28} className="text-white" />
             </div>
           </div>
-          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
+
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1">
             <TrendingUp size={16} />
             Currently in progress
           </p>
         </div>
 
-        {/* Projects Completed Card */}
+        {/* COMPLETED */}
+
         <div
           onClick={() => goToProjects("Completed")}
-          className="bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-6 hover:border-blue-400 transition-all duration-300 hover:shadow-2xl group cursor-pointer active:scale-[0.98]"
+          className="bg-blue-50 border border-blue-200 rounded-2xl p-6 cursor-pointer hover:shadow-xl transition"
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs font-medium text-gray-500 tracking-wider group-hover:text-blue-600 transition-colors">
+              <p className="text-xs text-gray-500">
                 PROJECTS COMPLETED
               </p>
-              <p className="text-4xl font-semibold text-gray-900 mt-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text transition-all">
+
+              <p className="text-4xl font-semibold mt-3">
                 {stats.completedProjects}
               </p>
             </div>
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center">
               <CheckCircle size={28} className="text-white" />
             </div>
           </div>
-          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
+
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1">
             <TrendingUp size={16} />
             68% completion rate
           </p>
         </div>
       </div>
 
-      {/* Main Graphs Section */}
+      {/* MAIN SECTION */}
+
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Project Completion (Circular) */}
-        <div className="lg:col-span-2 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
+
+        {/* LEFT CARD */}
+
+        <div className="lg:col-span-2 bg-blue-50 border border-blue-200 rounded-2xl p-8">
+
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-blue-500 group-hover:bg-clip-text">
+            <h3 className="text-lg font-semibold text-gray-800">
               PROJECT COMPLETION
             </h3>
-            <span className="px-4 py-1 bg-gradient-to-r from-blue-400 to-blue-300 text-blue-700 text-xs font-semibold rounded-full">
+
+            <span className="px-4 py-1 bg-blue-200 text-blue-700 text-xs font-semibold rounded-full">
               Overall
             </span>
           </div>
 
-          <div className="flex justify-center my-8 group-hover:scale-105 transition-transform">
+          <div className="flex justify-center my-8">
+
             <div className="relative w-52 h-52">
+
               <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-                <circle cx="60" cy="60" r="52" fill="none" stroke="#e5e7eb" strokeWidth="11" />
+
                 <circle
                   cx="60"
                   cy="60"
                   r="52"
                   fill="none"
-                  stroke="url(#completionGradient)"
+                  stroke="#e5e7eb"
+                  strokeWidth="11"
+                />
+
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="52"
+                  fill="none"
+                  stroke="#2563eb"
                   strokeWidth="11"
                   strokeDasharray="326.73"
-                  strokeDashoffset={326.73 - (326.73 * stats.overallCompletion) / 100}
+                  strokeDashoffset={
+                    326.73 -
+                    (326.73 * stats.overallCompletion) / 100
+                  }
                   strokeLinecap="round"
                 />
-                <defs>
-                  <linearGradient id="completionGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#2563eb" />
-                    <stop offset="100%" stopColor="#3b82f6" />
-                  </linearGradient>
-                </defs>
               </svg>
 
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-5xl font-bold text-gray-900">{stats.overallCompletion}%</span>
-                <span className="text-sm text-gray-500 font-medium mt-1">COMPLETED</span>
+                <span className="text-5xl font-bold">
+                  {stats.overallCompletion}%
+                </span>
+
+                <span className="text-sm text-gray-500 mt-1">
+                  COMPLETED
+                </span>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+
             <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
-              <p className="text-xs text-blue-600 font-semibold">COMPLETED</p>
-              <p className="text-3xl font-bold text-blue-700 mt-1">{stats.completedProjects}</p>
+              <p className="text-xs text-blue-600 font-semibold">
+                COMPLETED
+              </p>
+
+              <p className="text-3xl font-bold text-blue-700 mt-1">
+                {stats.completedProjects}
+              </p>
             </div>
+
             <div className="bg-white border border-blue-200 rounded-xl p-4 text-center">
-              <p className="text-xs text-blue-600 font-semibold">IN PROGRESS</p>
-              <p className="text-3xl font-bold text-blue-700 mt-1">{stats.activeProjects}</p>
+              <p className="text-xs text-blue-600 font-semibold">
+                IN PROGRESS
+              </p>
+
+              <p className="text-3xl font-bold text-blue-700 mt-1">
+                {stats.activeProjects}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* PROJECT PROGRESS Section */}
-        <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
+        {/* RIGHT GRAPH */}
+
+        <div className="lg:col-span-3 bg-blue-50 border border-blue-200 rounded-2xl p-8">
+
           <div className="flex justify-between items-center mb-6">
+
             <div>
-              <h3 className="text-lg font-semibold text-gray-800">PROJECT PROGRESS</h3>
-              <p className="text-xs text-gray-500">Weekly task completion progress</p>
+              <h3 className="text-lg font-semibold text-gray-800">
+                PROJECT PROGRESS
+              </h3>
+
+              <p className="text-xs text-gray-500">
+                Weekly task completion progress
+              </p>
             </div>
 
             <select
               value={selectedProjectId || ""}
               onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl focus:outline-none focus:border-blue-500 font-medium"
+              className="bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl"
             >
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
@@ -517,218 +411,122 @@ const Dashboard = () => {
             </select>
           </div>
 
-          <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
-            {selectedProjectProgress ? (
-              // 🔥 REPLACED GRAPH LOGIC (STEP 3)
-              progressChart ? (
-                <svg viewBox="0 0 750 280" className="w-full h-full">
-                  {/* GRID */}
-                  {[0, 25, 50, 75, 100].map((val, i) => (
-                    <line 
-                      key={i} 
-                      x1="50" 
-                      y1={250 - val * 2} 
-                      x2="710" 
-                      y2={250 - val * 2} 
-                      stroke="#f1f5f9" 
-                      strokeWidth="1.5" 
-                    />
-                  ))}
+          {/* GRAPH */}
 
-                  {/* WEEKS */}
-                  {progressChart.weekMarkers.map((marker, i) => (
-                    <g key={i}>
-                      <line
-                        x1={chartX(marker.dayOffset, progressChart.totalDays)}
-                        y1="54"
-                        x2={chartX(marker.dayOffset, progressChart.totalDays)}
-                        y2="252"
-                        stroke="#f8fafc"
-                        strokeWidth="1"
-                      />
-                      <text
-                        x={chartX(marker.dayOffset, progressChart.totalDays)}
-                        y="272"
-                        className="text-xs fill-gray-500"
-                        textAnchor="middle"
-                      >
-                        {marker.label}
-                      </text>
-                    </g>
-                  ))}
+          <div className="h-72 bg-white rounded-2xl p-4">
 
-                  {/* Y-AXIS LABELS */}
-                  {[0, 25, 50, 75, 100].map((val, i) => (
-                    <text 
-                      key={i} 
-                      x="38" 
-                      y={255 - val * 2} 
-                      className="text-xs fill-gray-500" 
-                      textAnchor="end"
-                    >
-                      {val}%
-                    </text>
-                  ))}
+            {chartData.length > 0 ? (
 
-                  {/* DEADLINE + CURRENT DATE */}
-                  {progressChart.showDeadlineMarker && (
-                    <g>
-                      <line
-                        x1={chartX(progressChart.deadlineDayOffset, progressChart.totalDays)}
-                        y1="50"
-                        x2={chartX(progressChart.deadlineDayOffset, progressChart.totalDays)}
-                        y2="250"
-                        stroke="#ef4444"
-                        strokeWidth="1.5"
-                        strokeDasharray="5 5"
-                      />
-                      <text
-                        x={chartX(progressChart.deadlineDayOffset, progressChart.totalDays)}
-                        y="44"
-                        className="text-xs fill-red-500 font-medium"
-                        textAnchor="middle"
-                      >
-                        {progressChart.deadline
-                          ? new Date(progressChart.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                          : 'Deadline'}
-                      </text>
-                    </g>
-                  )}
-                  {progressChart.showCurrentMarker && (
-                    <g>
-                      <line
-                        x1={chartX(progressChart.currentDayOffset, progressChart.totalDays)}
-                        y1="50"
-                        x2={chartX(progressChart.currentDayOffset, progressChart.totalDays)}
-                        y2="250"
-                        stroke="#2563eb"
-                        strokeWidth="1.5"
-                        strokeDasharray="4 6"
-                      />
-                      <text
-                        x={chartX(progressChart.currentDayOffset, progressChart.totalDays)}
-                        y="32"
-                        className="text-xs fill-blue-600 font-medium"
-                        textAnchor="middle"
-                      >
-                        {progressChart.currentDate
-                          ? new Date(progressChart.currentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
-                          : 'Today'}
-                      </text>
-                    </g>
-                  )}
-                  {progressChart.isCompleted && progressChart.actualCompletionDate && (
-                    <text
-                      x={chartX(progressChart.totalDays, progressChart.totalDays)}
-                      y="32"
-                      className="text-xs fill-emerald-600 font-medium"
-                      textAnchor="middle"
-                    >
-                      Completed {new Date(progressChart.actualCompletionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
-                    </text>
-                  )}
+              <ResponsiveContainer width="100%" height="100%">
 
-                  {/* LINE SEGMENTS */}
-                  {progressChart.linePoints.slice(0, -1).map((point, i) => (
-                    renderProgressSegment(point, progressChart.linePoints[i + 1], i, progressChart)
-                  ))}
+                <LineChart data={chartData}>
 
-                  {/* COMPLETION DOTS */}
-                  {progressChart.dots.map((dot, i) => {
-                    const isDelayedPoint =
-                      progressChart.isDelayed && dot.dayOffset > progressChart.deadlineDayOffset;
+                  <CartesianGrid
+                    stroke="#f1f5f9"
+                    vertical={false}
+                  />
 
-                    return (
-                      <circle
-                        key={`${dot.dayOffset}-${i}`}
-                        cx={chartX(dot.dayOffset, progressChart.totalDays)}
-                        cy={chartY(dot.percentage)}
-                        r="7"
-                        fill={isDelayedPoint ? "#ef4444" : "#10b981"}
-                        stroke="#fff"
-                        strokeWidth="2"
-                        className="transition-all duration-200 hover:r-[11]"
-                        style={{ cursor: 'pointer' }}
-                        onMouseEnter={(e) => {
-                          setHoveredPointIndex(i);
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const svg = e.currentTarget.parentElement.getBoundingClientRect();
-                          setTooltipPosition({
-                            x: rect.left - svg.left + 5,
-                            y: rect.top - svg.top - 25
-                          });
-                        }}
-                        onMouseLeave={() => setHoveredPointIndex(null)}
-                      />
-                    );
-                  })}
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
 
-                  {/* TOOLTIP */}
-                  {hoveredPointIndex !== null && progressChart.dots[hoveredPointIndex] && (
-                    <g>
-                      <rect
-                        x={tooltipPosition.x}
-                        y={tooltipPosition.y}
-                        width="170"
-                        height="66"
-                        rx="6"
-                        fill="#1f2937"
-                        opacity="0.95"
-                        stroke="#4b5563"
-                        strokeWidth="1"
-                      />
-                      <text
-                        x={tooltipPosition.x + 85}
-                        y={tooltipPosition.y + 20}
-                        textAnchor="middle"
-                        className="text-sm fill-white font-semibold"
-                      >
-                        {progressChart.dots[hoveredPointIndex].percentage}% Complete
-                      </text>
-                      <text
-                        x={tooltipPosition.x + 85}
-                        y={tooltipPosition.y + 38}
-                        textAnchor="middle"
-                        className="text-xs fill-gray-300"
-                      >
-                        {progressChart.dots[hoveredPointIndex].tasksCompletedOnDate || 1} task(s) on {progressChart.dots[hoveredPointIndex].date}
-                      </text>
-                      <text
-                        x={tooltipPosition.x + 85}
-                        y={tooltipPosition.y + 54}
-                        textAnchor="middle"
-                        className="text-xs fill-gray-300"
-                      >
-                        {progressChart.dots[hoveredPointIndex].completedTasks}/{progressChart.totalTasks} tasks done
-                      </text>
-                    </g>
-                  )}
-                </svg>
-              ) : (
-                <div className="h-full flex items-center justify-center text-gray-400">
-                  Select a project to view its weekly progress
-                </div>
-              )
+                  <YAxis
+                    domain={[0, 100]}
+                    ticks={[0, 25, 50, 75, 100]}
+                    tickFormatter={(value) => `${value}%`}
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+
+                  <Tooltip
+                    content={({ active, payload }) => {
+
+                      if (active && payload && payload.length) {
+
+                        const data = payload[0].payload;
+
+                        return (
+                          <div className="bg-white border border-gray-200 shadow-lg rounded-xl p-4">
+
+                            <p className="text-sm font-semibold text-gray-700 mb-2">
+                              {dayjs(data.date).format("MMM D, YYYY")}
+                            </p>
+
+                            <p className="text-sm text-blue-600">
+                              Progress: {data.progress}%
+                            </p>
+
+                            <p className="text-sm text-green-600 mt-1">
+                              Tasks: {data.completedTasks} / {data.totalTasks}
+                            </p>
+
+                          </div>
+                        );
+                      }
+
+                      return null;
+                    }}
+                  />
+
+                  <Line
+                    type="linear"
+                    dataKey="greenProgress"
+                    stroke="#22c55e"
+                    strokeWidth={4}
+                    dot={{ r: 5 }}
+                    connectNulls
+                  />
+
+                  <Line
+                    type="linear"
+                    dataKey="redProgress"
+                    stroke="#ef4444"
+                    strokeWidth={4}
+                    dot={{ r: 5 }}
+                    connectNulls
+                  />
+
+                </LineChart>
+
+              </ResponsiveContainer>
+
             ) : (
+
               <div className="h-full flex items-center justify-center text-gray-400">
-                Select a project to view its weekly progress
+                No progress data available
               </div>
             )}
+
           </div>
+
+          {/* FOOTER */}
 
           {selectedProjectProgress && (
             <div className="mt-6 flex justify-center">
-              <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border border-gray-100 shadow-sm">
-                <div 
-                  className="w-5 h-0.5 rounded" 
-                  style={{ backgroundColor: selectedProjectProgress.color }}
+
+              <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border shadow-sm">
+
+                <div
+                  className={`w-5 h-1 rounded ${
+                    selectedProjectProgress?.isDelayed
+                      ? "bg-red-500"
+                      : "bg-green-500"
+                  }`}
                 />
+
                 <span className="text-sm font-medium text-gray-700">
                   {selectedProjectProgress.name}
                 </span>
+
               </div>
+
             </div>
           )}
+
         </div>
       </div>
     </div>
