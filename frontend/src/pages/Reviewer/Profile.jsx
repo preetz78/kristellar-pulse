@@ -1,6 +1,7 @@
 // src/pages/Reviewer/Profile.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
   Mail,
   Calendar,
@@ -9,8 +10,7 @@ import {
   Phone,
   MapPin,
   Briefcase,
-  User,
-  Edit2
+  User
 } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
@@ -23,13 +23,15 @@ function ReviewerProfile() {
   const [stats, setStats] = useState({
     reviewsDone: 0,
     projectsReviewed: 0,
-    avgRating: 0
+    approvalRate: 0,
+    approvedTasks: 0,
+    reopenedTasks: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({});
-  const [saving, setSaving] = useState(false);
+  // const [isEditing, setIsEditing] = useState(false);
+  // const [editForm, setEditForm] = useState({});
+  // const [saving, setSaving] = useState(false);
 
   // Change Password Modal
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -56,15 +58,41 @@ function ReviewerProfile() {
 
         if (profileData.success) {
           setReviewerData(profileData.data);
-          setEditForm(profileData.data);
+          // setEditForm(profileData.data);
         }
 
-        // Stats (placeholder for now)
-        setStats({
-          reviewsDone: 156,
-          projectsReviewed: 23,
-          avgRating: 4.8
-        });
+        // Fetch Reviewer Stats
+        const statsRes = await fetch(
+          `${apiConfig.API_BASE_URL}/api/reviewer/stats-cards`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+
+        const statsData = await statsRes.json();
+
+        if (statsData.success) {
+
+          setStats({
+
+            reviewsDone:
+              statsData.stats.reviewsDone || 0,
+
+            projectsReviewed:
+              statsData.stats.projectsReviewed || 0,
+
+            approvalRate:
+              statsData.stats.approvalRate || 0,
+
+            approvedTasks:
+              statsData.stats.approvedTasks || 0,
+
+            reopenedTasks:
+              statsData.stats.reopenedTasks || 0
+          });
+        }
 
       } catch (err) {
         console.error("Data fetch error:", err);
@@ -78,70 +106,70 @@ function ReviewerProfile() {
   }, []);
 
   // Handle profile edit input change
-  const handleEditChange = (e) => {
-    const { name, value } = e.target;
-    setEditForm(prev => ({ ...prev, [name]: value }));
-  };
+  // const handleEditChange = (e) => {
+  //   const { name, value } = e.target;
+  //   setEditForm(prev => ({ ...prev, [name]: value }));
+  // };
 
-  // Save profile changes
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const token = sessionStorage.getItem("token");
+  // // Save profile changes
+  // const handleSave = async () => {
+  //   setSaving(true);
+  //   try {
+  //     const token = sessionStorage.getItem("token");
 
-      const res = await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/profile`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: editForm.name,
-          phone: editForm.phone,
-          designation: editForm.designation,
-          location: editForm.location,
-          bio: editForm.bio
-        })
-      });
+  //     const res = await fetch(`${apiConfig.API_BASE_URL}/api/reviewer/profile`, {
+  //       method: "PUT",
+  //       headers: {
+  //         Authorization: `Bearer ${token}`,
+  //         "Content-Type": "application/json"
+  //       },
+  //       body: JSON.stringify({
+  //         name: editForm.name,
+  //         phone: editForm.phone,
+  //         designation: editForm.designation,
+  //         location: editForm.location,
+  //         bio: editForm.bio
+  //       })
+  //     });
 
-      const data = await res.json();
+  //     const data = await res.json();
 
-      if (data.success) {
-        setReviewerData(data.data || editForm);
-        setIsEditing(false);
-        alert("Profile updated successfully!");
-      } else {
-        alert(data.message || "Failed to update profile");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save changes");
-    } finally {
-      setSaving(false);
-    }
-  };
+  //     if (data.success) {
+  //       setReviewerData(data.data || editForm);
+  //       setIsEditing(false);
+  //       alert("Profile updated successfully!");
+  //     } else {
+  //       alert(data.message || "Failed to update profile");
+  //     }
+  //   } catch (err) {
+  //     console.error(err);
+  //     alert("Failed to save changes");
+  //   } finally {
+  //     setSaving(false);
+  //   }
+  // };
 
-  const handleCancel = () => {
-    setEditForm(reviewerData);
-    setIsEditing(false);
-  };
+  // const handleCancel = () => {
+  //   setEditForm(reviewerData);
+  //   setIsEditing(false);
+  // };
 
   // Change Password Handler with fix
   const handleChangePassword = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
-      alert("New passwords do not match!");
+      toast.error("New passwords do not match!");
       return;
     }
 
     if (!validatePassword(passwordForm.newPassword)) {
-      alert(
+      toast.error(
         "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
       );
       return;
     }
 
     if (passwordForm.currentPassword === passwordForm.newPassword) {
-      alert("New password cannot be the same as current password!");
+      toast.error("New password cannot be the same as current password!");
       return;
     }
 
@@ -165,7 +193,7 @@ function ReviewerProfile() {
       const data = await res.json();
 
       if (data.success) {
-        alert("Password changed successfully! Please login again with the new password.");
+        toast.success("Password changed successfully! Please login again with the new password.");
         setShowChangePassword(false);
         setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
         setPasswordError("");
@@ -173,10 +201,10 @@ function ReviewerProfile() {
         window.dispatchEvent(new Event("auth-change"));
         navigate("/login", { replace: true });
       } else {
-        alert(data.message || "Failed to change password");
+        toast.error(data.message || "Failed to change password");
       }
     } catch (err) {
-      alert("Failed to change password. Please try again.");
+      toast.error("Failed to change password. Please try again.");
     } finally {
       setPasswordLoading(false);
     }
@@ -208,32 +236,16 @@ function ReviewerProfile() {
           {/* Info */}
           <div className="text-center md:text-left flex-1">
             <h1 className="text-3xl font-bold">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="name"
-                  value={editForm.name || ""}
-                  onChange={handleEditChange}
-                  className="bg-transparent border-b border-white text-white focus:outline-none text-3xl font-bold w-full"
-                />
-              ) : reviewerData.name}
+              {reviewerData.name}
             </h1>
             <p className="text-sm opacity-90 mt-0.5">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="designation"
-                  value={editForm.designation || ""}
-                  onChange={handleEditChange}
-                  className="bg-transparent border-b border-white text-white focus:outline-none"
-                />
-              ) : reviewerData.designation}
+               {reviewerData.designation}
             </p>
             <p className="text-xs opacity-80 mt-0.5">{reviewerData.email_id}</p>
           </div>
 
           {/* Edit Buttons */}
-          <div className="flex gap-3">
+          {/* <div className="flex gap-3">
             {!isEditing ? (
               <button
                 onClick={() => setIsEditing(true)}
@@ -259,7 +271,7 @@ function ReviewerProfile() {
                 </button>
               </>
             )}
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -278,43 +290,20 @@ function ReviewerProfile() {
             <InfoRow 
               icon={<Phone />} 
               label="Phone" 
-              value={isEditing ? (
-                <input
-                  type="text"
-                  name="phone"
-                  value={editForm.phone || ""}
-                  onChange={handleEditChange}
-                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
-                />
-              ) : (reviewerData.work_phone || "")} 
+              value={reviewerData.work_phone || ""}
+               
             />
 
             <InfoRow 
               icon={<MapPin />} 
               label="Location" 
-              value={isEditing ? (
-                <input
-                  type="text"
-                  name="location"
-                  value={editForm.location || ""}
-                  onChange={handleEditChange}
-                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
-                />
-              ) : (reviewerData.location || "")} 
+              value={reviewerData.location || ""} 
             />
 
             <InfoRow 
               icon={<Briefcase />} 
               label="Designation" 
-              value={isEditing ? (
-                <input
-                  type="text"
-                  name="designation"
-                  value={editForm.designation || ""}
-                  onChange={handleEditChange}
-                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
-                />
-              ) : (reviewerData.designation || "")} 
+              value={reviewerData.designation || ""}
             />
 
             <InfoRow
@@ -326,7 +315,7 @@ function ReviewerProfile() {
           </div>
 
           {/* Bio */}
-          <div className="mt-6">
+          {/* <div className="mt-6">
             <h3 className="font-semibold text-sm mb-1">Bio</h3>
             {isEditing ? (
               <textarea
@@ -341,7 +330,7 @@ function ReviewerProfile() {
                 {reviewerData.bio || ""}
               </p>
             )}
-          </div>
+          </div> */}
 
           {/* Change Password Button */}
           <button 
@@ -355,11 +344,23 @@ function ReviewerProfile() {
 
         {/* RIGHT PANEL - Stats */}
         <div className="space-y-4">
-          <StatCard title="Reviews Done" value={stats.reviewsDone} />
-          <StatCard title="Projects Reviewed" value={stats.projectsReviewed} />
-          <StatCard title="Avg Rating" value={stats.avgRating} />
+          <StatCard
+            title="Reviews Done"
+            value={stats.reviewsDone}
+          />
+
+          <StatCard
+            title="Projects Reviewed"
+            value={stats.projectsReviewed}
+          />
+
+          <StatCard
+            title="Approval Rate"
+            value={`${stats.approvalRate}%`}
+          />
         </div>
       </div>
+
 
       {/* ==================== CHANGE PASSWORD MODAL ==================== */}
       {showChangePassword && (

@@ -1,6 +1,7 @@
 // src/pages/Admin/Team.jsx
 import { useState, useEffect } from "react";
 import { Edit2, Users, ShieldCheck, UserCheck } from "lucide-react";
+import toast from "react-hot-toast";
 import apiConfig from "../../config/apiConfig";
 
 const ROLE_STYLES = {
@@ -115,15 +116,15 @@ const Team = () => {
       });
 
       if (res.ok) {
-        alert("Role updated successfully!");
+        toast.success("Role updated successfully!");
         setShowEditModal(false);
         await fetchUsers(); // Refresh list
       } else {
-        alert("Failed to update role");
+        toast.error("Failed to update role");
       }
     } catch (err) {
       console.error(err);
-      alert("Network error");
+      toast.error("Network error");
     } finally {
       setSubmitting(false);
     }
@@ -146,8 +147,16 @@ const Team = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-semibold text-slate-800">Team Management</h1>
-            <p className="text-slate-500 mt-1">Manage team members and their roles</p>
+            <h1 className="text-3xl font-semibold text-blue-700">Team Management</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className=" w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse inline-block
+              "></span>
+
+              <p className="text-slate-500">
+                Manage team members and their roles
+              </p>
+
+            </div>
           </div>
         </div>
 
@@ -305,7 +314,6 @@ const Team = () => {
                   <option value="Employee">Employee</option>
                   <option value="Manager">Manager</option>
                   <option value="Reviewer">Reviewer</option>
-                  <option value="Admin">Admin</option>
                 </select>
               </div>
             </div>

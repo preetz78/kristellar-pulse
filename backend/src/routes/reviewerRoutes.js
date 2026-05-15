@@ -11,13 +11,14 @@ import {
     updateReviewerProfile,
     approveTask,
     reopenTask,
-    getReviewerTaskStats
+    getReviewerTaskStats,
+    getReviewerProjectProgress,
+    getReviewerDashboardStats,
+    getReviewerStatsCards
+
  } from '../controllers/reviewerController.js';
 
-import { 
-  getDashboardStats,
-  getProjectProgress 
-} from '../controllers/adminController.js';
+
 
 import { changePassword } from '../controllers/authController.js';
 
@@ -36,8 +37,7 @@ router.patch('/tasks/:taskId/approve', protect, approveTask);
 router.patch('/tasks/:taskId/reopen', protect, reopenTask);
 router.get('/task-stats', protect, getReviewerTaskStats);
 
-router.get('/dashboard', protect, getDashboardStats);
-router.get('/project-progress', protect, getProjectProgress);
+router.get('/dashboard',protect,getReviewerDashboardStats);
 
 router.get('/notifications', protect, getReviewerNotifications);
 router.patch('/notifications/:notificationId/read', protect, markReviewerNotificationAsRead);
@@ -46,5 +46,9 @@ router.get('/profile', protect, getReviewerProfile);
 router.put('/profile', protect, updateReviewerProfile);
 
 router.put('/change-password', protect, changePassword);
+
+router.get('/project-progress', protect, getReviewerProjectProgress);
+
+router.get('/stats-cards', protect, getReviewerStatsCards);
 
 export default router;

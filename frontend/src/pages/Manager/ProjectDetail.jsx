@@ -1,13 +1,19 @@
 // src/pages/Manager/ProjectDetail.jsx
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import { 
   Plus, 
   Edit2, 
   Trash2, 
   Calendar, 
   X,
-  User 
+  User ,
+  MessageSquare,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  ListTodo
 } from "lucide-react";
 
 import apiConfig from "../../config/apiConfig";
@@ -25,6 +31,7 @@ const ProjectDetail = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
 
   const [newTask, setNewTask] = useState({
     title: "",
@@ -100,8 +107,8 @@ const ProjectDetail = () => {
   const handleAddOrUpdateTask = async (e) => {
     e.preventDefault();
 
-    if (!newTask.title || !newTask.assignee) {
-      alert("Title and Assignee are required");
+    if (!newTask.title || !newTask.assignee || !newTask.dueDate) {
+      toast.error("Title, Assignee, and Due Date are required");
       return;
     }
 
@@ -143,7 +150,7 @@ const ProjectDetail = () => {
       const result = await response.json();
 
       if (result.success) {
-        alert(isEdit ? "Task updated successfully!" : "Task created successfully!");
+        toast.success(isEdit ? "Task updated successfully!" : "Task created successfully!");
 
         // Refresh tasks list
         const refreshRes = await fetch(`${apiConfig.API_BASE_URL}/api/manager/projects/${projectId}/tasks`, {
@@ -162,11 +169,11 @@ const ProjectDetail = () => {
           dueDate: "" 
         });
       } else {
-        alert(result.message || "Failed to save task");
+        toast.error(result.message || "Failed to save task");
       }
     } catch (err) {
       console.error("Save task error:", err);
-      alert("Failed to connect to server. Please check if backend is running.");
+      toast.error("Failed to connect to server. Please check if backend is running.");
     }
   };
 
@@ -207,17 +214,29 @@ const ProjectDetail = () => {
       if (result.success) {
         setTasks(tasks.filter(t => t.id !== taskToDelete.id));
         setTaskToDelete(null);
-        alert("Task deleted successfully");
+        toast.success("Task deleted successfully");
       } else {
-        alert(result.message || "Failed to delete task");
+        toast.error(result.message || "Failed to delete task");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to delete task");
+      toast.error("Failed to delete task");
     }
   };
 
   const cancelDelete = () => setTaskToDelete(null);
+  const selectedTask =
+  tasks.find(
+    task => task.id === selectedTaskId
+  );
+
+  const handleOpenTask = (taskId) => {
+    setSelectedTaskId(taskId);
+  };
+
+  const handleCloseSidebar = () => {
+    setSelectedTaskId(null);
+  };
 
   if (loading) return <div className="p-6 text-center">Loading project details...</div>;
   if (error) return <div className="p-6 text-center text-red-600">{error}</div>;
@@ -274,9 +293,21 @@ const ProjectDetail = () => {
           const isOverdue = dueDate && dueDate < new Date() && task.status !== "Completed";
 
           return (
-            <div 
-              key={task.id} 
-              className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-blue-300 transition-all group"
+            <div
+              key={task.id}
+              onClick={() => handleOpenTask(task.id)}
+              className="
+                bg-white
+                border
+                border-slate-200
+                rounded-2xl
+                p-5
+                hover:border-blue-300
+                hover:shadow-md
+                transition-all
+                group
+                cursor-pointer
+              "
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -391,7 +422,7 @@ const ProjectDetail = () => {
                   type="date" 
                   value={newTask.dueDate} 
                   onChange={(e) => setNewTask({...newTask, dueDate: e.target.value})} 
-                  className="w-full px-5 py-3.5 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500" 
+                  className="w-full px-5 py-3.5 border border-gray-300 rounded-2xl focus:outline-none focus:border-blue-500 required" 
                 />
               </div>
 
@@ -458,6 +489,285 @@ const ProjectDetail = () => {
           </div>
         </div>
       )}
+
+      {/* Task Detail Sidebar */}
+      {selectedTaskId && selectedTask && (
+        <div
+          className="
+            fixed
+            inset-0
+            bg-black/50
+            backdrop-blur-sm
+            z-50
+            flex
+            justify-end
+          "
+          onClick={handleCloseSidebar}
+        >
+
+          <div
+            className="
+              bg-gradient-to-b
+              from-white
+              to-slate-50
+              w-full
+              max-w-xl
+              h-full
+              shadow-2xl
+              flex
+              flex-col
+              overflow-hidden
+              animate-slideInRight
+            "
+            onClick={(e) => e.stopPropagation()}
+          >
+
+            {/* HEADER */}
+
+            <div
+              className="
+                p-6
+                bg-gradient-to-r
+                from-blue-600
+                via-indigo-600
+                to-purple-600
+                sticky
+                top-0
+                z-10
+                shadow-lg
+                text-white
+              "
+            >
+
+              <div className="flex justify-between items-start">
+
+                <div>
+
+                  <p className="
+                    text-xs
+                    font-semibold
+                    tracking-widest
+                    uppercase
+                    text-blue-100
+                  ">
+                    Task Details
+                  </p>
+
+                  <h2 className="
+                    text-2xl
+                    font-bold
+                    mt-2
+                    leading-tight
+                  ">
+                    {selectedTask.title}
+                  </h2>
+
+                  <p className="text-sm text-blue-100 mt-1">
+                    Created for project execution and tracking
+                  </p>
+
+                </div>
+
+                <button
+                  onClick={handleCloseSidebar}
+                  className="
+                    p-2
+                    rounded-xl
+                    bg-white/20
+                    hover:bg-white/30
+                    transition-all
+                  "
+                >
+                  <X size={24} />
+                </button>
+
+              </div>
+            </div>
+
+            {/* BODY */}
+
+            <div className="
+              flex-1
+              overflow-y-auto
+              p-6
+              space-y-6
+            ">
+
+              {/* PROJECT INFO */}
+
+              <div className="
+                bg-white
+                rounded-2xl
+                p-5
+                shadow-sm
+                border
+                border-slate-200
+              ">
+
+                <div className="
+                  flex
+                  justify-between
+                  items-center
+                  mb-4
+                ">
+
+                  <div>
+
+                    <p className="
+                      text-xs
+                      text-slate-500
+                      font-medium
+                    ">
+                      Project Name
+                    </p>
+
+                    <p className="
+                      font-bold
+                      text-lg
+                      text-slate-800
+                      mt-1
+                    ">
+                      {project.name}
+                    </p>
+
+                  </div>
+
+                  <span
+                    className={`
+                      px-4
+                      py-1
+                      text-xs
+                      font-medium
+                      rounded-full
+
+                      ${
+                        selectedTask.status === "Completed"
+                          ? "bg-emerald-100 text-emerald-700"
+
+                          : selectedTask.status === "Delayed"
+                          ? "bg-red-100 text-red-700"
+
+                          : "bg-blue-100 text-blue-700"
+                      }
+                    `}
+                  >
+                    {selectedTask.status}
+                  </span>
+
+                </div>
+
+                <div className="
+                  grid
+                  grid-cols-1
+                  sm:grid-cols-2
+                  gap-4
+                  mt-4
+                ">
+
+                  <div className="
+                    bg-slate-50
+                    rounded-xl
+                    p-4
+                  ">
+
+                    <p className="
+                      text-xs
+                      text-slate-500
+                      font-medium
+                    ">
+                      Assignee
+                    </p>
+
+                    <p className="
+                      font-semibold
+                      text-slate-800
+                      mt-1
+                    ">
+                      {selectedTask.assignee_name || "Unassigned"}
+                    </p>
+
+                  </div>
+
+                  <div className="
+                    bg-slate-50
+                    rounded-xl
+                    p-4
+                  ">
+
+                    <p className="
+                      text-xs
+                      text-slate-500
+                      font-medium
+                    ">
+                      Due Date
+                    </p>
+
+                    <p className="
+                      font-semibold
+                      text-slate-800
+                      mt-1
+                    ">
+
+                      {
+                        selectedTask.due_date
+
+                          ? new Date(
+                              selectedTask.due_date
+                            ).toLocaleDateString(
+                              "en-GB",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric"
+                              }
+                            )
+
+                          : "No due date"
+                      }
+
+                    </p>
+
+                  </div>
+
+                </div>
+              </div>
+
+              {/* DESCRIPTION */}
+
+              <div className="
+                bg-white
+                rounded-2xl
+                p-5
+                shadow-sm
+                border
+                border-slate-200
+              ">
+
+                <p className="
+                  text-sm
+                  font-semibold
+                  text-slate-700
+                  mb-3
+                  uppercase
+                  tracking-wide
+                ">
+                  Description
+                </p>
+
+                <p className="
+                  text-slate-600
+                  leading-relaxed
+                ">
+                  {selectedTask.description || "No description provided."}
+                </p>
+
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

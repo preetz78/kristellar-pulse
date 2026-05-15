@@ -1,11 +1,11 @@
 // src/pages/Admin/Projects.jsx
 import { useState, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
   Calendar,
   Users,
   TrendingUp,
-  Search,
   Plus,
   X,
   Edit2,
@@ -27,7 +27,7 @@ const Projects = () => {
   // Filter states
   const [activeFilter, setActiveFilter] = useState("All Projects");
   const [selectedProjectTitle, setSelectedProjectTitle] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  
 
   // Modal states
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
@@ -61,7 +61,6 @@ const Projects = () => {
       setActiveFilter(incomingFilter);
       if (incomingFilter !== "All Projects") {
         setSelectedProjectTitle("");
-        setSearchTerm("");
       }
     }
   }, [location.state]);
@@ -213,10 +212,8 @@ const Projects = () => {
   // Filtered projects with search and filter logic
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
-      const matchesSearch =
-        searchTerm === "" ||
-        (project.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (project.idCode || "").toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch =true;
+       
 
       let matchesFilter = true;
 
@@ -236,7 +233,7 @@ const Projects = () => {
 
       return matchesSearch && matchesFilter && matchesSpecificProject;
     });
-  }, [projects, activeFilter, selectedProjectTitle, searchTerm]);
+  }, [projects, activeFilter, selectedProjectTitle]);
 
   // Stats calculation
   const totalProjects = projects.length;
@@ -347,7 +344,7 @@ const Projects = () => {
       await fetchProjects();
       handleCloseAddModal();
     } catch (err) {
-      alert(err.message || "Error creating project");
+      toast.error(err.message || "Error creating project");
     }
   };
 
@@ -422,7 +419,7 @@ const Projects = () => {
       await fetchProjects();
       handleCloseEditModal();
     } catch (err) {
-      alert(err.message || "Error updating project");
+      toast.error(err.message || "Error updating project");
     }
   };
 
@@ -448,7 +445,7 @@ const Projects = () => {
       setProjectToDelete(null);
       await fetchProjects();
     } catch (err) {
-      alert(err.message || "Error deleting project");
+      toast.error(err.message || "Error deleting project");
     }
   };
 
@@ -536,27 +533,64 @@ const Projects = () => {
 
       {/* Filter Bar with Searchable Project Dropdown */}
       <div className="mb-8 flex flex-wrap items-center gap-3">
-        <div className="relative w-80">
-          <div className="relative">
-            <input
-              type="text"
-              list="project-list"
-              value={selectedProjectTitle}
-              placeholder="Search or select project..."
-              onChange={(e) => {
-                setSelectedProjectTitle(e.target.value);
-                setSearchTerm("");
-              }}
-              className="w-full bg-white border border-gray-300 text-gray-700 font-medium px-5 py-3 pl-11 rounded-2xl focus:outline-none focus:border-blue-500 transition-all"
-            />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-          </div>
-          <datalist id="project-list">
-            <option value="">All Projects</option>
+        <div className="relative w-[380px]">
+          <select
+            value={selectedProjectTitle}
+            onChange={(e) => {
+              setSelectedProjectTitle(e.target.value);
+              setActiveFilter("All Projects");
+            }}
+            className="
+              w-full
+              appearance-none
+              bg-white
+              border
+              border-blue-200
+              text-gray-700
+              font-medium
+              px-5
+              py-3
+              pr-14
+              rounded-2xl
+              shadow-sm
+              focus:outline-none
+              focus:border-blue-500
+              focus:ring-4
+              focus:ring-blue-100
+              transition-all
+              cursor-pointer
+            "
+          >
+            <option value="">
+              All Project
+            </option>
+
             {projectTitles.map((title, index) => (
-              <option key={index} value={title} />
+              <option
+                key={index}
+                value={title}
+              >
+                {title}
+              </option>
             ))}
-          </datalist>
+          </select>
+
+          {/* Custom Arrow */}
+          <div className="absolute inset-y-0 right-5 flex items-center pointer-events-none">
+            <svg
+              className="w-5 h-5 text-blue-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2 bg-gray-100 p-2 rounded-2xl">

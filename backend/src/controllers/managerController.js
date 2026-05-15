@@ -156,7 +156,29 @@ export const createProject = async (req, res) => {
       });
     }
 
-    // ====================== VALIDATE ASSIGNED EMPLOYEES ======================
+    //DATE VALIDATION 
+
+  if (start_date && deadline) {
+
+    const startDateObj = new Date(start_date);
+    const deadlineDateObj = new Date(deadline);
+
+    // Remove time portion
+    startDateObj.setHours(0, 0, 0, 0);
+    deadlineDateObj.setHours(0, 0, 0, 0);
+
+    // Deadline must be AFTER start date
+    if (deadlineDateObj <= startDateObj) {
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Deadline date must be after the start date"
+      });
+    }
+  }
+
+    //  VALIDATE ASSIGNED EMPLOYEES 
     if (
       Array.isArray(assigned_employee_ids) &&
       assigned_employee_ids.length > 0
@@ -538,10 +560,10 @@ export const addTask = async (req, res) => {
   const projectId = Number(req.params.id || project_id);
   const assigneeId = Number(assigned_to);
 
-  if (!projectId || !title || !assigneeId) {
+  if (!projectId || !title || !assigneeId || !due_date) {
     return res.status(400).json({ 
       success: false, 
-      message: "Project ID, Title and Assignee are required" 
+      message: "Project ID, Title, Assignee, and Due Date are required" 
     });
   }
 
@@ -687,10 +709,10 @@ export const updateTask = async (req, res) => {
   let { title, description, assigned_to, due_date } = req.body;
   const assigneeId = Number(assigned_to);
 
-  if (!title || !assigneeId) {
+  if (!title || !assigneeId || !due_date) {
     return res.status(400).json({
       success: false,
-      message: "Title and Assignee are required"
+      message: "Title, Assignee, and Due Date are required"
     });
   }
 
@@ -1075,376 +1097,723 @@ export const getManagerDashboardStats = async (req, res) => {
 
 // Get Project Progress for Manager's Projects Only
 export const getManagerProjectProgress = async (req, res) => {
-  const manager_id = req.user.id;
+
   const { projectId } = req.query;
+
+  const managerId = req.user.id;
+
+  if (!projectId) {
+    return res.status(400).json({
+      success: false,
+      message: "projectId is required"
+    });
+  }
 
   try {
 
-    let sql = `
-      SELECT
+    // =========================
+    // FETCH PROJECT
+    // =========================
+
+    const [projects] = await pool.execute(`
+
+      SELECT 
         p.id,
         p.name,
         p.start_date,
         p.deadline,
-        t.id AS task_id,
-        t.status,
-        t.completed_at
+        p.created_by,
+        p.manager_id,
+
+        JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'id', t.id,
+            'status', t.status,
+            'reviewed_at', t.reviewed_at
+          )
+        ) AS tasks
+
       FROM projects p
-      LEFT JOIN tasks t ON t.project_id = p.id
-      WHERE (
-        p.manager_id = ?
-        OR p.created_by = ?
-      )
-    `;
 
-    const params = [manager_id, manager_id];
+      LEFT JOIN tasks t
+        ON p.id = t.project_id
 
-    if (projectId) {
-      sql += ` AND p.id = ?`;
-      params.push(projectId);
+      WHERE 
+        p.id = ?
+        AND
+        (
+          p.manager_id = ?
+          OR
+          p.created_by = ?
+        )
+
+      GROUP BY
+        p.id,
+        p.name,
+        p.start_date,
+        p.deadline,
+        p.created_by,
+        p.manager_id
+
+    `, [projectId, managerId, managerId]);
+
+    // =========================
+    // PROJECT NOT FOUND
+    // =========================
+
+    if (projects.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Project not found or access denied"
+      });
     }
 
-    const [rows] = await pool.execute(sql, params);
+    const project = projects[0];
 
-    const groupedProjects = {};
+    // =========================
+    // PARSE TASKS
+    // =========================
 
-    rows.forEach(row => {
+    let tasks = [];
 
-      if (!groupedProjects[row.id]) {
-        groupedProjects[row.id] = {
-          id: row.id,
-          name: row.name,
-          start_date: row.start_date,
-          deadline: row.deadline,
-          tasks: []
-        };
-      }
+    try {
 
-      if (row.task_id) {
-        groupedProjects[row.id].tasks.push({
-          status: row.status,
-          completed_at: row.completed_at
-        });
-      }
-    });
+      tasks =
+        typeof project.tasks === "string"
+          ? JSON.parse(project.tasks)
+          : project.tasks || [];
 
-    const response = [];
-    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    } catch {
+
+      tasks = [];
+    }
+
+    tasks = tasks.filter(
+      task => task.id !== null
+    );
+
+    // =========================
+    // COUNTS
+    // =========================
+
+    const totalTasks = tasks.length;
+
+    const completedTasks = tasks
+
+      .filter(task =>
+        task.status === "Completed" &&
+        task.reviewed_at
+      )
+
+      .sort((a, b) =>
+        new Date(a.reviewed_at) -
+        new Date(b.reviewed_at)
+      );
+
+    // =========================
+    // DATE HELPERS
+    // =========================
+
+    const MS_PER_DAY =
+      1000 * 60 * 60 * 24;
 
     const normaliseDate = (value) => {
-      const date = new Date(value);
+
+      const date =
+        value
+          ? new Date(value)
+          : new Date();
+
       date.setHours(0, 0, 0, 0);
+
       return date;
     };
 
-    const formatDate = (date) =>
-      date.toLocaleDateString('en-US', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      });
+    const toIsoDate = (date) =>
+      normaliseDate(date)
+        .toISOString()
+        .slice(0, 10);
 
-    const getDayOffset = (date, startDate) =>
-      Math.max(0, Math.floor((normaliseDate(date) - startDate) / MS_PER_DAY));
+    const sameDay = (a, b) =>
+      toIsoDate(a) === toIsoDate(b);
 
-    for (const project of Object.values(groupedProjects)) {
+    const formatDateLabel = (
+      date,
+      withYear = false
+    ) =>
 
-      const totalTasks = project.tasks.length;
-
-      if (!project.start_date || totalTasks === 0) {
-
-        response.push({
-          id: project.id,
-          name: project.name,
-          startDate: project.start_date,
-          deadline: project.deadline,
-          actualCompletionDate: null,
-          isCompleted: false,
-          currentDate: new Date().toISOString(),
-          totalTasks,
-          completedTasks: 0,
-          totalDays: 1,
-          deadlineDayOffset: 0,
-          currentDayOffset: 0,
-          weeks: ["Week 1"],
-          weeklyDates: [],
-          normalProgress: [null],
-          delayedProgress: [null],
-          actualDots: [],
-          linePoints: [],
-          projectionPoint: null,
-          isDelayed: false
+      normaliseDate(date)
+        .toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          ...(withYear
+            ? { year: "2-digit" }
+            : {})
         });
 
-        continue;
-      }
+    // =========================
+    // IMPORTANT DATES
+    // =========================
 
-      const startDate = normaliseDate(project.start_date);
-
-      const deadline = project.deadline
-        ? normaliseDate(project.deadline)
-        : normaliseDate(project.start_date);
-
-      const today = normaliseDate(new Date());
-
-      const completedTasks = project.tasks
-        .filter(
-          task =>
-            task.status === "Completed" &&
-            task.completed_at
-        )
-        .sort(
-          (a, b) =>
-            new Date(a.completed_at) -
-            new Date(b.completed_at)
-        );
-
-      const allTasksCompleted = completedTasks.length === totalTasks;
-
-      const lastCompletionDate = completedTasks.length > 0
-        ? normaliseDate(completedTasks[completedTasks.length - 1].completed_at)
-        : null;
-
-      const finalEndDate = allTasksCompleted
-        ? lastCompletionDate > deadline
-          ? lastCompletionDate
-          : deadline
-        : today > deadline
-          ? today
-          : deadline;
-
-      const totalDays = Math.max(
-        1,
-        Math.ceil(
-          (finalEndDate - startDate) / MS_PER_DAY
-        )
-      );
-
-      const totalWeeks = Math.max(
-        1,
-        Math.ceil(totalDays / 7)
-      );
-
-      const actualDots = [];
-      const dotsByDate = {};
-      let cumulativeCompleted = 0;
-
-      completedTasks.forEach((task) => {
-
-        const completedDate = normaliseDate(task.completed_at);
-        const dateKey = completedDate.toISOString().slice(0, 10);
-
-        cumulativeCompleted += 1;
-
-        const percentage = Math.round(
-          (cumulativeCompleted / totalTasks) * 100
-        );
-
-        dotsByDate[dateKey] = {
-          dayOffset: getDayOffset(completedDate, startDate),
-          percentage,
-          date: formatDate(completedDate),
-          completedTasks: cumulativeCompleted,
-          tasksCompletedOnDate:
-            (dotsByDate[dateKey]?.tasksCompletedOnDate || 0) + 1,
-          completedAt: completedDate.toISOString()
-        };
-      });
-
-      actualDots.push(...Object.values(dotsByDate));
-
-      const weeklyDates = [];
-      const progressValues = [];
-      const weekMarkers = [];
-
-      let lastPercentage = null;
-
-      for (let i = 0; i < totalWeeks; i++) {
-
-        const currentWeekDate = new Date(startDate);
-
-        currentWeekDate.setDate(
-          startDate.getDate() + (i * 7)
-        );
-
-        const weekDate = formatDate(currentWeekDate);
-
-        weeklyDates.push(weekDate);
-
-        weekMarkers.push({
-          label: `Week ${i + 1}`,
-          date: weekDate,
-          dayOffset: Math.min(i * 7, totalDays)
-        });
-
-        const weekEndOffset = Math.min((i + 1) * 7, totalDays);
-
-        const dotsInWeek = actualDots.filter(
-          dot => dot.dayOffset <= weekEndOffset
-        );
-
-        const lastDotInWeek = dotsInWeek[dotsInWeek.length - 1];
-
-        if (lastDotInWeek) {
-          lastPercentage = lastDotInWeek.percentage;
-        }
-
-        progressValues.push(
-          completedTasks.length > 0
-            ? lastPercentage
-            : null
-        );
-      }
-
-      const deadlineDayOffset = getDayOffset(deadline, startDate);
-
-      const currentDayOffset = Math.min(
-        getDayOffset(today, startDate),
-        totalDays
-      );
-
-      const deadlineWeekIndex = Math.floor(deadlineDayOffset / 7);
-
-      const isDelayed =
-        finalEndDate > deadline;
-
-      let normalProgress = [...progressValues];
-
-      let delayedProgress = Array(progressValues.length).fill(null);
-
-      if (isDelayed) {
-
-        normalProgress = progressValues.map(
-          (value, index) =>
-            index <= deadlineWeekIndex
-              ? value
-              : null
-        );
-
-        delayedProgress = progressValues.map(
-          (value, index) =>
-            index > deadlineWeekIndex
-              ? value
-              : null
-        );
-      }
-
-      const linePoints = completedTasks.length > 0
-        ? [
-            {
-              dayOffset: 0,
-              percentage: 0,
-              date: formatDate(startDate),
-              type: "start"
-            },
-            ...actualDots.map(dot => ({
-              ...dot,
-              type: "completed"
-            }))
-          ]
-        : [];
-
-      let projectionPoint = null;
-
-      if (!allTasksCompleted && totalTasks > 0) {
-
-        const lastPoint =
-          linePoints.length > 0
-            ? linePoints[linePoints.length - 1]
-            : {
-                dayOffset: 0,
-                percentage: 0
-              };
-
-        const projectionDate = today < startDate
-          ? startDate
-          : today > finalEndDate
-            ? finalEndDate
-            : today;
-
-        const projectionDayOffset = Math.min(
-          getDayOffset(projectionDate, startDate),
-          totalDays
-        );
-
-        const nextTaskPercentage = Math.min(
-          100,
-          Math.round(((completedTasks.length + 1) / totalTasks) * 100)
-        );
-
-        const availableDays = Math.max(
-          1,
-          deadlineDayOffset - lastPoint.dayOffset
-        );
-
-        const elapsedDays = Math.max(
-          0,
-          projectionDayOffset - lastPoint.dayOffset
-        );
-
-        const progressRatio = Math.min(
-          1,
-          elapsedDays / availableDays
-        );
-
-        const percentage = Math.round(
-          lastPoint.percentage +
-          (
-            (nextTaskPercentage - lastPoint.percentage)
-            * progressRatio
+    const startDate =
+      project.start_date
+        ? normaliseDate(
+            project.start_date
           )
+        : normaliseDate(
+            project.deadline || new Date()
+          );
+
+    const deadlineDate =
+      project.deadline
+        ? normaliseDate(
+            project.deadline
+          )
+        : startDate;
+
+    const today =
+      normaliseDate(new Date());
+
+    // =========================
+    // FINAL COMPLETION DATE
+    // =========================
+
+    let finalCompletionDate = null;
+
+    const allTasksCompleted =
+
+      totalTasks > 0 &&
+      completedTasks.length === totalTasks;
+
+    if (allTasksCompleted) {
+
+      finalCompletionDate =
+        normaliseDate(
+
+          completedTasks[
+            completedTasks.length - 1
+          ].reviewed_at
+        );
+    }
+
+    // =========================
+    // DELAY LOGIC
+    // =========================
+
+    const isDelayed =
+
+      (
+        finalCompletionDate &&
+        finalCompletionDate > deadlineDate
+      )
+
+      ||
+
+      (
+        !finalCompletionDate &&
+        today > deadlineDate
+      );
+
+    const deadlinePassed =
+      today > deadlineDate;
+
+    // =========================
+    // CURRENT PROGRESS
+    // =========================
+
+    const currentProgress =
+
+      totalTasks > 0
+
+        ? Math.round(
+            (
+              completedTasks.length /
+              totalTasks
+            ) * 100
+          )
+
+        : 0;
+
+    // =========================
+    // CHART END DATE
+    // =========================
+
+    const finalChartDate =
+
+      allTasksCompleted
+        ? finalCompletionDate
+        : today;
+
+    // =========================
+    // COMPLETION GROUPING
+    // =========================
+
+    const completedByDate = {};
+
+    let cumulativeCompleted = 0;
+
+    completedTasks.forEach((task) => {
+
+      const completedDate =
+        normaliseDate(
+          task.reviewed_at
         );
 
-        projectionPoint = {
-          dayOffset: projectionDayOffset,
-          percentage,
-          date: formatDate(projectionDate),
-          completedTasks: completedTasks.length,
-          nextTaskPercentage,
-          type: "projection"
-        };
+      const dateKey =
+        toIsoDate(completedDate);
 
-        if (
-          projectionPoint.dayOffset > lastPoint.dayOffset
-        ) {
-          linePoints.push(projectionPoint);
-        }
+      cumulativeCompleted += 1;
+
+      completedByDate[dateKey] = {
+
+        date: completedDate,
+
+        percentage:
+
+          totalTasks > 0
+
+            ? Math.round(
+                (
+                  cumulativeCompleted /
+                  totalTasks
+                ) * 100
+              )
+
+            : 0,
+
+        completedTasks:
+          cumulativeCompleted,
+
+        tasksCompletedOnDate:
+
+          (
+            completedByDate[dateKey]
+              ?.tasksCompletedOnDate || 0
+          ) + 1
+      };
+    });
+
+    // =========================
+    // HELPERS
+    // =========================
+
+    const getCompletedCountByDate = (
+      date
+    ) =>
+
+      completedTasks.filter(task =>
+
+        normaliseDate(
+          task.reviewed_at
+        ) <= normaliseDate(date)
+
+      ).length;
+
+    const getProgressByDate = (
+      date
+    ) => {
+
+      if (totalTasks === 0) {
+        return 0;
       }
 
-      response.push({
-        id: project.id,
-        name: project.name,
-        startDate: project.start_date,
-        deadline: project.deadline,
-        actualCompletionDate: allTasksCompleted && lastCompletionDate
-          ? lastCompletionDate.toISOString()
-          : null,
-        isCompleted: allTasksCompleted,
-        currentDate: today.toISOString(),
-        totalTasks,
-        completedTasks: completedTasks.length,
-        totalDays,
-        deadlineDayOffset,
-        currentDayOffset,
-        weeks: Array.from(
-          { length: totalWeeks },
-          (_, index) => `Week ${index + 1}`
-        ),
-        weeklyDates,
-        weekMarkers,
-        normalProgress,
-        delayedProgress,
-        actualDots,
-        linePoints,
-        projectionPoint,
-        deadlineWeekIndex,
-        isDelayed
+      return Math.round(
+
+        (
+          getCompletedCountByDate(date) /
+          totalTasks
+        ) * 100
+      );
+    };
+
+    // =========================
+    // BUILD GRAPH POINTS
+    // =========================
+
+    const progressPoints = [];
+
+    const addPoint = (point) => {
+
+      progressPoints.push({
+
+        ...point,
+
+        date:
+          point.date < startDate
+            ? startDate
+            : point.date
+      });
+    };
+
+    // START POINT
+
+    addPoint({
+
+      date: startDate,
+
+      percentage: 0,
+
+      completedTasks: 0,
+
+      tasksCompletedOnDate: 0,
+
+      markerType: "start"
+    });
+
+    // TASK COMPLETION POINTS
+
+    completedTasks.forEach(
+      (task, index) => {
+
+        const completedDate =
+          normaliseDate(
+            task.reviewed_at
+          );
+
+        const dateKey =
+          toIsoDate(completedDate);
+
+        addPoint({
+
+          date: completedDate,
+
+          percentage:
+
+            totalTasks > 0
+
+              ? Math.round(
+                  (
+                    (index + 1) /
+                    totalTasks
+                  ) * 100
+                )
+
+              : 0,
+
+          completedTasks:
+            index + 1,
+
+          tasksCompletedOnDate:
+
+            completedByDate[dateKey]
+              ?.tasksCompletedOnDate || 1,
+
+          markerType: "completion"
+        });
+      }
+    );
+
+    // DEADLINE MARKER
+
+    if (
+
+      isDelayed &&
+      deadlineDate >= startDate &&
+      deadlineDate <= finalChartDate
+
+    ) {
+
+      addPoint({
+
+        date: deadlineDate,
+
+        percentage:
+          getProgressByDate(
+            deadlineDate
+          ),
+
+        completedTasks:
+          getCompletedCountByDate(
+            deadlineDate
+          ),
+
+        tasksCompletedOnDate:
+
+          completedByDate[
+            toIsoDate(deadlineDate)
+          ]?.tasksCompletedOnDate || 0,
+
+        markerType: "deadline"
       });
     }
 
+    // TODAY POINT
+
+    if (
+
+      !allTasksCompleted &&
+      !sameDay(today, startDate)
+
+    ) {
+
+      addPoint({
+
+        date: today,
+
+        percentage: currentProgress,
+
+        completedTasks:
+          completedTasks.length,
+
+        tasksCompletedOnDate: 0,
+
+        markerType: "today"
+      });
+    }
+
+    // =========================
+    // SORT & REMOVE DUPLICATES
+    // =========================
+
+    progressPoints.sort(
+      (a, b) =>
+        new Date(a.date) -
+        new Date(b.date)
+    );
+
+    const uniquePointsByKey =
+      new Map();
+
+    progressPoints.forEach((point) => {
+
+      const key =
+
+        `${toIsoDate(point.date)}-${point.markerType}-${point.completedTasks}`;
+
+      uniquePointsByKey.set(
+        key,
+        point
+      );
+    });
+
+    const uniqueProgressPoints =
+
+      Array.from(
+        uniquePointsByKey.values()
+      )
+
+      .sort((a, b) =>
+        new Date(a.date) -
+        new Date(b.date)
+      );
+
+    // =========================
+    // FINAL GRAPH DATA
+    // =========================
+
+    const progressHistory =
+      uniqueProgressPoints.map((point, index) => {
+
+        const date =
+          normaliseDate(point.date);
+
+        const isAfterDeadline =
+          date > deadlineDate;
+
+        const isDeadline =
+          point.markerType === "deadline";
+
+        const shouldUseRed =
+          isDelayed &&
+          (isAfterDeadline || isDeadline);
+
+        // =========================
+        // FIX SAME-DAY DOT OVERLAP
+        // =========================
+
+        const baseDayOffset =
+          Math.max(
+            0,
+            Math.floor(
+              (date - startDate) / MS_PER_DAY
+            )
+          );
+
+        const sameDatePoints =
+          uniqueProgressPoints.filter(
+            p =>
+              toIsoDate(p.date) ===
+              toIsoDate(point.date)
+          );
+
+        const sameDateIndex =
+          sameDatePoints.findIndex(
+            p =>
+              p.completedTasks ===
+              point.completedTasks
+          );
+
+        const adjustedDayOffset =
+
+          baseDayOffset +
+
+          (
+            sameDatePoints.length > 1
+              ? sameDateIndex * 0.015
+              : 0
+          );
+
+        // =========================
+        // LABELS
+        // =========================
+
+        let xLabel =
+          formatDateLabel(date);
+
+        if (
+          point.markerType === "start"
+        ) {
+
+          xLabel =
+            `Start ${formatDateLabel(
+              date,
+              true
+            )}`;
+
+        } else if (
+          point.markerType === "deadline"
+        ) {
+
+          xLabel =
+            `Deadline ${formatDateLabel(
+              date,
+              true
+            )}`;
+
+        } else if (
+          point.markerType === "today"
+        ) {
+
+          xLabel =
+            `Today ${formatDateLabel(
+              date,
+              true
+            )}`;
+
+        } else if (
+
+          allTasksCompleted &&
+          finalCompletionDate &&
+          sameDay(
+            date,
+            finalCompletionDate
+          ) &&
+          index ===
+          uniqueProgressPoints.length - 1
+
+        ) {
+
+          xLabel =
+            `Complete ${formatDateLabel(
+              date,
+              true
+            )}`;
+        }
+
+        return {
+
+          xLabel,
+
+          label: xLabel,
+
+          pointIndex: index,
+
+          // =========================
+          // FIXED DAY OFFSET
+          // =========================
+
+          dayOffset:
+            adjustedDayOffset,
+
+          markerType:
+            point.markerType,
+
+          percentage:
+            point.percentage,
+
+          completedTasks:
+            point.completedTasks,
+
+          totalTasks,
+
+          tasksCompletedOnDate:
+            point.tasksCompletedOnDate,
+
+          date:
+            date.toISOString(),
+
+          isToday:
+            point.markerType === "today",
+
+          isDeadline,
+
+          isCompletion:
+            point.markerType === "completion",
+
+          isDeadlineCrossed:
+            shouldUseRed,
+
+          greenProgress:
+
+            shouldUseRed &&
+            !isDeadline
+
+              ? null
+
+              : point.percentage,
+
+          redProgress:
+
+            shouldUseRed
+              ? point.percentage
+              : null,
+
+          dotProgress:
+            point.percentage
+        };
+      });
+
+    // =========================
+    // RESPONSE
+    // =========================
+
     res.json({
       success: true,
-      data: response
+
+      data: [{
+
+        id: project.id,
+
+        name: project.name,
+
+        startDate:
+          project.start_date,
+
+        deadline:
+          project.deadline,
+
+        currentDate: today,
+
+        actualCompletionDate:
+          finalCompletionDate,
+
+        chartEndDate:
+          finalChartDate,
+
+        totalTasks,
+
+        completedTasks:
+          completedTasks.length,
+
+        currentProgress,
+
+        isDelayed,
+
+        deadlinePassed,
+
+        progressHistory
+      }]
     });
 
   } catch (error) {
@@ -1456,7 +1825,8 @@ export const getManagerProjectProgress = async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "Failed to generate progress graph"
+      message:
+        "Failed to generate project progress"
     });
   }
 };

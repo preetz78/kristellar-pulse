@@ -6,7 +6,8 @@ import {
   Briefcase,
   Clock,
   CheckCircle,
-  TrendingUp
+  TrendingUp,
+  ChevronDown
 } from "lucide-react";
 
 import dayjs from "dayjs";
@@ -49,14 +50,77 @@ const Dashboard = () => {
       progress: item.percentage,
       greenProgress: item.greenProgress,
       redProgress: item.redProgress,
+      dotProgress: item.isCompletion ? item.percentage : null,
       completedTasks: item.completedTasks,
       totalTasks: item.totalTasks,
+      tasksCompletedOnDate: item.tasksCompletedOnDate,
       date: item.date,
+      dayOffset: Number(item.dayOffset) || 0,
+      markerType: item.markerType,
+      isDeadline: item.isDeadline,
+      isCompletion: item.isCompletion,
       isDeadlineCrossed: item.isDeadlineCrossed
     }));
   };
 
   const chartData = buildChartData(selectedProjectProgress);
+
+  const maxDayOffset = chartData.length > 0
+    ? Math.max(...chartData.map((item) => item.dayOffset || 0))
+    : 0;
+
+  const xAxisTicks = [
+    ...new Set(
+      chartData
+        .filter((item, index) =>
+          item.markerType === "start" ||
+          item.markerType === "deadline" ||
+          item.markerType === "today" ||
+          index === chartData.length - 1
+        )
+        .map((item) => item.dayOffset || 0)
+    )
+  ];
+
+  const formatXAxisTick = (value) => {
+    const exactMatch = chartData.find(
+      (item, index) =>
+        (item.dayOffset || 0) === value &&
+        (
+          item.markerType === "start" ||
+          item.markerType === "deadline" ||
+          item.markerType === "today" ||
+          index === chartData.length - 1
+        )
+    );
+
+    return exactMatch?.label || "";
+  };
+
+  const renderProgressDot = ({ cx, cy, payload }) => {
+    if (!payload || cx === undefined || cy === undefined) {
+      return null;
+    }
+
+    if (!payload.isCompletion) {
+      return null;
+    }
+
+    const isDelayedPoint = payload.isDeadlineCrossed;
+    const fill = isDelayedPoint ? "#ef4444" : "#22c55e";
+    const radius = 5;
+
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill={fill}
+        stroke="#ffffff"
+        strokeWidth={2}
+      />
+    );
+  };
 
   // FETCH DASHBOARD STATS
 
@@ -159,9 +223,8 @@ const Dashboard = () => {
     });
   };
 
-  // =========================
+  
   // LOADING
-  // =========================
 
   if (loading) {
     return (
@@ -174,9 +237,8 @@ const Dashboard = () => {
     );
   }
 
-  // =========================
   // ERROR
-  // =========================
+
 
   if (error) {
     return (
@@ -189,9 +251,8 @@ const Dashboard = () => {
     );
   }
 
-  // =========================
   // MAIN UI
-  // =========================
+ 
 
   return (
     <div className="p-6 bg-white min-h-screen">
@@ -202,10 +263,12 @@ const Dashboard = () => {
         <h1 className="text-3xl font-semibold text-blue-700">
           Dashboard
         </h1>
-
-        <p className="text-gray-600 mt-1">
-          Real-time Project Overview
-        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
+          <p className="text-gray-600">
+            Real time Project Overview
+          </p>
+        </div>
       </div>
 
       {/* STATS */}
@@ -220,7 +283,7 @@ const Dashboard = () => {
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 font-medium">
                 TOTAL PROJECTS
               </p>
 
@@ -234,9 +297,9 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1">
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
             <TrendingUp size={16} />
-            12% from last month
+            Projects across all departments
           </p>
         </div>
 
@@ -248,7 +311,7 @@ const Dashboard = () => {
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 font-medium">
                 ACTIVE PROJECTS
               </p>
 
@@ -262,7 +325,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1">
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
             <TrendingUp size={16} />
             Currently in progress
           </p>
@@ -276,11 +339,11 @@ const Dashboard = () => {
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 font-medium">
                 PROJECTS COMPLETED
               </p>
 
-              <p className="text-4xl font-semibold mt-3">
+              <p className="text-4xl font-semibold mt-3 ">
                 {stats.completedProjects}
               </p>
             </div>
@@ -290,9 +353,9 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1">
+          <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
             <TrendingUp size={16} />
-            68% completion rate
+            Successfully completed projects
           </p>
         </div>
       </div>
@@ -394,32 +457,35 @@ const Dashboard = () => {
               </h3>
 
               <p className="text-xs text-gray-500">
-                Weekly task completion progress
+                Task completions from start date to current status
               </p>
             </div>
 
-            <select
-              value={selectedProjectId || ""}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl"
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+            <div className="relative inline-flex">
+              <select
+                value={selectedProjectId || ""}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="appearance-none bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl pr-10 focus:outline-none focus:ring-0 focus:border-blue-300"
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            </div>
           </div>
 
           {/* GRAPH */}
 
-          <div className="h-72 bg-white rounded-2xl p-4">
+          <div className="h-72 bg-white rounded-2xl p-4 border-0 outline-none focus:outline-none ring-0 focus:ring-0 shadow-none">
 
             {chartData.length > 0 ? (
 
               <ResponsiveContainer width="100%" height="100%">
 
-                <LineChart data={chartData}>
+                <LineChart data={chartData} style={{outline: "none" , border: "none"}}>
 
                   <CartesianGrid
                     stroke="#f1f5f9"
@@ -427,10 +493,15 @@ const Dashboard = () => {
                   />
 
                   <XAxis
-                    dataKey="label"
+                    dataKey="dayOffset"
+                    type="number"
+                    domain={[0, Math.max(1, maxDayOffset)]}
+                    ticks={xAxisTicks}
+                    tickFormatter={formatXAxisTick}
                     tick={{ fontSize: 12 }}
                     axisLine={false}
                     tickLine={false}
+                    allowDecimals={false}
                   />
 
                   <YAxis
@@ -447,7 +518,29 @@ const Dashboard = () => {
 
                       if (active && payload && payload.length) {
 
-                        const data = payload[0].payload;
+                        const validPayloads = payload
+                          .filter(item => item?.payload);
+
+                        if (!validPayloads.length) {
+                          return null;
+                        }
+
+                        const data =
+                          validPayloads.reduce((highest, current) => {
+
+                            const currentProgress =
+                              current.payload?.progress || 0;
+
+                            const highestProgress =
+                              highest.payload?.progress || 0;
+
+                            return currentProgress > highestProgress
+                              ? current
+                              : highest;
+
+                          }).payload;
+
+                        if (!data) return null;
 
                         return (
                           <div className="bg-white border border-gray-200 shadow-lg rounded-xl p-4">
@@ -464,6 +557,12 @@ const Dashboard = () => {
                               Tasks: {data.completedTasks} / {data.totalTasks}
                             </p>
 
+                            {data.tasksCompletedOnDate > 0 && (
+                              <p className="text-sm text-gray-500 mt-1">
+                                Completed on this date: {data.tasksCompletedOnDate}
+                              </p>
+                            )}
+
                           </div>
                         );
                       }
@@ -477,8 +576,8 @@ const Dashboard = () => {
                     dataKey="greenProgress"
                     stroke="#22c55e"
                     strokeWidth={4}
-                    dot={{ r: 5 }}
-                    connectNulls
+                    dot={false}
+                    activeDot={false}
                   />
 
                   <Line
@@ -486,7 +585,17 @@ const Dashboard = () => {
                     dataKey="redProgress"
                     stroke="#ef4444"
                     strokeWidth={4}
-                    dot={{ r: 5 }}
+                    dot={false}
+                    activeDot={false}
+                  />
+
+                  <Line
+                    type="linear"
+                    dataKey="dotProgress"
+                    stroke="transparent"
+                    strokeWidth={0}
+                    dot={renderProgressDot}
+                    activeDot={renderProgressDot}
                     connectNulls
                   />
 
@@ -508,7 +617,7 @@ const Dashboard = () => {
           {selectedProjectProgress && (
             <div className="mt-6 flex justify-center">
 
-              <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl border shadow-sm">
+              <div className="flex items-center gap-3 bg-white px-6 py-2 rounded-2xl shadow-sm">
 
                 <div
                   className={`w-5 h-1 rounded ${

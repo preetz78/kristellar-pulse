@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLocation } from "react-router-dom";
+import toast from "react-hot-toast";
 import { 
   Calendar, 
   Users, 
@@ -210,10 +211,7 @@ const ManagerProjects = () => {
     return projects.filter((project) => {
       const progress = project.progress || 0;
 
-      const matchesSearch = 
-        searchTerm === "" || 
-        (project.name && project.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (project.project_id && project.project_id.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesSearch = true;
 
       let matchesFilter = true;
 
@@ -242,7 +240,7 @@ const ManagerProjects = () => {
     e.preventDefault();
     
     if (!newProject.projectId || !newProject.title || !newProject.deadline) {
-      alert("Please fill in Project ID, Project Name and Deadline");
+      toast.error("Please fill in Project ID, Project Name and Deadline");
       return;
     }
 
@@ -276,16 +274,16 @@ const ManagerProjects = () => {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        alert("Project created successfully!");
+        toast.success("Project created successfully!");
         handleCloseAddModal();
         fetchProjects();
       } else {
         console.error("Server error response:", result);
-        alert(result.message || `Failed to create project (Status: ${response.status})`);
+        toast.error(result.message || `Failed to create project (Status: ${response.status})`);
       }
     } catch (err) {
       console.error("Add project error:", err);
-      alert("Failed to connect to server. Please check console for details.");
+      toast.error("Failed to connect to server. Please check console for details.");
     }
   };
 
@@ -293,7 +291,7 @@ const ManagerProjects = () => {
     e.preventDefault();
     
     if (!editProjectData.projectId || !editProjectData.title || !editProjectData.deadline) {
-      alert("Please fill in Project ID, Project Name and Deadline");
+      toast.error("Please fill in Project ID, Project Name and Deadline");
       return;
     }
 
@@ -321,16 +319,16 @@ const ManagerProjects = () => {
       const result = await response.json();
 
       if (result.success) {
-        alert("Project updated successfully!");
+        toast.success("Project updated successfully!");
         setShowEditModal(false);
         setEditingProject(null);
         fetchProjects();
       } else {
-        alert(result.message || "Failed to update project");
+        toast.error(result.message || "Failed to update project");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to connect to server");
+      toast.error("Failed to connect to server");
     }
   };
 
@@ -351,16 +349,16 @@ const ManagerProjects = () => {
       const result = await response.json();
 
       if (result.success) {
-        alert("Project deleted successfully!");
+        toast.success("Project deleted successfully!");
         setShowDeleteModal(false);
         setProjectToDelete(null);
         fetchProjects();
       } else {
-        alert(result.message || "Failed to delete project");
+        toast.error(result.message || "Failed to delete project");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to connect to server");
+      toast.error("Failed to connect to server");
     }
   };
 
@@ -557,16 +555,63 @@ const ManagerProjects = () => {
 
       {/* Filter Bar with Search */}
       <div className="mb-8 flex flex-wrap items-center gap-3">
-        <div className="relative w-80">
-          <div className="relative">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search projects by name or ID..."
-              className="w-full bg-white border border-gray-300 text-gray-700 font-medium px-5 py-3 pl-11 rounded-2xl focus:outline-none focus:border-blue-500 transition-all"
-            />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+        <div className="relative w-[380px]">
+          <select
+            value={selectedProjectTitle}
+            onChange={(e) => {
+              setSelectedProjectTitle(e.target.value);
+              setActiveFilter("All Projects");
+            }}
+            className="
+              w-full
+              appearance-none
+              bg-white
+              border
+              border-blue-200
+              text-gray-700
+              font-medium
+              px-5
+              py-3
+              pr-14
+              rounded-2xl
+              shadow-sm
+              focus:outline-none
+              focus:border-blue-500
+              focus:ring-4
+              focus:ring-blue-100
+              transition-all
+              cursor-pointer
+            "
+          >
+            <option value="">
+              All Project
+            </option>
+
+            {projects.map((project) => (
+              <option
+                key={project.id}
+                value={project.name}
+              >
+                {project.name}
+              </option>
+            ))}
+          </select>
+
+          {/* Custom Arrow */}
+          <div className="absolute inset-y-0 right-5 flex items-center pointer-events-none">
+            <svg
+              className="w-5 h-5 text-blue-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
           </div>
         </div>
 

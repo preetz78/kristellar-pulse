@@ -1,6 +1,7 @@
 // src/pages/Admin/Profile.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
   Mail,
   Calendar,
@@ -9,8 +10,7 @@ import {
   Phone,
   MapPin,
   Briefcase,
-  User,
-  Edit2
+  User
 } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
@@ -27,9 +27,9 @@ function AdminProfile() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({});
-  const [saving, setSaving] = useState(false);
+  // const [isEditing, setIsEditing] = useState(false);
+  // const [editForm, setEditForm] = useState({});
+  // const [saving, setSaving] = useState(false);
   
   // Change Password Modal State
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -54,7 +54,7 @@ function AdminProfile() {
         const profileData = await profileRes.json();
         if (profileData.success) {
           setAdminData(profileData.data);
-          setEditForm(profileData.data);
+          // setEditForm(profileData.data);
         }
         // Fetch Real Stats
         const statsRes = await fetch(`${apiConfig.API_BASE_URL}/api/admin/dashboard-stats`, {
@@ -75,68 +75,68 @@ function AdminProfile() {
   }, []);
 
   // Handle input change during editing
-  const handleEditChange = (e) => {
-    const { name, value } = e.target;
-    setEditForm(prev => ({ ...prev, [name]: value }));
-  };
+  // const handleEditChange = (e) => {
+  //   const { name, value } = e.target;
+  //   setEditForm(prev => ({ ...prev, [name]: value }));
+  // };
 
   // Save profile changes
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const token = sessionStorage.getItem("token");
-      const res = await fetch(`${apiConfig.API_BASE_URL}/api/admin/profile`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: editForm.name,
-          phone: editForm.phone,
-          designation: editForm.designation,
-          location: editForm.location,
-          bio: editForm.bio
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setAdminData(data.data || editForm);
-        setIsEditing(false);
-        alert("Profile updated successfully!");
-      } else {
-        alert(data.message || "Failed to update profile");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save changes");
-    } finally {
-      setSaving(false);
-    }
-  };
+  // const handleSave = async () => {
+  //   setSaving(true);
+  //   try {
+  //     const token = sessionStorage.getItem("token");
+  //     const res = await fetch(`${apiConfig.API_BASE_URL}/api/admin/profile`, {
+  //       method: "PUT",
+  //       headers: {
+  //         Authorization: `Bearer ${token}`,
+  //         "Content-Type": "application/json"
+  //       },
+  //       body: JSON.stringify({
+  //         name: editForm.name,
+  //         phone: editForm.phone,
+  //         designation: editForm.designation,
+  //         location: editForm.location,
+  //         bio: editForm.bio
+  //       })
+  //     });
+  //     const data = await res.json();
+  //     if (data.success) {
+  //       setAdminData(data.data || editForm);
+  //       setIsEditing(false);
+  //       alert("Profile updated successfully!");
+  //     } else {
+  //       alert(data.message || "Failed to update profile");
+  //     }
+  //   } catch (err) {
+  //     console.error(err);
+  //     alert("Failed to save changes");
+  //   } finally {
+  //     setSaving(false);
+  //   }
+  // };
 
   // Cancel editing
-  const handleCancel = () => {
-    setEditForm(adminData);
-    setIsEditing(false);
-  };
+  // const handleCancel = () => {
+  //   setEditForm(adminData);
+  //   setIsEditing(false);
+  // };
 
   // Change Password Handler
   const handleChangePassword = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
-      alert("New passwords do not match!");
+      toast.error("New passwords do not match!");
       return;
     }
 
     if (!validatePassword(passwordForm.newPassword)) {
-      alert(
+      toast.error(
         "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
       );
       return;
     }
 
     if (passwordForm.currentPassword === passwordForm.newPassword) {
-      alert("New password cannot be the same as current password!");
+      toast.error("New password cannot be the same as current password!");
       return;
     }
 
@@ -156,7 +156,7 @@ function AdminProfile() {
       });
       const data = await res.json();
       if (data.success) {
-        alert("Password changed successfully! Please login again with the new password.");
+        toast.success("Password changed successfully! Please login again with the new password.");
         setShowChangePassword(false);
         setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
         setPasswordError("");
@@ -164,10 +164,10 @@ function AdminProfile() {
         window.dispatchEvent(new Event("auth-change"));
         navigate("/login", { replace: true });
       } else {
-        alert(data.message || "Failed to change password");
+        toast.error(data.message || "Failed to change password");
       }
     } catch (err) {
-      alert("Failed to change password. Please try again.");
+      toast.error("Failed to change password. Please try again.");
     } finally {
       setPasswordLoading(false);
     }
@@ -197,31 +197,15 @@ function AdminProfile() {
           {/* Info */}
           <div className="text-center md:text-left flex-1">
             <h1 className="text-3xl font-bold">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="name"
-                  value={editForm.name || ""}
-                  onChange={handleEditChange}
-                  className="bg-transparent border-b border-white text-white focus:outline-none text-3xl font-bold w-full"
-                />
-              ) : adminData.name}
+              {adminData.name}
             </h1>
             <p className="text-sm opacity-90 mt-0.5">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="designation"
-                  value={editForm.designation || ""}
-                  onChange={handleEditChange}
-                  className="bg-transparent border-b border-white text-white focus:outline-none"
-                />
-              ) : adminData.designation}
+              {adminData.designation}
             </p>
             <p className="text-xs opacity-80 mt-0.5">{adminData.email}</p>
           </div>
           {/* Edit / Save / Cancel Buttons */}
-          <div className="flex gap-3">
+          {/* <div className="flex gap-3">
             {!isEditing ? (
               <button
                 onClick={() => setIsEditing(true)}
@@ -247,7 +231,7 @@ function AdminProfile() {
                 </button>
               </>
             )}
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -262,43 +246,19 @@ function AdminProfile() {
             <InfoRow icon={<Mail />} label="Email" value={adminData.email} />
            
             <InfoRow
-              icon={<Phone />}
-              label="Phone"
-              value={isEditing ? (
-                <input
-                  type="text"
-                  name="phone"
-                  value={editForm.phone || ""}
-                  onChange={handleEditChange}
-                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
-                />
-              ) : (adminData.phone || "")}
+                icon={<Phone />}
+                label="Phone"
+                value={adminData.phone || ""}
             />
             <InfoRow
-              icon={<MapPin />}
-              label="Location"
-              value={isEditing ? (
-                <input
-                  type="text"
-                  name="location"
-                  value={editForm.location || ""}
-                  onChange={handleEditChange}
-                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
-                />
-              ) : (adminData.location || "")}
+                icon={<MapPin />}
+                label="Location"
+                value={adminData.location || ""}
             />
             <InfoRow
-              icon={<Briefcase />}
-              label="Designation"
-              value={isEditing ? (
-                <input
-                  type="text"
-                  name="designation"
-                  value={editForm.designation || ""}
-                  onChange={handleEditChange}
-                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none"
-                />
-              ) : (adminData.designation || "")}
+               icon={<Briefcase />}
+               label="Designation"
+               value={adminData.designation || ""}
             />
             <InfoRow
               icon={<Calendar />}
@@ -308,9 +268,9 @@ function AdminProfile() {
             <InfoRow icon={<Shield />} label="Role" value="Admin" />
           </div>
           {/* BIO - Editable */}
-          <div className="mt-6">
-            <h3 className="font-semibold text-sm mb-1">Bio</h3>
-            {isEditing ? (
+          {/* <div className="mt-6">
+            <h3 className="font-semibold text-sm mb-1">Bio</h3> */}
+            {/* {isEditing ? (
               <textarea
                 name="bio"
                 value={editForm.bio || ""}
@@ -323,7 +283,7 @@ function AdminProfile() {
                 {adminData.bio || ""}
               </p>
             )}
-          </div>
+          </div> */}
           {/* Change Password Button */}
           <button
             onClick={() => setShowChangePassword(true)}

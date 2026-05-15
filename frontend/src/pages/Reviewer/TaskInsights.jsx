@@ -1,6 +1,7 @@
 // src/pages/Reviewer/TaskReview.jsx
 import { useState, useEffect, useMemo, useRef } from 'react';
 import apiConfig from '../../config/apiConfig';
+import toast from "react-hot-toast";
 import {
   Search,
   Clock,
@@ -209,7 +210,7 @@ export default function TaskReview() {
       setSelectedTask(null);
       setActionDone('approved');
     } catch {
-      alert('Failed to approve task');
+      toast.error('Failed to approve task');
     } finally {
       setActionLoading(null);
     }
@@ -230,7 +231,7 @@ export default function TaskReview() {
       setSelectedTask(null);
       setActionDone('reopened');
     } catch {
-      alert('Failed to reopen task');
+      toast.error('Failed to reopen task');
     } finally {
       setActionLoading(null);
     }
@@ -270,7 +271,7 @@ export default function TaskReview() {
         setNewComment('');
       }
     } catch {
-      alert('Failed to post comment');
+      toast.error('Failed to post comment');
     } finally {
       setCommentPosting(false);
     }

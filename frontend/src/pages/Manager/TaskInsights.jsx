@@ -198,7 +198,7 @@ export default function TaskInsights() {
     <div className="p-6 bg-slate-50 min-h-screen">
       {/* Header */}
       <div className="mb-8">   
-        <h1 className="text-3xl font-semibold text-slate-900">Task Insights</h1>
+        <h1 className="text-3xl font-semibold text-blue-700">Task Insights</h1>
         <p className="text-gray-600 mt-1 flex items-center gap-2">
           <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
           Project performance and task reviews

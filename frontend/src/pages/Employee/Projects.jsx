@@ -4,7 +4,6 @@ import {
   Calendar, 
   Users, 
   TrendingUp,
-  Search,
   Briefcase,
   Clock3,
   CheckCircle
@@ -20,7 +19,7 @@ const EmployeeProjects = () => {
   
   // Filter & Search states
   const [activeFilter, setActiveFilter] = useState("All Projects");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProjectTitle, setSelectedProjectTitle] = useState("");
 
   useEffect(() => {
     const fetchMyProjects = async () => {
@@ -114,9 +113,9 @@ const EmployeeProjects = () => {
 
       // Search filter
       const matchesSearch = 
-        searchTerm === "" || 
-        (project.title && project.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (project.idCode && project.idCode.toLowerCase().includes(searchTerm.toLowerCase()));
+        selectedProjectTitle === "" ||
+        project.title === selectedProjectTitle;
+       
 
       // Status filter
       let matchesFilter = true;
@@ -131,7 +130,7 @@ const EmployeeProjects = () => {
 
       return matchesSearch && matchesFilter;
     });
-  }, [projects, searchTerm, activeFilter]);
+  }, [projects, selectedProjectTitle, activeFilter]);
 
   // Stats
   const totalProjects = projects.length;
@@ -196,16 +195,63 @@ const EmployeeProjects = () => {
       {/* Search Bar + Filter Buttons */}
       <div className="mb-8 flex flex-wrap items-center gap-3">
         {/* Search Input */}
-        <div className="relative w-80">
-          <div className="relative">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search projects by name or ID..."
-              className="w-full bg-white border border-gray-300 text-gray-700 font-medium px-5 py-3 pl-11 rounded-2xl focus:outline-none focus:border-blue-500 transition-all"
-            />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+        <div className="relative w-[380px]">
+          <select
+            value={selectedProjectTitle}
+            onChange={(e) => {
+              setSelectedProjectTitle(e.target.value);
+              setActiveFilter("All Projects");
+            }}
+            className="
+              w-full
+              appearance-none
+              bg-white
+              border
+              border-blue-200
+              text-gray-700
+              font-medium
+              px-5
+              py-3
+              pr-14
+              rounded-2xl
+              shadow-sm
+              focus:outline-none
+              focus:border-blue-500
+              focus:ring-4
+              focus:ring-blue-100
+              transition-all
+              cursor-pointer
+            "
+          >
+            <option value="">
+              All Project
+            </option>
+
+            {projects.map((project) => (
+              <option
+                key={project.id}
+                value={project.title}
+              >
+                {project.title}
+              </option>
+            ))}
+          </select>
+
+          {/* Custom Arrow */}
+          <div className="absolute inset-y-0 right-5 flex items-center pointer-events-none">
+            <svg
+              className="w-5 h-5 text-blue-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
           </div>
         </div>
 

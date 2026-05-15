@@ -1,7 +1,23 @@
 // src/pages/Manager/Dashboard.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Briefcase, Clock, CheckCircle, TrendingUp } from "lucide-react";
+import {
+  Briefcase,
+  Clock,
+  CheckCircle,
+  TrendingUp,
+  ChevronDown
+} from "lucide-react";
+import dayjs from "dayjs";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip
+} from "recharts";
 import apiConfig from "../../config/apiConfig";
 
 const ManagerDashboard = () => {
@@ -20,7 +36,87 @@ const ManagerDashboard = () => {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
+  const buildChartData = (project) => {
+    if (!project) return [];
+
+    return (project.progressHistory || []).map((item) => ({
+      label: item.xLabel,
+      progress: item.percentage,
+      greenProgress: item.greenProgress,
+      redProgress: item.redProgress,
+      dotProgress: item.isCompletion ? item.percentage : null,
+      completedTasks: item.completedTasks,
+      totalTasks: item.totalTasks,
+      tasksCompletedOnDate: item.tasksCompletedOnDate,
+      date: item.date,
+      dayOffset: Number(item.dayOffset) || 0,
+      markerType: item.markerType,
+      isDeadline: item.isDeadline,
+      isCompletion: item.isCompletion,
+      isDeadlineCrossed: item.isDeadlineCrossed
+    }));
+  };
+
+  const chartData = buildChartData(selectedProjectProgress);
+
+  const maxDayOffset = chartData.length > 0
+    ? Math.max(...chartData.map((item) => item.dayOffset || 0))
+    : 0;
+
+  const xAxisTicks = [
+    ...new Set(
+      chartData
+        .filter((item, index) =>
+          item.markerType === "start" ||
+          item.markerType === "deadline" ||
+          item.markerType === "today" ||
+          index === chartData.length - 1
+        )
+        .map((item) => item.dayOffset || 0)
+    )
+  ];
+
+  const formatXAxisTick = (value) => {
+    const exactMatch = chartData.find(
+      (item, index) =>
+        (item.dayOffset || 0) === value &&
+        (
+          item.markerType === "start" ||
+          item.markerType === "deadline" ||
+          item.markerType === "today" ||
+          index === chartData.length - 1
+        )
+    );
+
+    return exactMatch?.label || "";
+  };
+
+  const renderProgressDot = ({ cx, cy, payload }) => {
+    if (!payload || cx === undefined || cy === undefined) {
+      return null;
+    }
+
+    if (!payload.isCompletion) {
+      return null;
+    }
+
+    const isDelayedPoint = payload.isDeadlineCrossed;
+    const fill = isDelayedPoint ? "#ef4444" : "#22c55e";
+    const radius = 5;
+
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={radius}
+        fill={fill}
+        stroke="#ffffff"
+        strokeWidth={2}
+      />
+    );
+  };
+
   // 🔥 HOVER TOOLTIP STATE
   const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
@@ -358,7 +454,7 @@ const ManagerDashboard = () => {
           <h1 className="text-3xl font-semibold text-blue-700">Dashboard</h1>
           <p className="text-gray-600 mt-1 flex items-center gap-2">
             <span className="w-2 h-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full animate-pulse"></span>
-            My Projects Overview
+            Real time Project Overview
           </p>
         </div>
       </div>
@@ -384,7 +480,7 @@ const ManagerDashboard = () => {
             </div>
           </div>
           <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
-            <TrendingUp size={16} /> My Projects
+            <TrendingUp size={16} /> Projects managed by you
           </p>
         </div>
 
@@ -428,7 +524,7 @@ const ManagerDashboard = () => {
             </div>
           </div>
           <p className="text-sm text-emerald-600 mt-6 flex items-center gap-1 font-medium">
-            <TrendingUp size={16} /> {stats.overallCompletion}% completion rate
+            <TrendingUp size={16} /> Successfully delivered projects
           </p>
         </div>
       </div>
@@ -488,214 +584,135 @@ const ManagerDashboard = () => {
           </div>
         </div>
 
-        {/* PROJECT PROGRESS - Advanced Version */}
-        <div className="lg:col-span-3 bg-gradient-to-b from-blue-50 to-white border border-blue-200 rounded-2xl p-8 hover:border-blue-400 hover:shadow-2xl transition-all group">
+        {/* PROJECT PROGRESS */}
+        <div className="lg:col-span-3 bg-blue-50 border border-blue-200 rounded-2xl p-8">
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="text-lg font-semibold text-gray-800">PROJECT PROGRESS</h3>
-              <p className="text-xs text-gray-500">Weekly task completion progress</p>
+              <p className="text-xs text-gray-500">Task completions from start date to current status</p>
             </div>
 
-            <select
-              value={selectedProjectId || ""}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl focus:outline-none focus:border-blue-500 font-medium"
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+            <div className="relative inline-flex">
+              <select
+                value={selectedProjectId || ""}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="appearance-none bg-white border border-blue-200 text-sm px-5 py-2.5 rounded-2xl pr-10 focus:outline-none focus:ring-0 focus:border-blue-300"
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            </div>
           </div>
 
-          <div className="relative h-64 bg-white rounded-2xl p-6 border border-gray-100">
-            {selectedProjectProgress && progressChart ? (
-              <svg viewBox="0 0 750 280" className="w-full h-full">
-                {/* GRID */}
-                {[0, 25, 50, 75, 100].map((val, i) => (
-                  <line 
-                    key={i} 
-                    x1="50" 
-                    y1={250 - val * 2} 
-                    x2="710" 
-                    y2={250 - val * 2} 
-                    stroke="#f1f5f9" 
-                    strokeWidth="1.5" 
+          <div className="h-72 bg-white rounded-2xl p-4">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} style={{ outline: "none", border: "none" }}>
+
+                  <CartesianGrid
+                    stroke="#f1f5f9"
+                    vertical={false}
                   />
-                ))}
 
-                {/* WEEKS */}
-                {progressChart.weekMarkers.map((marker, i) => (
-                  <g key={i}>
-                    <line
-                      x1={chartX(marker.dayOffset, progressChart.totalDays)}
-                      y1="54"
-                      x2={chartX(marker.dayOffset, progressChart.totalDays)}
-                      y2="252"
-                      stroke="#f8fafc"
-                      strokeWidth="1"
-                    />
-                    <text
-                      x={chartX(marker.dayOffset, progressChart.totalDays)}
-                      y="272"
-                      className="text-xs fill-gray-500"
-                      textAnchor="middle"
-                    >
-                      {marker.label}
-                    </text>
-                  </g>
-                ))}
+                  <XAxis
+                    dataKey="dayOffset"
+                    type="number"
+                    domain={[0, Math.max(1, maxDayOffset)]}
+                    ticks={xAxisTicks}
+                    tickFormatter={formatXAxisTick}
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
 
-                {/* Y-AXIS LABELS */}
-                {[0, 25, 50, 75, 100].map((val, i) => (
-                  <text 
-                    key={i} 
-                    x="38" 
-                    y={255 - val * 2} 
-                    className="text-xs fill-gray-500" 
-                    textAnchor="end"
-                  >
-                    {val}%
-                  </text>
-                ))}
+                  <YAxis
+                    domain={[0, 100]}
+                    ticks={[0, 25, 50, 75, 100]}
+                    tickFormatter={(value) => `${value}%`}
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
 
-                {/* DEADLINE + CURRENT DATE */}
-                {progressChart.showDeadlineMarker && (
-                  <g>
-                    <line
-                      x1={chartX(progressChart.deadlineDayOffset, progressChart.totalDays)}
-                      y1="50"
-                      x2={chartX(progressChart.deadlineDayOffset, progressChart.totalDays)}
-                      y2="250"
-                      stroke="#ef4444"
-                      strokeWidth="1.5"
-                      strokeDasharray="5 5"
-                    />
-                    <text
-                      x={chartX(progressChart.deadlineDayOffset, progressChart.totalDays)}
-                      y="44"
-                      className="text-xs fill-red-500 font-medium"
-                      textAnchor="middle"
-                    >
-                      {progressChart.deadline
-                        ? new Date(progressChart.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                        : 'Deadline'}
-                    </text>
-                  </g>
-                )}
-                {progressChart.showCurrentMarker && (
-                  <g>
-                    <line
-                      x1={chartX(progressChart.currentDayOffset, progressChart.totalDays)}
-                      y1="50"
-                      x2={chartX(progressChart.currentDayOffset, progressChart.totalDays)}
-                      y2="250"
-                      stroke="#2563eb"
-                      strokeWidth="1.5"
-                      strokeDasharray="4 6"
-                    />
-                    <text
-                      x={chartX(progressChart.currentDayOffset, progressChart.totalDays)}
-                      y="32"
-                      className="text-xs fill-blue-600 font-medium"
-                      textAnchor="middle"
-                    >
-                      {progressChart.currentDate
-                        ? new Date(progressChart.currentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
-                        : 'Today'}
-                    </text>
-                  </g>
-                )}
-                {progressChart.isCompleted && progressChart.actualCompletionDate && (
-                  <text
-                    x={chartX(progressChart.totalDays, progressChart.totalDays)}
-                    y="32"
-                    className="text-xs fill-emerald-600 font-medium"
-                    textAnchor="middle"
-                  >
-                    Completed {new Date(progressChart.actualCompletionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
-                  </text>
-                )}
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const validPayloads = payload.filter(
+                          item => item?.payload
+                        );
 
-                {/* LINE SEGMENTS */}
-                {progressChart.linePoints.slice(0, -1).map((point, i) => (
-                  renderProgressSegment(point, progressChart.linePoints[i + 1], i, progressChart)
-                ))}
+                        if (!validPayloads.length) {
+                          return null;
+                        }
 
-                {/* COMPLETION DOTS */}
-                {progressChart.dots.map((dot, i) => {
-                  const isDelayedPoint =
-                    progressChart.isDelayed && dot.dayOffset > progressChart.deadlineDayOffset;
+                        const data =
+                          validPayloads[
+                            validPayloads.length - 1
+                          ].payload;
+                        if (!data) return null;
 
-                  return (
-                    <circle
-                      key={`${dot.dayOffset}-${i}`}
-                      cx={chartX(dot.dayOffset, progressChart.totalDays)}
-                      cy={chartY(dot.percentage)}
-                      r="6"
-                      fill={isDelayedPoint ? "#ef4444" : "#10b981"}
-                      stroke="#fff"
-                      strokeWidth="2"
-                      style={{ cursor: 'pointer' }}
-                      onMouseEnter={(e) => {
-                        setHoveredPointIndex(i);
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const svg = e.currentTarget.parentElement.getBoundingClientRect();
-                        setTooltipPosition({
-                          x: rect.left - svg.left + 5,
-                          y: rect.top - svg.top - 25
-                        });
-                      }}
-                      onMouseLeave={() => setHoveredPointIndex(null)}
-                    />
-                  );
-                })}
+                        return (
+                          <div className="bg-white border border-gray-200 shadow-lg rounded-xl p-4">
+                            <p className="text-sm font-semibold text-gray-700 mb-2">
+                              {dayjs(data.date).format("MMM D, YYYY")}
+                            </p>
+                            <p className="text-sm text-blue-600">
+                              Progress: {data.progress}%
+                            </p>
+                            <p className="text-sm text-green-600 mt-1">
+                              Tasks: {data.completedTasks} / {data.totalTasks}
+                            </p>
+                            {data.tasksCompletedOnDate > 0 && (
+                              <p className="text-sm text-gray-500 mt-1">
+                                Completed on this date: {data.tasksCompletedOnDate}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      }
 
-                {/* TOOLTIP */}
-                {hoveredPointIndex !== null && progressChart.dots[hoveredPointIndex] && (
-                  <g>
-                    <rect
-                      x={tooltipPosition.x}
-                      y={tooltipPosition.y}
-                      width="170"
-                      height="66"
-                      rx="6"
-                      fill="#1f2937"
-                      opacity="0.95"
-                      stroke="#4b5563"
-                      strokeWidth="1"
-                    />
-                    <text
-                      x={tooltipPosition.x + 85}
-                      y={tooltipPosition.y + 20}
-                      textAnchor="middle"
-                      className="text-sm fill-white font-semibold"
-                    >
-                      {progressChart.dots[hoveredPointIndex].percentage}% Complete
-                    </text>
-                    <text
-                      x={tooltipPosition.x + 85}
-                      y={tooltipPosition.y + 38}
-                      textAnchor="middle"
-                      className="text-xs fill-gray-300"
-                    >
-                      {progressChart.dots[hoveredPointIndex].tasksCompletedOnDate || 1} task(s) on {progressChart.dots[hoveredPointIndex].date}
-                    </text>
-                    <text
-                      x={tooltipPosition.x + 85}
-                      y={tooltipPosition.y + 54}
-                      textAnchor="middle"
-                      className="text-xs fill-gray-300"
-                    >
-                      {progressChart.dots[hoveredPointIndex].completedTasks}/{progressChart.totalTasks} tasks done
-                    </text>
-                  </g>
-                )}
-              </svg>
+                      return null;
+                    }}
+                  />
+
+                  <Line
+                    type="linear"
+                    dataKey="greenProgress"
+                    stroke="#22c55e"
+                    strokeWidth={4}
+                    dot={false}
+                    activeDot={false}
+                  />
+
+                  <Line
+                    type="linear"
+                    dataKey="redProgress"
+                    stroke="#ef4444"
+                    strokeWidth={4}
+                    dot={false}
+                    activeDot={false}
+                  />
+
+                  <Line
+                    type="linear"
+                    dataKey="dotProgress"
+                    stroke="transparent"
+                    strokeWidth={0}
+                    dot={renderProgressDot}
+                    activeDot={renderProgressDot}
+                    connectNulls
+                  />
+
+                </LineChart>
+              </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-gray-400">
-                Select a project to view its weekly progress
+                No progress data available
               </div>
             )}
           </div>

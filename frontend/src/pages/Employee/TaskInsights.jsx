@@ -12,6 +12,7 @@ import {
   ListTodo,
   Check
 } from 'lucide-react';
+import Swal from "sweetalert2";
 
 import apiConfig from "../../config/apiConfig";
 
@@ -121,9 +122,20 @@ export default function TaskInsights() {
     e.stopPropagation();
 
     // Confirmation before marking complete
-    if (!window.confirm("Mark this task as completed? This action cannot be undone.")) {
-      return;
-    }
+    const result = await Swal.fire({
+  title: "Are you sure?",
+  text: "Mark this task as completed? This action cannot be undone.",
+  icon: "warning",
+  showCancelButton: true,
+  confirmButtonText: "Yes, Complete Task",
+  cancelButtonText: "Cancel",
+  confirmButtonColor: "#2563eb",
+  cancelButtonColor: "#6b7280",
+});
+
+if (!result.isConfirmed) {
+  return;
+}
 
     try {
       setCompletingTaskId(taskId);

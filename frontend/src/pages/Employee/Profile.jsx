@@ -1,6 +1,7 @@
 // src/pages/Employee/Profile.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
   Mail,
   Calendar,
@@ -10,7 +11,7 @@ import {
   MapPin,
   Briefcase,
   User,
-  Edit2
+  // Edit2
 } from "lucide-react";
 import apiConfig from "../../config/apiConfig";
 
@@ -27,9 +28,9 @@ function EmployeeProfile() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({});
-  const [saving, setSaving] = useState(false);
+  // const [isEditing, setIsEditing] = useState(false);
+  // const [editForm, setEditForm] = useState({});
+  // const [saving, setSaving] = useState(false);
 
   // Change Password Modal
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -54,7 +55,7 @@ function EmployeeProfile() {
         const profileData = await profileRes.json();
         if (profileData.success) {
           setEmployeeData(profileData.data);
-          setEditForm(profileData.data);
+          // setEditForm(profileData.data);
         }
 
         const statsRes = await fetch(`${apiConfig.API_BASE_URL}/api/employees/dashboard`, {
@@ -80,61 +81,61 @@ function EmployeeProfile() {
     fetchData();
   }, []);
 
-  const handleEditChange = (e) => {
-    const { name, value } = e.target;
-    setEditForm(prev => ({ ...prev, [name]: value }));
-  };
+  // const handleEditChange = (e) => {
+  //   const { name, value } = e.target;
+  //   setEditForm(prev => ({ ...prev, [name]: value }));
+  // };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const token = sessionStorage.getItem("token");
+  // const handleSave = async () => {
+  //   setSaving(true);
+  //   try {
+  //     const token = sessionStorage.getItem("token");
 
-      const res = await fetch(`${apiConfig.API_BASE_URL}/api/employees/profile`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: editForm.name,
-          phone: editForm.phone,
-          designation: editForm.designation,
-          location: editForm.location,
-          bio: editForm.bio
-        })
-      });
+  //     const res = await fetch(`${apiConfig.API_BASE_URL}/api/employees/profile`, {
+  //       method: "PUT",
+  //       headers: {
+  //         Authorization: `Bearer ${token}`,
+  //         "Content-Type": "application/json"
+  //       },
+  //       body: JSON.stringify({
+  //         name: editForm.name,
+  //         phone: editForm.phone,
+  //         designation: editForm.designation,
+  //         location: editForm.location,
+  //         bio: editForm.bio
+  //       })
+  //     });
 
-      const data = await res.json();
+  //     const data = await res.json();
 
-      if (data.success) {
-        setEmployeeData(data.data || editForm);
-        setIsEditing(false);
-        alert("Profile updated successfully!");
-      } else {
-        alert(data.message || "Failed to update profile");
-      }
-    } catch (err) {
-      alert("Failed to save changes");
-    } finally {
-      setSaving(false);
-    }
-  };
+  //     if (data.success) {
+  //       setEmployeeData(data.data || editForm);
+  //       setIsEditing(false);
+  //       alert("Profile updated successfully!");
+  //     } else {
+  //       alert(data.message || "Failed to update profile");
+  //     }
+  //   } catch (err) {
+  //     alert("Failed to save changes");
+  //   } finally {
+  //     setSaving(false);
+  //   }
+  // };
 
-  const handleCancel = () => {
-    setEditForm(employeeData);
-    setIsEditing(false);
-  };
+  // const handleCancel = () => {
+  //   setEditForm(employeeData);
+  //   setIsEditing(false);
+  // };
 
   // Fixed Change Password Handler
   const handleChangePassword = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
-      alert("New passwords do not match!");
+      toast.error("New passwords do not match!");
       return;
     }
 
     if (!validatePassword(passwordForm.newPassword)) {
-      alert(
+      toast.error(
         "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
       );
       return;
@@ -142,7 +143,7 @@ function EmployeeProfile() {
 
     // NEW CHECK: Prevent same as current
     if (passwordForm.currentPassword === passwordForm.newPassword) {
-      alert("New password cannot be the same as current password!");
+      toast.error("New password cannot be the same as current password!");
       return;
     }
 
@@ -166,7 +167,7 @@ function EmployeeProfile() {
       const data = await res.json();
 
       if (data.success) {
-        alert("Password changed successfully! Please login again with the new password.");
+        toast.success("Password changed successfully! Please login again with the new password.");
         setShowChangePassword(false);
         setPasswordForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
         setPasswordError("");
@@ -174,10 +175,10 @@ function EmployeeProfile() {
         window.dispatchEvent(new Event("auth-change"));
         navigate("/login", { replace: true });
       } else {
-        alert(data.message || "Failed to change password");
+        toast.error(data.message || "Failed to change password");
       }
     } catch (err) {
-      alert("Failed to change password. Please try again.");
+      toast.error("Failed to change password. Please try again.");
     } finally {
       setPasswordLoading(false);
     }
@@ -207,31 +208,15 @@ function EmployeeProfile() {
 
           <div className="text-center md:text-left flex-1">
             <h1 className="text-3xl font-bold">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="name"
-                  value={editForm.name || ""}
-                  onChange={handleEditChange}
-                  className="bg-transparent border-b border-white text-white focus:outline-none text-3xl font-bold w-full"
-                />
-              ) : employeeData.name}
+              {employeeData.name}
             </h1>
             <p className="text-sm opacity-90 mt-0.5">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="designation"
-                  value={editForm.designation || ""}
-                  onChange={handleEditChange}
-                  className="bg-transparent border-b border-white text-white focus:outline-none"
-                />
-              ) : employeeData.designation}
+              {employeeData.designation}
             </p>
             <p className="text-xs opacity-80 mt-0.5">{employeeData.email_id}</p>
           </div>
 
-          <div className="flex gap-3">
+          {/* <div className="flex gap-3">
             {!isEditing ? (
               <button
                 onClick={() => setIsEditing(true)}
@@ -257,7 +242,7 @@ function EmployeeProfile() {
                 </button>
               </>
             )}
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -271,34 +256,25 @@ function EmployeeProfile() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-700">
             <InfoRow icon={<Mail />} label="Email" value={employeeData.email_id} />
             <InfoRow 
-              icon={<Phone />} 
-              label="Phone" 
-              value={isEditing ? (
-                <input type="text" name="phone" value={editForm.work_phone || ""} onChange={handleEditChange}
-                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none" />
-              ) : (employeeData.work_phone || "")} 
+                 icon={<Phone />}
+                 label="Phone"
+                 value={employeeData.work_phone || ""}
             />
             <InfoRow 
               icon={<MapPin />} 
               label="Location" 
-              value={isEditing ? (
-                <input type="text" name="location" value={editForm.location || ""} onChange={handleEditChange}
-                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none" />
-              ) : (employeeData.location || "")} 
+              value={employeeData.location || ""}
             />
             <InfoRow 
               icon={<Briefcase />} 
               label="Designation" 
-              value={isEditing ? (
-                <input type="text" name="designation" value={editForm.designation || ""} onChange={handleEditChange}
-                  className="bg-white border border-gray-300 px-3 py-1 rounded-lg w-full focus:outline-none" />
-              ) : (employeeData.designation || "")} 
+              value={employeeData.designation || ""} 
             />
             <InfoRow icon={<Calendar />} label="Joined" value={employeeData.created_at ? new Date(employeeData.created_at).toDateString() : ""} />
             <InfoRow icon={<Shield />} label="Role" value="Employee" />
           </div>
 
-          <div className="mt-6">
+          {/* <div className="mt-6">
             <h3 className="font-semibold text-sm mb-1">Bio</h3>
             {isEditing ? (
               <textarea name="bio" value={editForm.bio || ""} onChange={handleEditChange} rows={4}
@@ -306,7 +282,7 @@ function EmployeeProfile() {
             ) : (
               <p className="text-gray-600 text-sm leading-relaxed">{employeeData.bio || ""}</p>
             )}
-          </div>
+          </div> */}
 
           <button 
             onClick={() => setShowChangePassword(true)}
